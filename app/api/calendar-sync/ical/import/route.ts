@@ -17,7 +17,9 @@ import { splitIcsComponents, parseIcsField, parseIcsDateValue } from '@/lib/serv
 //
 // Imports both VEVENT (-> events) and VTODO (-> tasks) components found in
 // the file. Dedupes against what's already in the family's data by
-// title+start/due time, so re-importing the same file twice is a no-op.
+// title+start/due time, via the ics_import_records claim-ticket table (see
+// scripts/add-ics-import-dedup-table.sql) - so re-importing the same file
+// twice, or double-clicking "Import" once, is a no-op rather than a race.
 const MAX_ICS_BYTES = 5 * 1024 * 1024 // 5MB - generous for a calendar export, not for abuse
 const MAX_ITEMS_PER_TYPE = 1000 // guard against pathological files / serverless timeouts
 
@@ -127,14 +129,17 @@ export async function POST(request: NextRequest) {
         const dtEnd = parseIcsField(raw, 'DTEND')
         const endTime = dtEnd ? parseIcsDateValue(dtEnd) : startTime
 
-        // Dedupe against what's already in this calendar (same title +
-        // start time) so importing the same file twice doesn't duplicate.
-        const existing = await sql`
-          SELECT id FROM events
-          WHERE calendar_id = ${calendarId} AND title = ${summary} AND start_time = ${startTime}
-          LIMIT 1
+        // Atomically claim (family, title, start time) before creating
+        // anything. The claim's UNIQUE constraint is the "already
+        // imported?" check - no gap for a double-click or a concurrent
+        // re-import to slip through, unlike the old SELECT-then-INSERT.
+        const claimed = await sql`
+          INSERT INTO ics_import_records (family_id, item_type, title, occurs_at)
+          VALUES (${familyId}, 'event', ${summary}, ${startTime})
+          ON CONFLICT (family_id, item_type, title, occurs_at) DO NOTHING
+          RETURNING id
         `
-        if (existing.length > 0) { eventsSkipped++; continue }
+        if (claimed.length === 0) { eventsSkipped++; continue }
 
         await sql`
           INSERT INTO events (
@@ -164,13 +169,18 @@ export async function POST(request: NextRequest) {
       const todoStatus = parseIcsField(raw, 'STATUS')
       const taskStatus = todoStatus === 'COMPLETED' ? 'COMPLETED' : 'PENDING'
 
-      const existing = await sql`
-        SELECT id FROM tasks
-        WHERE family_id = ${familyId} AND title = ${summary}
-        AND due_date IS NOT DISTINCT FROM ${dueDate}
-        LIMIT 1
+      // Same atomic claim-ticket approach as the events loop above. Note:
+      // a NULL dueDate means every such task has a distinct claim (Postgres
+      // treats NULLs as distinct under a UNIQUE constraint), so tasks with
+      // no due date aren't raced-protected the same way - an acceptable gap
+      // since there's no time component to actually collide on.
+      const claimed = await sql`
+        INSERT INTO ics_import_records (family_id, item_type, title, occurs_at)
+        VALUES (${familyId}, 'task', ${summary}, ${dueDate})
+        ON CONFLICT (family_id, item_type, title, occurs_at) DO NOTHING
+        RETURNING id
       `
-      if (existing.length > 0) { tasksSkipped++; continue }
+      if (claimed.length === 0) { tasksSkipped++; continue }
 
       const task = await sql`
         INSERT INTO tasks (
