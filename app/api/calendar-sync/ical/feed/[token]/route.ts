@@ -49,7 +49,7 @@ export async function GET(
   }
 
   const connections = await sql`
-    SELECT id, family_id, sync_enabled
+    SELECT id, family_id, user_id, sync_enabled
     FROM calendar_sync_connections
     WHERE ical_token = ${token}
   `
@@ -59,6 +59,7 @@ export async function GET(
   }
 
   const familyId = connections[0].family_id
+  const feedUserId = connections[0].user_id
 
   // Export a rolling window: 3 months back, 12 months ahead, so the feed
   // doesn't grow unbounded but still covers most calendar apps' default view.
@@ -73,6 +74,26 @@ export async function GET(
     AND e.start_time <= NOW() + INTERVAL '12 months'
     ORDER BY e.start_time ASC
   `
+
+  // Personal reminders (standalone, not tied to a task or event) for
+  // whichever user generated this feed link - exported as VTODO alongside
+  // the VEVENTs above. Same rolling window as events. Most calendar apps
+  // (including, as far as we can tell, Samsung's own Calendar/Reminders)
+  // render VEVENTs reliably but handle subscribed VTODOs inconsistently or
+  // not at all - these are included on a best-effort basis, and the UI
+  // that surfaces this feed says so rather than promising reminders will
+  // show up.
+  const reminders = feedUserId
+    ? await sql`
+        SELECT id, title, description, remind_at, status, updated_at, created_at
+        FROM reminders
+        WHERE user_id = ${feedUserId}
+          AND status = 'PENDING'
+          AND remind_at >= NOW() - INTERVAL '3 months'
+          AND remind_at <= NOW() + INTERVAL '12 months'
+        ORDER BY remind_at ASC
+      `
+    : []
 
   const lines: string[] = []
   lines.push('BEGIN:VCALENDAR')
@@ -108,6 +129,22 @@ export async function GET(
     }
     lines.push(`LAST-MODIFIED:${toICSDate(new Date(event.updated_at || event.created_at), false)}`)
     lines.push('END:VEVENT')
+  }
+
+  for (const reminder of reminders) {
+    const due = new Date(reminder.remind_at)
+
+    lines.push('BEGIN:VTODO')
+    lines.push(foldLine(`UID:reminder-${reminder.id}@togethrapp.com`))
+    lines.push(`DTSTAMP:${toICSDate(new Date(), false)}`)
+    lines.push(`DUE:${toICSDate(due, false)}`)
+    lines.push(foldLine(`SUMMARY:${escapeICSText(reminder.title)}`))
+    if (reminder.description) {
+      lines.push(foldLine(`DESCRIPTION:${escapeICSText(reminder.description)}`))
+    }
+    lines.push('STATUS:NEEDS-ACTION')
+    lines.push(`LAST-MODIFIED:${toICSDate(new Date(reminder.updated_at || reminder.created_at), false)}`)
+    lines.push('END:VTODO')
   }
 
   lines.push('END:VCALENDAR')

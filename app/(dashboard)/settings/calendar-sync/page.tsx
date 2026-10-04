@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, RefreshCw, Trash2, ListTodo, Calendar, Copy, Check, Upload, Link2 } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Trash2, ListTodo, Calendar, Copy, Check, Upload, Link2, Smartphone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
@@ -595,6 +595,83 @@ function CalendarSyncContent() {
         </CardContent>
       </Card>
 
+      {/* Samsung Calendar & Reminders - Samsung has no public Calendar/Samsung
+          Cloud API for third-party apps to connect to (unlike Google's OAuth
+          or Apple's CalDAV), so there's no "Connect" button here the way
+          there is above. This reuses the exact same subscription feed as
+          the "Other Calendars" card below - same link, same token - just
+          presented with Samsung-specific setup steps, since Samsung's own
+          Calendar app only displays calendars that come in through an
+          account it already syncs (Samsung account or Google account), not
+          a direct "subscribe by URL" option of its own. */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <Smartphone className="w-8 h-8 text-muted-foreground" />
+            <div>
+              <CardTitle className="text-lg">Samsung Calendar & Reminders</CardTitle>
+              <CardDescription>
+                Bring your Togethr events (and, best-effort, reminders) into Samsung Calendar
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+            Samsung doesn&apos;t publish a Calendar or Samsung Cloud API for apps like Togethr to connect
+            to directly, so this isn&apos;t a one-tap &quot;Connect&quot; like Google or Apple above. Instead,
+            it uses the same subscription link other calendar apps use, bridged in through Google
+            Calendar (which Samsung Calendar already knows how to display).
+          </div>
+
+          {icalLoading ? (
+            <div className="flex justify-center py-4">
+              <Spinner className="w-5 h-5" />
+            </div>
+          ) : icalFeedUrl ? (
+            <>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input readOnly value={icalFeedUrl} className="flex-1 font-mono text-xs" />
+                <Button variant="outline" size="sm" onClick={handleCopyIcalFeed} className="shrink-0">
+                  {icalCopied ? (
+                    <Check className="w-4 h-4 mr-2" />
+                  ) : (
+                    <Copy className="w-4 h-4 mr-2" />
+                  )}
+                  {icalCopied ? 'Copied' : 'Copy link'}
+                </Button>
+              </div>
+              <ol className="text-sm text-muted-foreground space-y-1.5 list-decimal list-inside">
+                <li>On any device, open Google Calendar (web or app) and make sure it&apos;s the same Google account your Samsung phone is signed into.</li>
+                <li>On the web: <strong>Other calendars → + → From URL</strong>, and paste the link above. Give it a moment to import.</li>
+                <li>On your Samsung phone: open <strong>Calendar → Menu → Manage calendars</strong>, find it listed under your Google account, and turn it on.</li>
+              </ol>
+              <p className="text-xs text-muted-foreground">
+                This is one-way (Togethr → Samsung) and refreshes roughly every 15-60 minutes, same
+                as the Other Calendars link below. Events show up reliably; reminders are included in
+                the feed too, but most calendar apps - Samsung&apos;s included - don&apos;t reliably surface
+                subscribed to-dos the way they do events, so treat that part as a bonus, not a guarantee.
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleGenerateIcalFeed}
+                disabled={icalGenerating}
+                className="text-muted-foreground"
+              >
+                {icalGenerating ? <Spinner className="w-4 h-4 mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                Regenerate link (invalidates the old one)
+              </Button>
+            </>
+          ) : (
+            <Button onClick={handleGenerateIcalFeed} disabled={icalGenerating} className="w-full sm:w-auto">
+              {icalGenerating ? <Spinner className="w-4 h-4 mr-2" /> : <Smartphone className="w-4 h-4 mr-2" />}
+              Create subscription link
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Info Card */}
       <Card className="bg-muted/30">
         <CardContent className="pt-6">
@@ -604,6 +681,7 @@ function CalendarSyncContent() {
             <li>• <strong>Google Tasks:</strong> Tasks with due dates sync to Google Tasks app and appear as reminders on Android</li>
             <li>• <strong>Apple Calendar & Reminders:</strong> Full bidirectional sync via CalDAV using your Apple ID and an app-specific password - events and reminders flow both ways automatically</li>
             <li>• <strong>Other Calendars:</strong> Outlook, and any app that supports calendar subscription links, can subscribe to a one-way feed of your Togethr events</li>
+            <li>• <strong>Samsung Calendar & Reminders:</strong> No public Samsung API exists, so this uses the same subscription link, bridged through Google Calendar, to show up in Samsung&apos;s Calendar app</li>
             <li>• <strong>Import a Calendar File:</strong> Upload a .ics file (exported from Outlook, Android, iOS, or any calendar/task app) or paste a public calendar URL to bring its events and tasks into Togethr once</li>
             <li>• Auto-sync runs at your chosen frequency (1, 10, 30, or 60 minutes) while Togethr is open in a browser tab or installed app</li>
             <li>• Your calendar credentials are encrypted and stored securely</li>
