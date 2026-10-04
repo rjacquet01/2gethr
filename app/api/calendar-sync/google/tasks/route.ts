@@ -220,7 +220,9 @@ export async function POST(request: NextRequest) {
           const row = mapped[0]
           const lastSynced = row.last_synced_at ? new Date(row.last_synced_at) : new Date(0)
           const willPull = googleUpdated > lastSynced
-          ;(debug.mappedChecks ??= [] as unknown[]) as unknown[]
+          if (!Array.isArray(debug.mappedChecks)) {
+            debug.mappedChecks = []
+          }
           ;(debug.mappedChecks as unknown[]).push({
             googleTaskId: gTask.id, title: gTask.title,
             googleUpdated: googleUpdated.toISOString(), lastSynced: lastSynced.toISOString(),
