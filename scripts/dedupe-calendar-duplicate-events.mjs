@@ -46,14 +46,20 @@ if (!process.env.DATABASE_URL) {
 const sql = neon(process.env.DATABASE_URL)
 const dryRun = process.argv.includes('--dry-run')
 
+// Group by family (not calendar_id): a race-created duplicate from the
+// Google/Apple import path lands in the auto-created "Google Calendar" /
+// "Apple Calendar" calendar, not the original event's calendar, so matching
+// on calendar_id alone misses exactly the duplicates this is meant to find.
 const duplicateGroups = await sql`
-  SELECT calendar_id, title, start_time, end_time, COUNT(*) as cnt,
-         ARRAY_AGG(id ORDER BY created_at ASC) as ids
-  FROM events
-  WHERE status != 'CANCELLED'
-  GROUP BY calendar_id, title, start_time, end_time
+  SELECT c.family_id, e.title, e.start_time, e.end_time, COUNT(*) as cnt,
+         ARRAY_AGG(e.id ORDER BY e.created_at ASC) as ids,
+         ARRAY_AGG(c.name ORDER BY e.created_at ASC) as calendar_names
+  FROM events e
+  JOIN calendars c ON c.id = e.calendar_id
+  WHERE e.status != 'CANCELLED'
+  GROUP BY c.family_id, e.title, e.start_time, e.end_time
   HAVING COUNT(*) > 1
-  ORDER BY start_time ASC
+  ORDER BY e.start_time ASC
 `
 
 if (duplicateGroups.length === 0) {
