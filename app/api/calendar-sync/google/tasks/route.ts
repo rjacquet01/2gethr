@@ -186,8 +186,21 @@ export async function POST(request: NextRequest) {
       { headers: { Authorization: `Bearer ${accessToken}` } }
     )
 
+    // TEMP DEBUG: surfacing what the pull phase actually saw, to diagnose
+    // "pulled 0" without needing Vercel log access. Remove once confirmed
+    // working.
+    const debug: Record<string, unknown> = {
+      taskListId,
+      listFetchOk: listRes.ok,
+      listFetchStatus: listRes.status,
+    }
+
     if (listRes.ok) {
       const listed = await listRes.json()
+      debug.googleTaskCount = (listed.items || []).length
+      debug.googleTasks = (listed.items || []).map((t: { id: string; title: string; status: string; updated: string }) => ({
+        id: t.id, title: t.title, status: t.status, updated: t.updated,
+      }))
 
       for (const gTask of listed.items || []) {
         if (!gTask.id || !gTask.title || gTask.deleted) continue
@@ -206,11 +219,18 @@ export async function POST(request: NextRequest) {
         if (mapped.length > 0) {
           const row = mapped[0]
           const lastSynced = row.last_synced_at ? new Date(row.last_synced_at) : new Date(0)
+          const willPull = googleUpdated > lastSynced
+          ;(debug.mappedChecks ??= [] as unknown[]) as unknown[]
+          ;(debug.mappedChecks as unknown[]).push({
+            googleTaskId: gTask.id, title: gTask.title,
+            googleUpdated: googleUpdated.toISOString(), lastSynced: lastSynced.toISOString(),
+            willPull,
+          })
           // Only pull if Google's own "updated" timestamp is newer than our
           // last sync checkpoint - otherwise this is just Google echoing
           // back a change the push loop already sent it, and re-applying it
           // here would stomp a more recent local edit with stale data.
-          if (googleUpdated > lastSynced) {
+          if (willPull) {
             await sql`
               UPDATE tasks
               SET title = ${gTask.title}, description = ${gTask.notes || null},
@@ -374,7 +394,11 @@ export async function POST(request: NextRequest) {
       pulled,
       errors,
       message: `Synced ${synced} task(s) to Google Tasks, pulled ${pulled} change(s) from Google Tasks` +
-        `${errors > 0 ? `, ${errors} error(s)` : ''}`,
+        `${errors > 0 ? `, ${errors} error(s)` : ''}` +
+        // TEMP DEBUG: appended so it's visible in the on-page status banner
+        // without needing to open devtools. Remove once confirmed working.
+        ` | DEBUG: ${JSON.stringify(debug)}`,
+      debug,
     })
   } catch (error) {
     console.error('Task sync error:', error)
