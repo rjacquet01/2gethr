@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { neon } from '@neondatabase/serverless'
 import { getUserFromRequest } from '@/lib/auth'
 import { decrypt, encrypt } from '@/lib/encryption'
-
-const sql = neon(process.env.DATABASE_URL!)
+import { sql } from '@/lib/db'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
@@ -176,20 +174,94 @@ export async function POST(request: NextRequest) {
 
     const familyId = familyMembers[0].family_id
 
-    // Get tasks with due dates that haven't been synced or need updating
+    // --- Pull: reflect changes made directly in Google Tasks back into
+    // Togethr. This used to be push-only (Togethr -> Google Tasks), so
+    // completing or editing a task in the Google Tasks app, or adding a
+    // brand new one there, never showed up here. Runs before the push
+    // loop below, so a task just pulled in doesn't immediately get
+    // pushed back out as if it were a local change.
+    let pulled = 0
+    const listRes = await fetch(
+      `https://tasks.googleapis.com/tasks/v1/lists/${taskListId}/tasks?showCompleted=true&showHidden=true&maxResults=100`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    )
+
+    if (listRes.ok) {
+      const listed = await listRes.json()
+
+      for (const gTask of listed.items || []) {
+        if (!gTask.id || !gTask.title || gTask.deleted) continue
+
+        const googleUpdated = gTask.updated ? new Date(gTask.updated) : new Date()
+        const googleStatus = gTask.status === 'completed' ? 'COMPLETED' : 'PENDING'
+        const googleDue = gTask.due ? new Date(gTask.due) : null
+
+        const mapped = await sql`
+          SELECT id as sync_id, familyhub_task_id, last_synced_at
+          FROM synced_tasks
+          WHERE connection_id = ${connection.id} AND google_task_id = ${gTask.id}
+          LIMIT 1
+        `
+
+        if (mapped.length > 0) {
+          const row = mapped[0]
+          const lastSynced = row.last_synced_at ? new Date(row.last_synced_at) : new Date(0)
+          // Only pull if Google's own "updated" timestamp is newer than our
+          // last sync checkpoint - otherwise this is just Google echoing
+          // back a change the push loop already sent it, and re-applying it
+          // here would stomp a more recent local edit with stale data.
+          if (googleUpdated > lastSynced) {
+            await sql`
+              UPDATE tasks
+              SET title = ${gTask.title}, description = ${gTask.notes || null},
+                  due_date = ${googleDue}, status = ${googleStatus}, updated_at = NOW()
+              WHERE id = ${row.familyhub_task_id}
+            `
+            await sql`UPDATE synced_tasks SET last_synced_at = NOW() WHERE id = ${row.sync_id}`
+            pulled++
+          }
+          continue
+        }
+
+        // No mapping - this task didn't come from Togethr, so it was
+        // created directly in Google Tasks. Atomically claim it by
+        // google_task_id before importing, so two overlapping sync calls
+        // (the 1-minute auto-sync timer and a manual "Sync Tasks Now"
+        // click, say) can't both import the same new Google task as two
+        // separate Togethr tasks.
+        const claimed = await sql`
+          INSERT INTO synced_tasks (connection_id, familyhub_task_id, google_task_id, google_tasklist_id, last_synced_at)
+          VALUES (${connection.id}, ${'pending:' + gTask.id}, ${gTask.id}, ${taskListId}, NOW())
+          ON CONFLICT (connection_id, google_task_id) DO NOTHING
+          RETURNING id
+        `
+        if (claimed.length === 0) continue
+
+        const newTask = await sql`
+          INSERT INTO tasks (family_id, title, description, created_by_id, due_date, priority, category, status)
+          VALUES (${familyId}, ${gTask.title}, ${gTask.notes || null}, ${user.id}, ${googleDue}, 'MEDIUM', 'OTHER', ${googleStatus})
+          RETURNING id
+        `
+        await sql`UPDATE synced_tasks SET familyhub_task_id = ${newTask[0].id} WHERE id = ${claimed[0].id}`
+        pulled++
+      }
+    }
+
+    // --- Push: Togethr tasks with due dates that haven't been synced or
+    // need updating, out to Google Tasks.
     // BUG FIX: synced_tasks' column linking back to tasks is `familyhub_task_id`,
     // not `task_id` (see scripts/add-synced-tasks-table.sql) - the old name
     // doesn't exist, so this join always threw and task sync never ran.
     const tasks = await sql`
       SELECT t.id, t.title, t.description, t.due_date, t.status, t.updated_at,
-             st.google_task_id, st.last_synced_at
+             st.id as sync_id, st.google_task_id, st.last_synced_at
       FROM tasks t
       LEFT JOIN synced_tasks st ON t.id = st.familyhub_task_id AND st.connection_id = ${connection.id}
       WHERE t.family_id = ${familyId}
       AND t.due_date IS NOT NULL
       AND t.status NOT IN ('ARCHIVED', 'CANCELLED')
       AND (
-        st.id IS NULL 
+        st.id IS NULL
         OR t.updated_at > st.last_synced_at
       )
     `
@@ -201,7 +273,7 @@ export async function POST(request: NextRequest) {
       try {
         // Convert status
         const googleStatus = task.status === 'COMPLETED' ? 'completed' : 'needsAction'
-        
+
         // Format due date (Google Tasks uses RFC 3339 date format)
         const dueDate = new Date(task.due_date).toISOString()
 
@@ -213,8 +285,25 @@ export async function POST(request: NextRequest) {
         }
 
         let googleTaskId = task.google_task_id
+        let claimedSyncId: string | null = null
 
-        if (googleTaskId) {
+        if (!googleTaskId) {
+          // Not yet synced - atomically claim this local task before
+          // creating anything on Google's side. The claim's UNIQUE
+          // constraint on (connection_id, familyhub_task_id) is the
+          // "already being synced?" check now, closing the gap that used
+          // to let two overlapping sync calls both decide to create a
+          // fresh Google Task for the same local task (leaving one
+          // orphaned, since only the last writer's id ever got tracked).
+          const claimed = await sql`
+            INSERT INTO synced_tasks (connection_id, familyhub_task_id, google_task_id, google_tasklist_id, last_synced_at)
+            VALUES (${connection.id}, ${task.id}, ${'pending:' + task.id}, ${taskListId}, NOW())
+            ON CONFLICT (connection_id, familyhub_task_id) DO NOTHING
+            RETURNING id
+          `
+          if (claimed.length === 0) continue
+          claimedSyncId = claimed[0].id
+        } else {
           // Update existing task
           const updateRes = await fetch(
             `https://tasks.googleapis.com/tasks/v1/lists/${taskListId}/tasks/${googleTaskId}`,
@@ -229,7 +318,8 @@ export async function POST(request: NextRequest) {
           )
 
           if (!updateRes.ok) {
-            // Task may have been deleted, try creating new one
+            // Task may have been deleted on Google's side - fall through
+            // to create a replacement below.
             googleTaskId = null
           }
         }
@@ -257,18 +347,14 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Upsert sync record
-        // BUG FIX: the column is `familyhub_task_id`, not `task_id`, and
-        // `google_tasklist_id` is NOT NULL on this table (see
-        // scripts/add-synced-tasks-table.sql) but was never supplied, so
-        // this insert always violated the schema and no task ever got
-        // marked as synced.
-        await sql`
-          INSERT INTO synced_tasks (connection_id, familyhub_task_id, google_task_id, google_tasklist_id, last_synced_at)
-          VALUES (${connection.id}, ${task.id}, ${googleTaskId}, ${taskListId}, NOW())
-          ON CONFLICT (connection_id, familyhub_task_id)
-          DO UPDATE SET google_task_id = ${googleTaskId}, google_tasklist_id = ${taskListId}, last_synced_at = NOW()
-        `
+        if (claimedSyncId) {
+          await sql`UPDATE synced_tasks SET google_task_id = ${googleTaskId}, last_synced_at = NOW() WHERE id = ${claimedSyncId}`
+        } else {
+          await sql`
+            UPDATE synced_tasks SET google_task_id = ${googleTaskId}, last_synced_at = NOW()
+            WHERE connection_id = ${connection.id} AND familyhub_task_id = ${task.id}
+          `
+        }
 
         synced++
       } catch (err) {
@@ -285,8 +371,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       synced,
+      pulled,
       errors,
-      message: `Synced ${synced} task(s) to Google Tasks${errors > 0 ? `, ${errors} error(s)` : ''}`,
+      message: `Synced ${synced} task(s) to Google Tasks, pulled ${pulled} change(s) from Google Tasks` +
+        `${errors > 0 ? `, ${errors} error(s)` : ''}`,
     })
   } catch (error) {
     console.error('Task sync error:', error)
