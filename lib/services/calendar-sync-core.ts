@@ -146,13 +146,22 @@ export async function syncGoogleConnection(
       for (const gEvent of googleEvents.items || []) {
         if (!gEvent.id || !gEvent.summary) continue
 
-        const existingSynced = await sql`
-          SELECT id FROM synced_events
-          WHERE connection_id = ${connection.id}
-          AND external_event_id = ${gEvent.id}
+        // Atomically reserve this external event before creating anything
+        // locally. Overlapping sync runs (the 1-minute client timer, the
+        // 5-minute cron, a manual "Sync Now" click) used to each do a
+        // SELECT-then-INSERT check here - a TOCTOU gap that let two runs
+        // both pass the "not yet synced" check and each create their own
+        // duplicate local copy of the same Google event. The unique
+        // constraint on (connection_id, external_event_id) makes this
+        // INSERT itself the check: only one concurrent run can ever win it.
+        const reserved = await sql`
+          INSERT INTO synced_events (connection_id, external_event_id, sync_status, last_synced_at)
+          VALUES (${connection.id}, ${gEvent.id}, 'synced', NOW())
+          ON CONFLICT (connection_id, external_event_id) DO NOTHING
+          RETURNING id
         `
 
-        if (existingSynced.length === 0) {
+        if (reserved.length > 0) {
           const startTime = gEvent.start?.dateTime || gEvent.start?.date
           const endTime = gEvent.end?.dateTime || gEvent.end?.date
           const isAllDay = !gEvent.start?.dateTime
@@ -171,11 +180,7 @@ export async function syncGoogleConnection(
           `
 
           await sql`
-            INSERT INTO synced_events (
-              connection_id, local_event_id, external_event_id, sync_status, last_synced_at
-            ) VALUES (
-              ${connection.id}, ${newEvent[0].id}, ${gEvent.id}, 'synced', NOW()
-            )
+            UPDATE synced_events SET local_event_id = ${newEvent[0].id} WHERE id = ${reserved[0].id}
           `
 
           importedCount++
@@ -200,6 +205,22 @@ export async function syncGoogleConnection(
     `
 
     for (const event of localEvents) {
+      // Same race as the import side, mirrored: reserve this local event
+      // with a placeholder external id BEFORE posting to Google, so a
+      // second concurrent sync run can't also pick up this still-unsynced
+      // event and create a second Google event for it. Real id swapped in
+      // after Google confirms creation; reservation released on failure so
+      // a later sync can retry.
+      const placeholderExternalId = `pending:${event.id}`
+      const reserved = await sql`
+        INSERT INTO synced_events (connection_id, local_event_id, external_event_id, sync_status, last_synced_at)
+        VALUES (${connection.id}, ${event.id}, ${placeholderExternalId}, 'pending', NOW())
+        ON CONFLICT (connection_id, external_event_id) DO NOTHING
+        RETURNING id
+      `
+
+      if (reserved.length === 0) continue
+
       const googleEvent = {
         summary: event.title,
         description: event.description,
@@ -228,14 +249,14 @@ export async function syncGoogleConnection(
         const createdEvent = await createResponse.json()
 
         await sql`
-          INSERT INTO synced_events (
-            connection_id, local_event_id, external_event_id, sync_status, last_synced_at
-          ) VALUES (
-            ${connection.id}, ${event.id}, ${createdEvent.id}, 'synced', NOW()
-          )
+          UPDATE synced_events
+          SET external_event_id = ${createdEvent.id}, sync_status = 'synced', last_synced_at = NOW()
+          WHERE id = ${reserved[0].id}
         `
 
         exportedCount++
+      } else {
+        await sql`DELETE FROM synced_events WHERE id = ${reserved[0].id}`
       }
     }
   }
@@ -303,16 +324,25 @@ export async function syncAppleConnection(
     }
 
     for (const item of items) {
-      const existingSynced = await sql`
-        SELECT id FROM synced_events
-        WHERE connection_id = ${connection.id} AND external_event_id = ${item.uid}
+      // Same atomic-reservation fix as the Google import path above: the
+      // INSERT's unique constraint on (connection_id, external_event_id)
+      // IS the "already synced?" check now, closing the race between
+      // overlapping sync runs.
+      const reserved = await sql`
+        INSERT INTO synced_events (connection_id, external_event_id, sync_status, last_synced_at)
+        VALUES (${connection.id}, ${item.uid}, 'synced', NOW())
+        ON CONFLICT (connection_id, external_event_id) DO NOTHING
+        RETURNING id
       `
-      if (existingSynced.length > 0) continue
+      if (reserved.length === 0) continue
 
       const summary = parseIcsField(item.raw, 'SUMMARY')
       const dtStart = parseIcsField(item.raw, 'DTSTART')
       const dtEnd = parseIcsField(item.raw, 'DTEND')
-      if (!summary || !dtStart) continue
+      if (!summary || !dtStart) {
+        await sql`DELETE FROM synced_events WHERE id = ${reserved[0].id}`
+        continue
+      }
 
       const isAllDay = !/T/.test(dtStart)
       const startTime = parseIcsDate(dtStart)
@@ -331,8 +361,7 @@ export async function syncAppleConnection(
       `
 
       await sql`
-        INSERT INTO synced_events (connection_id, local_event_id, external_event_id, sync_status, last_synced_at)
-        VALUES (${connection.id}, ${newEvent[0].id}, ${item.uid}, 'synced', NOW())
+        UPDATE synced_events SET local_event_id = ${newEvent[0].id} WHERE id = ${reserved[0].id}
       `
       importedCount++
     }
@@ -353,6 +382,18 @@ export async function syncAppleConnection(
 
     for (const event of localEvents) {
       const uid = `togethr-${event.id}@togethr.app`
+
+      // uid is deterministic per local event, so reserving it up front (via
+      // the same ON CONFLICT trick used elsewhere in this file) is enough
+      // to stop a second concurrent sync run from also exporting it.
+      const reserved = await sql`
+        INSERT INTO synced_events (connection_id, local_event_id, external_event_id, sync_status, last_synced_at)
+        VALUES (${connection.id}, ${event.id}, ${uid}, 'synced', NOW())
+        ON CONFLICT (connection_id, external_event_id) DO NOTHING
+        RETURNING id
+      `
+      if (reserved.length === 0) continue
+
       const itemUrl = `${eventsCalendarUrl}${eventsCalendarUrl.endsWith('/') ? '' : '/'}${uid}.ics`
       const ics = buildVEvent({
         uid,
@@ -366,11 +407,9 @@ export async function syncAppleConnection(
 
       const ok = await putCalDavItem(itemUrl, creds, ics)
       if (ok) {
-        await sql`
-          INSERT INTO synced_events (connection_id, local_event_id, external_event_id, sync_status, last_synced_at)
-          VALUES (${connection.id}, ${event.id}, ${uid}, 'synced', NOW())
-        `
         exportedCount++
+      } else {
+        await sql`DELETE FROM synced_events WHERE id = ${reserved[0].id}`
       }
     }
   }
