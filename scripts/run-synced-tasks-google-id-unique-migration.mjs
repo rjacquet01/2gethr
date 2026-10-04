@@ -1,8 +1,11 @@
 // One-off runner: applies add-synced-tasks-google-id-unique.sql directly
-// against the project's own Neon database. Mirrors run-ics-import-dedup-migration.mjs
-// (including its comment-stripping fix, so a leading comment block above a
-// statement in the same ';'-delimited chunk doesn't cause that statement to
-// be silently discarded).
+// against the project's own Neon database. Mirrors run-ics-import-dedup-migration.mjs,
+// but strips comment lines from the RAW file first and splits on ';' only
+// after that. Stripping-then-splitting (rather than splitting-then-stripping)
+// matters because a semicolon inside a prose comment - e.g. "(one Togethr
+// task); this adds..." - would otherwise split the file mid-comment and
+// strand the back half of a comment sentence as a bare statement fragment
+// that still carries real SQL on later lines in the same chunk.
 import { readFileSync, existsSync } from 'fs'
 import { neon } from '@neondatabase/serverless'
 
@@ -40,12 +43,18 @@ const sql = neon(process.env.DATABASE_URL)
 const migrationPath = 'scripts/add-synced-tasks-google-id-unique.sql'
 const raw = readFileSync(migrationPath, 'utf8')
 
-// Strip comment lines out of each ';'-delimited chunk before checking it -
-// see run-ics-import-dedup-migration.mjs for why checking only the chunk's
-// raw prefix is wrong.
-const statements = raw
+// Strip every comment line out of the whole file FIRST, then split on ';'.
+// Splitting first (as the ics-import migration runner this was copied from
+// does) breaks if a semicolon ever appears inside a comment's prose rather
+// than only at statement ends - which this file's own comments do.
+const withoutComments = raw
+  .split('\n')
+  .filter(line => !line.trim().startsWith('--'))
+  .join('\n')
+
+const statements = withoutComments
   .split(';')
-  .map(s => s.split('\n').filter(line => !line.trim().startsWith('--')).join('\n').trim())
+  .map(s => s.trim())
   .filter(s => s.length > 0)
 
 for (const stmt of statements) {
