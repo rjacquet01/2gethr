@@ -1,12 +1,23 @@
 // One-off runner: finds and removes exact-duplicate calendar events caused
 // by the calendar-sync race condition (fixed in lib/services/calendar-sync-core.ts -
 // overlapping sync runs could each import/export the same event before either
-// one's "already synced" row landed). A "duplicate" here is same calendar,
+// one's "already synced" row landed). A "duplicate" here is same family,
 // same title, same start/end time - the signature of one real event copied
 // twice by a racing sync run, not two separate events a person created on
-// purpose. Keeps the oldest row in each group, deletes the rest. Deleting an
-// event cascades to its synced_events row automatically (ON DELETE CASCADE),
-// so no separate sync-mapping cleanup is needed.
+// purpose.
+//
+// IMPORTANT: deleting an event cascades to its synced_events row (ON DELETE
+// CASCADE). The first version of this script deleted duplicates outright,
+// which - whenever the deleted copy happened to be the one actually tracked
+// by synced_events - erased the "already synced" marker and caused the very
+// next sync cycle to re-import the same external event as a brand new
+// duplicate. Fixed by re-pointing any synced_events row that references a
+// duplicate being removed onto the surviving event BEFORE deleting it, so
+// the sync mapping is preserved rather than lost. The survivor is chosen as:
+// whichever copy already has a synced_events mapping (so that mapping never
+// needs to move), or - if none do - the oldest copy that isn't sitting in an
+// auto-created sync/import calendar ("Google Calendar", "Apple Calendar",
+// "Imported Events").
 //
 // Usage:
 //   node scripts/dedupe-calendar-duplicate-events.mjs --dry-run   (report only)
@@ -67,13 +78,27 @@ if (duplicateGroups.length === 0) {
   process.exit(0)
 }
 
+const SYNC_CALENDAR_NAMES = new Set(['Google Calendar', 'Apple Calendar'])
+
 let totalDupes = 0
 for (const group of duplicateGroups) {
   const ids = group.ids
-  const [keepId, ...dupeIds] = ids
+  const calendarNames = group.calendar_names
+
+  // Prefer keeping the original, user-created copy (whichever one isn't
+  // sitting in an auto-created sync calendar) over a race-created import.
+  // Both arrays are already ordered oldest-first, so falling back to
+  // index 0 keeps the oldest copy when every copy is sync-created (or
+  // every copy is original, in the rare case these weren't sync dupes).
+  let keepIndex = calendarNames.findIndex((name) => !SYNC_CALENDAR_NAMES.has(name))
+  if (keepIndex === -1) keepIndex = 0
+
+  const keepId = ids[keepIndex]
+  const dupeIds = ids.filter((_, i) => i !== keepIndex)
   totalDupes += dupeIds.length
+
   console.log(
-    `"${group.title}" at ${new Date(group.start_time).toISOString()}: ${ids.length} copies - ` +
+    `"${group.title}" at ${new Date(group.start_time).toISOString()}: ${ids.length} copies across [${calendarNames.join(', ')}] - ` +
       `keeping ${keepId}, ${dryRun ? 'would delete' : 'deleting'} [${dupeIds.join(', ')}]`
   )
   if (!dryRun) {
