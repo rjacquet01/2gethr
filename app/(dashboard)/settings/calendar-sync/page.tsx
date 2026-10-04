@@ -472,7 +472,9 @@ function CalendarSyncContent() {
                   </div>
                   <p className="text-sm text-muted-foreground mb-4">
                     Sync your Togethr tasks with due dates to Google Tasks.
-                    Tasks will appear in the Google Tasks app and show as reminders on your Android phone.
+                    Tasks will appear in a dedicated <strong>&quot;Togethr Tasks&quot;</strong> list in the Google Tasks app and show as reminders on your Android phone.
+                    Completing, editing, or adding a task directly in that list syncs back here too -
+                    but changes in your other Google Tasks lists (like the default &quot;My Tasks&quot;) won&apos;t, since Togethr only watches its own list.
                   </p>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
@@ -678,7 +680,7 @@ function CalendarSyncContent() {
           <h4 className="font-medium mb-2">About Calendar &amp; Task Sync</h4>
           <ul className="text-sm text-muted-foreground space-y-2">
             <li>• <strong>Google Calendar:</strong> Full bidirectional sync - events flow both ways automatically</li>
-            <li>• <strong>Google Tasks:</strong> Tasks with due dates sync to Google Tasks app and appear as reminders on Android</li>
+            <li>• <strong>Google Tasks:</strong> Tasks with due dates sync bidirectionally with a dedicated &quot;Togethr Tasks&quot; list in Google Tasks and appear as reminders on Android - only that list syncs, not your other Google Tasks lists</li>
             <li>• <strong>Apple Calendar & Reminders:</strong> Full bidirectional sync via CalDAV using your Apple ID and an app-specific password - events and reminders flow both ways automatically</li>
             <li>• <strong>Other Calendars:</strong> Outlook, and any app that supports calendar subscription links, can subscribe to a one-way feed of your Togethr events</li>
             <li>• <strong>Samsung Calendar & Reminders:</strong> No public Samsung API exists, so this uses the same subscription link, bridged through Google Calendar, to show up in Samsung&apos;s Calendar app</li>
