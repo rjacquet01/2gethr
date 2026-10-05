@@ -14,7 +14,7 @@
     },
     {
       "path": "/api/cron/weekly-digest",
-      "schedule": "0 13 * * 0"
+      "schedule": "0 13,14 * * 0"
     },
     {
       "path": "/api/cron/calendar-sync",

@@ -22,6 +22,52 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const url = new URL(request.url)
+    const force = url.searchParams.get('force') === 'true'
+
+    // Vercel cron schedules are plain UTC with no timezone/DST awareness,
+    // but the digest is meant to land at 9am Eastern year-round. Eastern
+    // time alternates between UTC-4 (EDT, roughly mid-March to early
+    // November) and UTC-5 (EST, the rest of the year), so a single fixed
+    // UTC cron time drifts by an hour twice a year. vercel.json now
+    // schedules this route at BOTH times 9am Eastern could fall on every
+    // Sunday (13:00 and 14:00 UTC), and this check picks out whichever
+    // firing actually lands at 9am Eastern right now and makes the other
+    // one a no-op - so the digest keeps landing at 9am Eastern across the
+    // DST changeover without anyone needing to hand-edit vercel.json.
+    // `?force=true` (or running outside production) bypasses this, for
+    // manual testing.
+    if (!force && process.env.NODE_ENV === 'production') {
+      const etHour = Number(
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/New_York',
+          hour: 'numeric',
+          hourCycle: 'h23',
+        }).format(new Date())
+      )
+      if (etHour !== 9) {
+        console.log(`[Cron] Weekly digest: skipping this firing, it's not 9am Eastern yet (current ET hour: ${etHour})`)
+        return NextResponse.json({ success: true, skipped: true, reason: 'not-9am-eastern', etHour })
+      }
+    }
+
+    // Idempotency guard: with two scheduled firings a week apart in UTC
+    // terms but meant to be "the same 9am Eastern slot", make sure a retry
+    // or an edge case where both firings land in the 9am Eastern hour
+    // can't send the digest twice in the same week.
+    if (!force) {
+      const recentRun = await sql`
+        SELECT id FROM admin_action_logs
+        WHERE action = 'WEEKLY_DIGEST_CRON'
+        AND created_at > NOW() - INTERVAL '20 hours'
+        LIMIT 1
+      `
+      if (recentRun.length > 0) {
+        console.log('[Cron] Weekly digest: already ran within the last 20 hours, skipping duplicate run')
+        return NextResponse.json({ success: true, skipped: true, reason: 'already-ran-recently' })
+      }
+    }
+
     console.log("[Cron] Starting weekly digest job at", new Date().toISOString())
 
     // Get users eligible for weekly digest (active parents/guardians)
