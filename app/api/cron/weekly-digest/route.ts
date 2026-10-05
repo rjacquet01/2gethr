@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     // Get users eligible for weekly digest (active parents/guardians)
     const digestUsers = await sql`
-      SELECT 
+      SELECT
         u.id,
         u.email,
         u.first_name,
@@ -63,14 +63,27 @@ export async function GET(request: NextRequest) {
     for (const user of digestUsers) {
       try {
         // Get upcoming events for this user's family
+        //
+        // e.status is checked against the events.status Postgres enum,
+        // whose only valid values are PENDING/APPROVED/REJECTED/CANCELLED/
+        // ARCHIVED - there is no SCHEDULED. The previous 'SCHEDULED' literal
+        // here made this query throw NeonDbError "invalid input value for
+        // enum event_status" for every single user, every time this cron
+        // ran, so it always landed in the catch block below, logged as a
+        // failure, and never sent a real digest email on schedule (the
+        // admin "Send Test Digest" button uses a separate endpoint that
+        // already queries the correct 'APPROVED' value, which is why this
+        // went unnoticed). APPROVED is the status normal, non-rejected,
+        // non-cancelled events end up with - same fix already applied to
+        // the event-reminder cron's 'CONFIRMED' typo.
         const familyEvents = await sql`
-          SELECT 
+          SELECT
             e.id, e.title, e.start_time, e.end_time, e.location,
             e.is_all_day, c.name as calendar_name
           FROM events e
           JOIN calendars c ON e.calendar_id = c.id
           WHERE c.family_id = ${user.family_id}
-          AND e.status = 'SCHEDULED'
+          AND e.status = 'APPROVED'
           AND e.start_time >= ${startOfWeek.toISOString()}
           AND e.start_time <= ${endOfWeek.toISOString()}
           ORDER BY e.start_time ASC
@@ -79,7 +92,7 @@ export async function GET(request: NextRequest) {
 
         // Get tasks summary for the past week
         const tasksSummary = await sql`
-          SELECT 
+          SELECT
             COALESCE(COUNT(*) FILTER (WHERE status = 'COMPLETED'), 0)::int as completed,
             COALESCE(COUNT(*) FILTER (WHERE status = 'PENDING'), 0)::int as pending,
             COALESCE(COUNT(*) FILTER (WHERE status = 'OVERDUE' OR (status = 'PENDING' AND due_date < NOW())), 0)::int as overdue

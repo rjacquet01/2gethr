@@ -5,8 +5,18 @@ import { sendEmail, isResendConfigured } from "@/lib/services/email"
 import { sendSMS, isTwilioConfigured } from "@/lib/services/sms"
 import { tierHasFeature } from "@/lib/subscription-tiers"
 
-// This endpoint processes event reminders, refreshes digest cache, and sends weekly digest on Sundays
-// Runs daily at 8 AM UTC - combined into single cron for Hobby account limit
+// This endpoint processes event reminders, refreshes the digest recipients
+// cache (stats only - it does not send anything), and auto-archives old
+// tasks/events. Runs daily at 8 AM UTC - combined into single cron for
+// Hobby account limit.
+//
+// The weekly digest EMAIL send lives entirely in its own dedicated cron
+// (/api/cron/weekly-digest, scheduled directly in vercel.json for Sunday
+// 13:00 UTC / 9am Eastern). This endpoint used to also call that digest
+// endpoint internally whenever it happened to run on a Sunday - which,
+// combined with the dedicated cron, meant the digest logic fired twice
+// every Sunday, 5 hours apart. Removed that internal trigger so there is
+// exactly one scheduled source of truth for sending the digest.
 export async function GET(request: NextRequest) {
   try {
     // Verify cron secret in production
@@ -16,7 +26,7 @@ export async function GET(request: NextRequest) {
     }
 
     const now = new Date()
-    
+
     // Find events that need reminders sent
     // Look for events starting in the next 60 minutes that have reminder_minutes set
     //
@@ -46,10 +56,10 @@ export async function GET(request: NextRequest) {
     for (const event of upcomingEvents) {
       const eventStart = new Date(event.start_time)
       const minutesUntilEvent = Math.floor((eventStart.getTime() - now.getTime()) / (1000 * 60))
-      
+
       // Check if any reminder minute matches (within 1 minute window)
       const reminderMinutes = event.reminder_minutes || []
-      const shouldSendReminder = reminderMinutes.some((min: number) => 
+      const shouldSendReminder = reminderMinutes.some((min: number) =>
         Math.abs(minutesUntilEvent - min) < 1
       )
 
@@ -98,7 +108,7 @@ export async function GET(request: NextRequest) {
           const currentHour = now.getHours()
           const startHour = parseInt(userSettings.quiet_hours_start.split(':')[0])
           const endHour = parseInt(userSettings.quiet_hours_end.split(':')[0])
-          
+
           if (startHour <= currentHour && currentHour < endHour) {
             continue // Skip during quiet hours
           }
@@ -106,9 +116,9 @@ export async function GET(request: NextRequest) {
 
         // Create in-app notification
         const notificationId = crypto.randomUUID()
-        const timeText = minutesUntilEvent <= 1 
-          ? "now" 
-          : minutesUntilEvent < 60 
+        const timeText = minutesUntilEvent <= 1
+          ? "now"
+          : minutesUntilEvent < 60
             ? `in ${minutesUntilEvent} minutes`
             : `in ${Math.floor(minutesUntilEvent / 60)} hour${Math.floor(minutesUntilEvent / 60) > 1 ? 's' : ''}`
 
@@ -204,9 +214,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Also refresh digest recipients cache (combined into this cron for Hobby account limit)
+    // Refresh digest recipients cache stats (informational only - this cron
+    // does not send the weekly digest; see the dedicated cron noted above)
     const digestStats = await sql`
-      SELECT 
+      SELECT
         COUNT(DISTINCT u.id) as total_users,
         COUNT(DISTINCT f.id) as total_families,
         COUNT(DISTINCT CASE WHEN fm.role = 'PARENT' THEN u.id END) as parents,
@@ -272,35 +283,9 @@ export async function GET(request: NextRequest) {
       console.error('[Cron] Auto-archive error (non-fatal):', archiveError)
     }
 
-    // On Sundays, also trigger weekly digest sending
-    let weeklyDigestSent = 0
-    const dayOfWeek = now.getUTCDay() // 0 = Sunday
-    
-    if (dayOfWeek === 0) {
-      console.log('[Cron] Sunday detected - triggering weekly digest')
-      // Call the weekly digest endpoint internally
-      try {
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || 'http://localhost:3000'
-        const digestResponse = await fetch(`${baseUrl}/api/cron/weekly-digest`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-          },
-        })
-        if (digestResponse.ok) {
-          const digestResult = await digestResponse.json()
-          weeklyDigestSent = digestResult.sent || 0
-          console.log('[Cron] Weekly digest sent:', weeklyDigestSent)
-        }
-      } catch (digestError) {
-        console.error('[Cron] Weekly digest error:', digestError)
-      }
-    }
-
     return NextResponse.json({
       success: true,
       remindersSent,
-      weeklyDigestSent,
       tasksArchived,
       eventsArchived,
       digestStats: digestStats[0],
