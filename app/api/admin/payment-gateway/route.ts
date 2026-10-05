@@ -1,15 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getAdminFromToken } from '@/lib/admin-auth'
+import { encrypt } from '@/lib/encryption'
 
 // GET - Get payment gateway settings
 export async function GET(request: NextRequest) {
   try {
     const token = request.headers.get('Authorization')?.replace('Bearer ', '')
     const admin = token ? await getAdminFromToken(token) : null
-    
+
     if (!admin) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // This endpoint reads/writes merchant processing credentials for real
+    // payment gateways. There's no dedicated permission key for it in
+    // admin_permissions, and it's at least as sensitive as managing other
+    // admins, so gate it the same way (SUPER_ADMIN only) rather than letting
+    // any logged-in admin role view or change it.
+    if (!admin.roles.includes('SUPER_ADMIN')) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
     }
 
     const settings = await sql`
@@ -39,9 +49,13 @@ export async function POST(request: NextRequest) {
   try {
     const token = request.headers.get('Authorization')?.replace('Bearer ', '')
     const admin = token ? await getAdminFromToken(token) : null
-    
+
     if (!admin) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!admin.roles.includes('SUPER_ADMIN')) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -65,6 +79,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // The columns are named *_encrypted, but nothing was ever actually
+    // encrypting these before writing them - api keys, api secrets, and
+    // webhook secrets were being stored as plain text. Encrypt with the same
+    // AES-256-GCM helper already used for OAuth/CalDAV tokens and 2FA
+    // secrets (lib/encryption.ts, keyed by ENCRYPTION_KEY, already required
+    // in production for those features). GET never selects these columns
+    // back to the client, so no decrypt path is needed here.
+    const apiKeyEncrypted = apiKey ? encrypt(apiKey) : null
+    const apiSecretEncrypted = apiSecret ? encrypt(apiSecret) : null
+    const webhookSecretEncrypted = webhookSecret ? encrypt(webhookSecret) : null
+
     // Check if gateway already exists
     const existing = await sql`
       SELECT id FROM payment_gateway_settings WHERE provider = ${gatewayName}
@@ -77,12 +102,12 @@ export async function POST(request: NextRequest) {
         UPDATE payment_gateway_settings SET
           display_name = ${displayName},
           merchant_id = ${merchantId},
-          api_key_encrypted = ${apiKey || null},
-          api_secret_encrypted = ${apiSecret || null},
+          api_key_encrypted = ${apiKeyEncrypted},
+          api_secret_encrypted = ${apiSecretEncrypted},
           webhook_url = ${webhookUrl || null},
-          webhook_secret_encrypted = ${webhookSecret || null},
+          webhook_secret_encrypted = ${webhookSecretEncrypted},
           is_active = ${isActive},
-          settings = ${JSON.stringify({ ...settings, webhookSecret, apiEndpoint })}::jsonb,
+          settings = ${JSON.stringify({ ...settings, apiEndpoint })}::jsonb,
           updated_at = NOW(),
           configured_by_admin_id = ${admin.id}::uuid
         WHERE provider = ${gatewayName}
@@ -99,8 +124,8 @@ export async function POST(request: NextRequest) {
           created_at, updated_at, configured_by_admin_id
         ) VALUES (
           gen_random_uuid(), ${gatewayName}, ${displayName}, ${merchantId},
-          ${apiKey || null}, ${apiSecret || null},
-          ${webhookUrl || null}, ${webhookSecret || null},
+          ${apiKeyEncrypted}, ${apiSecretEncrypted},
+          ${webhookUrl || null}, ${webhookSecretEncrypted},
           ${isActive}, ${JSON.stringify({ ...settings, apiEndpoint })}::jsonb,
           NOW(), NOW(), ${admin.id}::uuid
         )
@@ -127,9 +152,13 @@ export async function DELETE(request: NextRequest) {
   try {
     const token = request.headers.get('Authorization')?.replace('Bearer ', '')
     const admin = token ? await getAdminFromToken(token) : null
-    
+
     if (!admin) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!admin.roles.includes('SUPER_ADMIN')) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
     }
 
     const { searchParams } = new URL(request.url)

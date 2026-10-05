@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import bcrypt from 'bcryptjs'
-import { getAdminFromToken, logAdminAction } from '@/lib/admin-auth'
+import { getAdminFromToken, hashPassword, logAdminAction } from '@/lib/admin-auth'
 import { sql } from '@/lib/db'
 
 // List all admin users (SUPER_ADMIN only)
@@ -9,7 +8,7 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get('authorization')
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
     const admin = token ? await getAdminFromToken(token) : null
-    
+
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -20,8 +19,8 @@ export async function GET(request: NextRequest) {
     }
 
     const admins = await sql`
-      SELECT 
-        au.id, au.email, au.first_name, au.last_name, au.status, 
+      SELECT
+        au.id, au.email, au.first_name, au.last_name, au.status,
         au.created_at, au.last_login_at,
         COALESCE(
           json_agg(
@@ -60,7 +59,7 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('authorization')
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
     const admin = token ? await getAdminFromToken(token) : null
-    
+
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -86,8 +85,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email already exists' }, { status: 400 })
     }
 
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 10)
+    // Hash password - use the shared hashPassword() from lib/admin-auth.ts
+    // (bcrypt cost 12) instead of a local bcrypt.hash(password, 10) call, so
+    // every admin password in the system is hashed at the same, stronger
+    // cost factor rather than drifting per call site.
+    const passwordHash = await hashPassword(password)
 
     // Create admin user
     const newAdmin = await sql`
