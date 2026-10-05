@@ -14,9 +14,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
-import { 
-  MapPin, Navigation, RefreshCw, Clock, Battery, 
-  User, ExternalLink, Settings, Shield, Bell, 
+import {
+  MapPin, Navigation, RefreshCw, Clock, Battery,
+  User, ExternalLink, Settings, Shield, Bell,
   Users, ChevronRight, Loader2, AlertCircle, Crown, Crosshair
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
@@ -95,10 +95,10 @@ export default function LocationPage() {
 
   const loadLocations = useCallback(async () => {
     if (!selectedFamily?.id) return
-    
+
     try {
       const res = await authFetch(`/api/location?familyId=${selectedFamily.id}`)
-      
+
       const data = await res.json()
       if (res.ok) {
         setLocations(data.data || [])
@@ -114,11 +114,11 @@ export default function LocationPage() {
 
   const loadMySettings = useCallback(async () => {
     if (!selectedFamily?.id) return
-    
+
     try {
       // API returns settings for all families user is in
       const res = await authFetch('/api/location/settings')
-      
+
       if (res.ok) {
         const data = await res.json()
         // Find settings for current family
@@ -156,7 +156,7 @@ export default function LocationPage() {
   // Request location from a family member (parent feature)
   const requestLocationNow = async (memberId: string, memberName: string) => {
     if (!selectedFamily?.id) return
-    
+
     setRequestingLocation(memberId)
     try {
       const res = await authFetch('/api/location/request', {
@@ -167,9 +167,9 @@ export default function LocationPage() {
           memberId,
         }),
       })
-      
+
       const data = await res.json()
-      
+
       if (res.ok) {
         toast.success(`Location request sent to ${memberName}`)
         // Refresh locations after a short delay to show updated data
@@ -183,7 +183,7 @@ export default function LocationPage() {
       setRequestingLocation(null)
     }
   }
-  
+
 
   useEffect(() => {
     async function load() {
@@ -196,7 +196,7 @@ export default function LocationPage() {
         setLoading(false)
       }
     }
-    
+
     if (selectedFamily?.id) {
       load()
     } else if (!familiesLoading) {
@@ -216,15 +216,15 @@ export default function LocationPage() {
 
     return () => clearInterval(interval)
   }, [selectedFamily?.id, loadLocations, viewRefreshIntervalSec])
-  
+
   // Live location tracking - continuously share location when mode is ACTIVE
   useEffect(() => {
     if (!mySettings || mySettings.mode !== 'ACTIVE' || !mySettings.shareWithFamily || !navigator.geolocation) {
       return
     }
-    
+
     const updateInterval = (mySettings.updateIntervalSec || 60) * 1000
-    
+
     const sendLocation = async (position: GeolocationPosition) => {
       try {
         await authFetch('/api/location', {
@@ -245,10 +245,10 @@ export default function LocationPage() {
         // Silent fail for live tracking
       }
     }
-    
+
     // Get initial position
     navigator.geolocation.getCurrentPosition(sendLocation, () => {}, { enableHighAccuracy: true })
-    
+
     // Set up continuous tracking
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
@@ -259,7 +259,7 @@ export default function LocationPage() {
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: updateInterval }
     )
-    
+
     return () => {
       navigator.geolocation.clearWatch(watchId)
     }
@@ -306,7 +306,7 @@ export default function LocationPage() {
                   familyId,
                 }),
               })
-              
+
               if (res.ok) {
                 await loadLocations()
                 resolve('Location shared successfully')
@@ -337,7 +337,7 @@ export default function LocationPage() {
       toast.error("Unable to update settings - please refresh the page")
       return
     }
-    
+
     setUpdatingSettings(true)
     try {
       // Send updates directly - mode is already in correct format (OFF/ACTIVE/PAUSED)
@@ -346,7 +346,7 @@ export default function LocationPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ memberId: mySettings.memberId, ...updates }),
       })
-      
+
       if (res.ok) {
         await loadMySettings() // Reload to get fresh data
         toast.success('Settings updated')
@@ -365,7 +365,7 @@ export default function LocationPage() {
     // Detect platform and open appropriate maps app
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
     const isAndroid = /Android/.test(navigator.userAgent)
-    
+
     if (isIOS) {
       // Apple Maps
       window.open(`maps://maps.apple.com/?q=${encodeURIComponent(name)}&ll=${lat},${lng}`, '_blank')
@@ -383,7 +383,7 @@ export default function LocationPage() {
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
     const diffMins = Math.floor(diffMs / 60000)
-    
+
     if (diffMins < 1) return 'Just now'
     if (diffMins < 60) return `${diffMins} min ago`
     if (diffMins < 1440) return `${Math.floor(diffMins / 60)} hours ago`
@@ -399,9 +399,36 @@ export default function LocationPage() {
     }
   }
 
+  // A member's locationMode of 'ACTIVE' only means their sharing SETTING is
+  // turned on - it says nothing about whether we've actually heard from
+  // their device recently. The per-member badge used to show the raw mode
+  // (ACTIVE/PAUSED/OFF) regardless of how old the last ping was, so a family
+  // member whose phone hadn't reported in days still showed a plain green
+  // "Active" badge - misleading for a feature parents rely on for safety.
+  // These two helpers fold "is the mode ACTIVE" and "is the data actually
+  // fresh" into one status so the badge reflects what's really going on.
+  const STALE_LOCATION_THRESHOLD_MS = 30 * 60 * 1000 // 30 minutes
+
+  const getMemberLocationStatus = (member: FamilyMemberLocation): { label: string; colorClass: string } => {
+    if (member.locationMode !== 'ACTIVE') {
+      return {
+        label: member.locationMode === 'OFF' ? 'Off' : 'Paused',
+        colorClass: getModeColor(member.locationMode),
+      }
+    }
+    if (!member.location) {
+      return { label: 'Active · No Data Yet', colorClass: 'bg-amber-500' }
+    }
+    const ageMs = Date.now() - new Date(member.location.timestamp).getTime()
+    if (ageMs > STALE_LOCATION_THRESHOLD_MS) {
+      return { label: 'Active · Stale', colorClass: 'bg-amber-500' }
+    }
+    return { label: 'Active', colorClass: 'bg-green-500' }
+  }
+
   // Only show loading if we're actually loading data (not if familyId is missing)
   const isActuallyLoading = familiesLoading || (selectedFamily?.id && (loading || subscriptionLoading))
-  
+
   if (isActuallyLoading) {
     return (
       <div className="container max-w-4xl py-8">
@@ -432,7 +459,7 @@ export default function LocationPage() {
   // Show upgrade prompt if subscription doesn't include location sharing
   // Only show upgrade prompt if we have subscription data AND user is not on Premium
   const hasLocationAccess = !!access?.featureFlags.locationSharing
-  
+
   if (subscriptionError || (access && !hasLocationAccess)) {
     return (
       <div className="container max-w-4xl py-8">
@@ -443,7 +470,7 @@ export default function LocationPage() {
               Track and share locations with your family members
             </p>
           </div>
-          
+
           <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20">
             <CardContent className="py-12 text-center">
               <Crown className="mx-auto h-12 w-12 text-amber-500" />
@@ -536,9 +563,9 @@ export default function LocationPage() {
                 <Navigation className="mr-2 h-4 w-4" />
                 Share My Current Location
               </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => handleUpdateSettings({ 
+              <Button
+                variant="outline"
+                onClick={() => handleUpdateSettings({
                   mode: mySettings?.mode === 'OFF' ? 'ACTIVE' : 'OFF',
                   shareWithFamily: mySettings?.mode === 'OFF' ? true : false
                 })}
@@ -556,7 +583,7 @@ export default function LocationPage() {
             <TabsTrigger value="list">List View</TabsTrigger>
             <TabsTrigger value="map">Map View</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="list" className="space-y-4">
             {locations.length === 0 ? (
               <Card>
@@ -569,7 +596,9 @@ export default function LocationPage() {
                 </CardContent>
               </Card>
             ) : (
-              locations.map((member) => (
+              locations.map((member) => {
+                const status = getMemberLocationStatus(member)
+                return (
                 <Card key={member.memberId} className="overflow-hidden">
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-4">
@@ -604,18 +633,18 @@ export default function LocationPage() {
                           )}
                         </div>
                       </div>
-                      
+
                       <div className="flex flex-col gap-2 items-end">
-                        <Badge variant="secondary" className={`${getModeColor(member.locationMode)} text-white text-xs`}>
-                          {member.locationMode}
+                        <Badge variant="secondary" className={`${status.colorClass} text-white text-xs`}>
+                          {status.label}
                         </Badge>
                         <div className="flex gap-1 flex-wrap justify-end">
                           {/* Request Location Now button - for parents/guardians to ping others */}
-                          {selectedFamily?.currentUserRole && 
-                           ['ADMIN', 'PARENT', 'GUARDIAN'].includes(selectedFamily.currentUserRole) && 
+                          {selectedFamily?.currentUserRole &&
+                           ['ADMIN', 'PARENT', 'GUARDIAN'].includes(selectedFamily.currentUserRole) &&
                            member.memberId !== mySettings?.memberId && (
-                            <Button 
-                              size="sm" 
+                            <Button
+                              size="sm"
                               variant="default"
                               className="h-8 text-xs"
                               disabled={requestingLocation === member.memberId}
@@ -634,8 +663,8 @@ export default function LocationPage() {
                           )}
                           {member.location && (
                             <>
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 variant="outline"
                                 className="h-8"
                                 onClick={() => {
@@ -645,13 +674,13 @@ export default function LocationPage() {
                               >
                                 <MapPin className="h-4 w-4" />
                               </Button>
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 variant="outline"
                                 className="h-8"
                                 onClick={() => openInMaps(
-                                  member.location!.latitude, 
-                                  member.location!.longitude, 
+                                  member.location!.latitude,
+                                  member.location!.longitude,
                                   member.name
                                 )}
                               >
@@ -664,10 +693,11 @@ export default function LocationPage() {
                     </div>
                   </CardContent>
                 </Card>
-              ))
+                )
+              })
             )}
           </TabsContent>
-          
+
           <TabsContent value="map">
             <Card>
               <CardContent className="p-0">
@@ -679,7 +709,7 @@ export default function LocationPage() {
                       loading="lazy"
                       referrerPolicy="no-referrer-when-downgrade"
                       src={`https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''}&q=${
-                        locations.filter(l => l.location).map(l => 
+                        locations.filter(l => l.location).map(l =>
                           `${l.location!.latitude},${l.location!.longitude}`
                         ).join('|')
                       }&center=${
@@ -697,7 +727,7 @@ export default function LocationPage() {
                       </p>
                     </div>
                   )}
-                  
+
                   {/* Static map fallback if no API key */}
                   {!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && locations.filter(l => l.location).length > 0 && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted">
@@ -708,9 +738,9 @@ export default function LocationPage() {
                       </p>
                       <div className="mt-4 space-y-2">
                         {locations.filter(l => l.location).map(member => (
-                          <Button 
+                          <Button
                             key={member.memberId}
-                            variant="outline" 
+                            variant="outline"
                             size="sm"
                             onClick={() => openInMaps(
                               member.location!.latitude,
@@ -758,7 +788,7 @@ export default function LocationPage() {
               {selectedMember?.location && formatTimestamp(selectedMember.location.timestamp)}
             </DialogDescription>
           </DialogHeader>
-          
+
           {selectedMember?.location && (
             <div className="space-y-4">
               <div className="relative h-[300px] w-full bg-muted rounded-lg overflow-hidden">
@@ -783,7 +813,7 @@ export default function LocationPage() {
                   </div>
                 )}
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Coordinates</p>
@@ -812,7 +842,7 @@ export default function LocationPage() {
               </div>
             </div>
           )}
-          
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowMapDialog(false)}>
               Close
@@ -840,7 +870,7 @@ export default function LocationPage() {
               Configure how you share your location with family members
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-6 py-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
@@ -855,7 +885,7 @@ export default function LocationPage() {
                 disabled={updatingSettings}
               />
             </div>
-            
+
             <div className="space-y-3">
               <Label>Sharing Mode</Label>
               <div className="grid gap-2">
@@ -867,8 +897,8 @@ export default function LocationPage() {
                   <button
                     key={option.mode}
                     className={`flex items-center justify-between p-3 rounded-lg border text-left transition-colors ${
-                      mySettings?.mode === option.mode 
-                        ? 'border-primary bg-primary/5' 
+                      mySettings?.mode === option.mode
+                        ? 'border-primary bg-primary/5'
                         : 'border-border hover:bg-muted'
                     }`}
                     onClick={() => handleUpdateSettings({ mode: option.mode as LocationSettings['mode'] })}
@@ -887,7 +917,7 @@ export default function LocationPage() {
                 ))}
               </div>
             </div>
-            
+
             <div className="space-y-3">
               <Label>Update Frequency</Label>
               <p className="text-sm text-muted-foreground">
