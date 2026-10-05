@@ -7,13 +7,15 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get('authorization')
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
     const admin = token ? await getAdminFromToken(token) : null
-    
+
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Check permission - hasPermission takes admin object and permission string
-    if (!hasPermission(admin, 'risk_flags.read')) {
+    // Check permission - hasPermission takes admin object and permission string.
+    // Real seeded key is 'trust.read' (see scripts/003-admin-schema.sql); this
+    // used to check the nonexistent 'risk_flags.read' and 403'd every TRUST_SAFETY admin.
+    if (!hasPermission(admin, 'trust.read')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -28,11 +30,11 @@ export async function GET(request: NextRequest) {
     // Build query based on filters - using proper SQL template literals
     let flags
     let countResult
-    
+
     // Handle resolvedToday filter first
     if (resolvedToday) {
       flags = await sql`
-        SELECT 
+        SELECT
           rf.id,
           rf.family_id,
           rf.user_id,
@@ -65,7 +67,7 @@ export async function GET(request: NextRequest) {
       `
     } else if (status === 'unresolved' && severity !== 'all') {
       flags = await sql`
-        SELECT 
+        SELECT
           rf.id,
           rf.family_id,
           rf.user_id,
@@ -86,12 +88,12 @@ export async function GET(request: NextRequest) {
         LEFT JOIN users u ON rf.user_id = u.id
         WHERE rf.status NOT IN ('RESOLVED', 'DISMISSED')
         AND rf.severity = ${severity}
-        ORDER BY 
-          CASE rf.severity 
-            WHEN 'CRITICAL' THEN 1 
-            WHEN 'HIGH' THEN 2 
-            WHEN 'MEDIUM' THEN 3 
-            ELSE 4 
+        ORDER BY
+          CASE rf.severity
+            WHEN 'CRITICAL' THEN 1
+            WHEN 'HIGH' THEN 2
+            WHEN 'MEDIUM' THEN 3
+            ELSE 4
           END,
           rf.created_at DESC
         LIMIT ${limit} OFFSET ${offset}
@@ -103,7 +105,7 @@ export async function GET(request: NextRequest) {
       `
     } else if (status === 'unresolved') {
       flags = await sql`
-        SELECT 
+        SELECT
           rf.id,
           rf.family_id,
           rf.user_id,
@@ -123,12 +125,12 @@ export async function GET(request: NextRequest) {
         LEFT JOIN families f ON rf.family_id = f.id
         LEFT JOIN users u ON rf.user_id = u.id
         WHERE rf.status NOT IN ('RESOLVED', 'DISMISSED')
-        ORDER BY 
-          CASE rf.severity 
-            WHEN 'CRITICAL' THEN 1 
-            WHEN 'HIGH' THEN 2 
-            WHEN 'MEDIUM' THEN 3 
-            ELSE 4 
+        ORDER BY
+          CASE rf.severity
+            WHEN 'CRITICAL' THEN 1
+            WHEN 'HIGH' THEN 2
+            WHEN 'MEDIUM' THEN 3
+            ELSE 4
           END,
           rf.created_at DESC
         LIMIT ${limit} OFFSET ${offset}
@@ -139,7 +141,7 @@ export async function GET(request: NextRequest) {
       `
     } else if (status === 'resolved' && severity !== 'all') {
       flags = await sql`
-        SELECT 
+        SELECT
           rf.id,
           rf.family_id,
           rf.user_id,
@@ -170,7 +172,7 @@ export async function GET(request: NextRequest) {
       `
     } else if (status === 'resolved') {
       flags = await sql`
-        SELECT 
+        SELECT
           rf.id,
           rf.family_id,
           rf.user_id,
@@ -199,7 +201,7 @@ export async function GET(request: NextRequest) {
       `
     } else if (severity !== 'all') {
       flags = await sql`
-        SELECT 
+        SELECT
           rf.id,
           rf.family_id,
           rf.user_id,
@@ -219,12 +221,12 @@ export async function GET(request: NextRequest) {
         LEFT JOIN families f ON rf.family_id = f.id
         LEFT JOIN users u ON rf.user_id = u.id
         WHERE rf.severity = ${severity}
-        ORDER BY 
-          CASE rf.severity 
-            WHEN 'CRITICAL' THEN 1 
-            WHEN 'HIGH' THEN 2 
-            WHEN 'MEDIUM' THEN 3 
-            ELSE 4 
+        ORDER BY
+          CASE rf.severity
+            WHEN 'CRITICAL' THEN 1
+            WHEN 'HIGH' THEN 2
+            WHEN 'MEDIUM' THEN 3
+            ELSE 4
           END,
           rf.created_at DESC
         LIMIT ${limit} OFFSET ${offset}
@@ -235,7 +237,7 @@ export async function GET(request: NextRequest) {
       `
     } else {
       flags = await sql`
-        SELECT 
+        SELECT
           rf.id,
           rf.family_id,
           rf.user_id,
@@ -254,12 +256,12 @@ export async function GET(request: NextRequest) {
         FROM risk_flags rf
         LEFT JOIN families f ON rf.family_id = f.id
         LEFT JOIN users u ON rf.user_id = u.id
-        ORDER BY 
-          CASE rf.severity 
-            WHEN 'CRITICAL' THEN 1 
-            WHEN 'HIGH' THEN 2 
-            WHEN 'MEDIUM' THEN 3 
-            ELSE 4 
+        ORDER BY
+          CASE rf.severity
+            WHEN 'CRITICAL' THEN 1
+            WHEN 'HIGH' THEN 2
+            WHEN 'MEDIUM' THEN 3
+            ELSE 4
           END,
           rf.created_at DESC
         LIMIT ${limit} OFFSET ${offset}

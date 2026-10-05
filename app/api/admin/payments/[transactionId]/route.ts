@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { getAdminFromRequest } from '@/lib/admin-auth'
+import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth'
 
 // PATCH - Process a payment (approve or reject)
 export async function PATCH(
@@ -9,9 +9,13 @@ export async function PATCH(
 ) {
   try {
     const { admin, error } = await getAdminFromRequest(request)
-    
+
     if (!admin) {
       return NextResponse.json({ success: false, error: error || 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!hasPermission(admin, 'payments.update')) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
     }
 
     const { transactionId } = await params
@@ -60,26 +64,35 @@ export async function PATCH(
       // Get the new tier from metadata
       const newTier = transaction.metadata?.tier || 'PREMIUM'
 
-      // Update transaction status
-      await sql`
+      // Update transaction status - atomic claim: only succeeds if still PENDING,
+      // so two concurrent approve clicks can't both process the same transaction.
+      const approveResult = await sql`
         UPDATE payment_transactions
-        SET 
+        SET
           status = 'COMPLETED',
           stripe_payment_id = ${transactionRef},
-          metadata = metadata || ${JSON.stringify({ 
+          metadata = metadata || ${JSON.stringify({
             processedAt: new Date().toISOString(),
             processedBy: admin.id,
             gateway: gateway || 'amex',
             amexTransactionRef: transactionRef
           })}::jsonb
-        WHERE id = ${transactionId}
+        WHERE id = ${transactionId} AND status = 'PENDING'
+        RETURNING id
       `
+
+      if (approveResult.length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'Transaction was already processed' },
+          { status: 409 }
+        )
+      }
 
       // Update subscription tier
       if (transaction.subscription_id) {
         await sql`
           UPDATE subscriptions
-          SET 
+          SET
             tier = ${newTier}::subscription_tier,
             status = 'ACTIVE',
             updated_at = NOW()
@@ -89,7 +102,7 @@ export async function PATCH(
         // Log subscription status change
         await sql`
           INSERT INTO subscription_status_history (
-            id, subscription_id, old_status, new_status, 
+            id, subscription_id, old_status, new_status,
             notes, source, admin_user_id, changed_at
           ) VALUES (
             gen_random_uuid(),
@@ -142,17 +155,25 @@ export async function PATCH(
         )
       }
 
-      await sql`
+      const rejectResult = await sql`
         UPDATE payment_transactions
-        SET 
+        SET
           status = 'FAILED',
           metadata = metadata || ${JSON.stringify({
             rejectedAt: new Date().toISOString(),
             rejectedBy: admin.id,
             rejectionReason
           })}::jsonb
-        WHERE id = ${transactionId}
+        WHERE id = ${transactionId} AND status = 'PENDING'
+        RETURNING id
       `
+
+      if (rejectResult.length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'Transaction was already processed' },
+          { status: 409 }
+        )
+      }
 
       // Log admin action
       await sql`

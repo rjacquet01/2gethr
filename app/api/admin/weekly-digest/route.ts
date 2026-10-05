@@ -1,18 +1,24 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
-// Using getAdminFromCookies for cookie-based admin authentication
-import { getAdminFromCookies, logAdminAction } from "@/lib/admin-auth"
+import { getAdminFromRequest, hasPermission, logAdminAction } from "@/lib/admin-auth"
 import { sendEmail, EMAIL_TEMPLATES } from "@/lib/services/email"
 
 // GET - Retrieves users eligible for weekly digest and preview stats
-// Note: This endpoint allows read access for admin dashboard preview
 export async function GET(request: NextRequest) {
-  void request
   try {
+    const { admin, error } = await getAdminFromRequest(request)
+
+    if (!admin) {
+      return NextResponse.json({ success: false, error: error || 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!hasPermission(admin, 'users.read')) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
 
     // Get count of users with weekly digest enabled
     const digestUsers = await sql`
-      SELECT 
+      SELECT
         u.id,
         u.email,
         u.first_name,
@@ -36,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     // Get last digest send info
     const lastDigest = await sql`
-      SELECT * FROM admin_action_logs 
+      SELECT * FROM admin_action_logs
       WHERE action = 'WEEKLY_DIGEST_SENT'
       ORDER BY created_at DESC
       LIMIT 1
@@ -79,15 +85,28 @@ export async function GET(request: NextRequest) {
 }
 
 // POST - Send weekly digest emails
-// Note: Auth removed for admin dashboard access (page itself is protected)
+// Restricted to SUPER_ADMIN since this mass-emails every parent/guardian.
 export async function POST(request: NextRequest) {
   try {
+    const { admin, error } = await getAdminFromRequest(request)
+
+    if (!admin) {
+      return NextResponse.json({ success: false, error: error || 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!admin.roles.includes('SUPER_ADMIN')) {
+      return NextResponse.json(
+        { success: false, error: 'Only super admins can send the weekly digest' },
+        { status: 403 }
+      )
+    }
+
     const body = await request.json()
     const { testMode = false, testEmail = null } = body
 
     // Get users with weekly digest enabled (parents/guardians only)
     const digestUsers = await sql`
-      SELECT 
+      SELECT
         u.id,
         u.email,
         u.first_name,
@@ -116,7 +135,7 @@ export async function POST(request: NextRequest) {
 
     // For test mode, create a test user object if the email isn't in the eligible list
     let usersToProcess: Array<{ id: string; email: string; first_name: string; last_name: string; family_name: string; family_id: string }>
-    
+
     if (testMode && testEmail) {
       // Check if test email exists in eligible users
       const existingUser = digestUsers.find((u: { email: string }) => u.email === testEmail)
@@ -124,10 +143,10 @@ export async function POST(request: NextRequest) {
         usersToProcess = [existingUser]
       } else {
         // Use first family's data for test, or create mock data
-        const sampleFamily = digestUsers.length > 0 
+        const sampleFamily = digestUsers.length > 0
           ? { family_id: digestUsers[0].family_id, family_name: digestUsers[0].family_name }
           : { family_id: null, family_name: 'Test Family' }
-        
+
         usersToProcess = [{
           id: 'test-user',
           email: testEmail,
@@ -150,7 +169,7 @@ export async function POST(request: NextRequest) {
         if (user.family_id) {
           // Get upcoming events for this user's family
           familyEvents = await sql`
-            SELECT 
+            SELECT
               e.id, e.title, e.start_time, e.end_time, e.location,
               e.is_all_day, c.name as calendar_name
             FROM events e
@@ -165,7 +184,7 @@ export async function POST(request: NextRequest) {
 
           // Get recent tasks summary
           tasksSummary = await sql`
-            SELECT 
+            SELECT
               COUNT(*) FILTER (WHERE status = 'COMPLETED') as completed,
               COUNT(*) FILTER (WHERE status = 'PENDING') as pending,
               COUNT(*) FILTER (WHERE status = 'OVERDUE') as overdue
@@ -221,7 +240,7 @@ export async function POST(request: NextRequest) {
                 events: familyEvents.slice(0, 5),
                 tasks: tasksSummary[0] || { completed: 0, pending: 0, overdue: 0 },
                 generatedBy: 'admin',
-                adminId: 'system'
+                adminId: admin.id
               })},
               NOW(),
               NOW()
@@ -247,9 +266,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Log the admin action (using 'system' as admin id since auth is removed)
+    // Log the admin action
     await logAdminAction(
-      'system',
+      admin.id,
       testMode ? 'WEEKLY_DIGEST_TEST' : 'WEEKLY_DIGEST_SENT',
       'system',
       'weekly_digest',
@@ -259,14 +278,15 @@ export async function POST(request: NextRequest) {
         failed: results.failed,
         testMode,
         testEmail: testMode ? testEmail : null,
-        adminEmail: 'system@togethr.app'
+        adminEmail: admin.email
       },
-      request
+      request.headers.get('x-forwarded-for') || undefined,
+      request.headers.get('user-agent') || undefined
     )
 
     return NextResponse.json({
       success: true,
-      message: testMode 
+      message: testMode
         ? `Test digest sent to ${testEmail}`
         : `Weekly digest sent to ${results.sent} users`,
       results

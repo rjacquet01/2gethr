@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { getAdminFromRequest } from '@/lib/admin-auth'
+import { getAdminFromRequest, hasPermission } from '@/lib/admin-auth'
 
 // GET - List all payment transactions with user info
 export async function GET(request: NextRequest) {
   try {
     const { admin, error } = await getAdminFromRequest(request)
-    
+
     if (!admin) {
       return NextResponse.json({ success: false, error: error || 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!hasPermission(admin, 'payments.read')) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -17,7 +21,7 @@ export async function GET(request: NextRequest) {
     let transactions
     if (status) {
       transactions = await sql`
-        SELECT 
+        SELECT
           pt.*,
           u.id as user_id,
           u.email as user_email,
@@ -34,7 +38,7 @@ export async function GET(request: NextRequest) {
       `
     } else {
       transactions = await sql`
-        SELECT 
+        SELECT
           pt.*,
           u.id as user_id,
           u.email as user_email,

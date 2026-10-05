@@ -10,12 +10,14 @@ export async function PATCH(
     const authHeader = request.headers.get('authorization')
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
     const admin = token ? await getAdminFromToken(token) : null
-    
+
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!hasPermission(admin, 'risk_flags.write')) {
+    // Real seeded key is 'trust.update' (see scripts/003-admin-schema.sql); this
+    // used to check the nonexistent 'risk_flags.write' and 403'd every TRUST_SAFETY admin.
+    if (!hasPermission(admin, 'trust.update')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -38,7 +40,7 @@ export async function PATCH(
     // Update flag
     await sql`
       UPDATE risk_flags
-      SET 
+      SET
         status = 'resolved',
         reviewed_at = NOW(),
         reviewed_by_admin_id = ${admin.id}::uuid,
@@ -47,14 +49,17 @@ export async function PATCH(
       WHERE id = ${flagId}::uuid
     `
 
-    // Log action
+    // Log action - metadata must be the 5th argument (an object), not the
+    // Request object; this used to pass `request` here, corrupting the
+    // audit trail for every risk-flag resolution.
     await logAdminAction(
       admin.id,
       'RESOLVE_RISK_FLAG',
       'risk_flag',
       flagId,
-      request,
-      { resolution: resolution.trim(), flagType: existing[0].flag_type }
+      { resolution: resolution.trim(), flagType: existing[0].flag_type },
+      request.headers.get('x-forwarded-for') || undefined,
+      request.headers.get('user-agent') || undefined
     )
 
     return NextResponse.json({ success: true })

@@ -16,7 +16,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!hasPermission(admin, 'subscription:update')) {
+    if (!hasPermission(admin, 'subscriptions.update')) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
 
@@ -43,23 +43,29 @@ export async function PATCH(
     const metadata = transaction[0].metadata as { requestedTier?: string; billingCycle?: string }
 
     if (action === 'approve') {
-      // Update transaction to succeeded
-      await sql`
+      // Update transaction to succeeded - atomic claim: only succeeds if still
+      // PENDING, so two concurrent approve clicks can't both process this.
+      const approveResult = await sql`
         UPDATE payment_transactions
         SET status = 'SUCCEEDED',
             stripe_payment_id = ${stripePaymentId || null},
-            metadata = metadata || ${JSON.stringify({ 
+            metadata = metadata || ${JSON.stringify({
               processedBy: admin.id,
               processedAt: new Date().toISOString(),
               notes: notes || null
             })}::jsonb
-        WHERE id = ${transactionId}
+        WHERE id = ${transactionId} AND status = 'PENDING'
+        RETURNING id
       `
+
+      if (approveResult.length === 0) {
+        return NextResponse.json({ error: 'Transaction was already processed' }, { status: 409 })
+      }
 
       // Update subscription tier
       const newTier = metadata?.requestedTier || 'PREMIUM'
       const billingCycle = metadata?.billingCycle || 'monthly'
-      
+
       // Calculate period end date
       const periodEnd = new Date()
       if (billingCycle === 'annual') {
@@ -83,7 +89,7 @@ export async function PATCH(
         INSERT INTO subscription_status_history (
           id, subscription_id, old_status, new_status, source, notes, changed_at, admin_user_id
         ) VALUES (
-          gen_random_uuid(), ${transaction[0].subscription_id}, 
+          gen_random_uuid(), ${transaction[0].subscription_id},
           ${transaction[0].current_tier}, ${newTier},
           'ADMIN_APPROVAL', ${notes || 'Payment approved by admin'}, NOW(), ${admin.id}::uuid
         )
@@ -95,7 +101,7 @@ export async function PATCH(
         'subscription_upgrade_approved',
         'subscription',
         transaction[0].subscription_id,
-        { 
+        {
           transactionId,
           newTier,
           amount: transaction[0].amount,
@@ -105,32 +111,37 @@ export async function PATCH(
         request.headers.get('user-agent') || 'unknown'
       )
 
-      return NextResponse.json({ 
-        success: true, 
+      return NextResponse.json({
+        success: true,
         message: 'Upgrade approved and subscription activated',
         newTier
       })
     }
 
     if (action === 'reject') {
-      // Update transaction to failed
-      await sql`
+      // Update transaction to failed - same atomic-claim guard as approve.
+      const rejectResult = await sql`
         UPDATE payment_transactions
         SET status = 'FAILED',
-            metadata = metadata || ${JSON.stringify({ 
+            metadata = metadata || ${JSON.stringify({
               rejectedBy: admin.id,
               rejectedAt: new Date().toISOString(),
               notes: notes || 'Rejected by admin'
             })}::jsonb
-        WHERE id = ${transactionId}
+        WHERE id = ${transactionId} AND status = 'PENDING'
+        RETURNING id
       `
+
+      if (rejectResult.length === 0) {
+        return NextResponse.json({ error: 'Transaction was already processed' }, { status: 409 })
+      }
 
       // Log subscription status change
       await sql`
         INSERT INTO subscription_status_history (
           id, subscription_id, old_status, new_status, source, notes, changed_at, admin_user_id
         ) VALUES (
-          gen_random_uuid(), ${transaction[0].subscription_id}, 
+          gen_random_uuid(), ${transaction[0].subscription_id},
           'PENDING_UPGRADE', ${transaction[0].current_tier},
           'ADMIN_REJECTION', ${notes || 'Upgrade request rejected'}, NOW(), ${admin.id}::uuid
         )
