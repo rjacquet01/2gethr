@@ -13,19 +13,20 @@ import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { Empty } from '@/components/ui/empty'
 import { toast } from 'sonner'
-import { 
-  Crown, 
-  Check, 
-  Sparkles, 
-  Shield, 
-  MapPin, 
-  Clock, 
+import {
+  Crown,
+  Check,
+  Sparkles,
+  Shield,
+  MapPin,
+  Clock,
   Users,
   AlertCircle,
   CreditCard,
   X
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getTierDefinition } from '@/lib/subscription-tiers'
 
 export default function SubscriptionPage() {
   const router = useRouter()
@@ -33,30 +34,30 @@ export default function SubscriptionPage() {
   const { families, isLoading: familiesLoading } = useFamilies()
   const [selectedBilling, setSelectedBilling] = useState<'monthly' | 'annual'>('annual')
   const [selectedTierIndex, setSelectedTierIndex] = useState<number | null>(null)
-  
+
   const primaryFamily = families?.[0]
   const { subscription, access, isLoading: subLoading, startTrial, cancelSubscription } = useSubscription(primaryFamily?.id || null)
   const tiers = useSubscriptionTiers()
-  
+
   const [isStartingTrial, setIsStartingTrial] = useState(false)
   const [isCanceling, setIsCanceling] = useState(false)
-  
+
   // Map tier names to API tier keys
   const tierNameToKey: Record<string, string> = {
     'Free': 'FREE',
     'Basic': 'PREMIUM',
     'Premium': 'PREMIUM_PLUS',
   }
-  
-  // Format tier key to display name
-  const formatTierName = (tier: string) => {
-    const tierDisplayNames: Record<string, string> = {
-      'FREE': 'Free',
-      'PREMIUM': 'Basic',
-      'PREMIUM_PLUS': 'Premium Plus',
-    }
-    return tierDisplayNames[tier.toUpperCase()] || tier
-  }
+
+  // Format tier key to display name. This used to hardcode its own
+  // name map (and had PREMIUM_PLUS wrong, as "Premium Plus" instead of
+  // "Premium"), which drifted out of sync with the canonical tier names
+  // in lib/subscription-tiers.ts - the same single-source-of-truth file
+  // the pricing cards below already read from via useSubscriptionTiers().
+  // Delegating here keeps this page's "Current Plan" badge and "What's
+  // included" heading consistent with the pricing cards instead of
+  // re-duplicating the mapping a second time.
+  const formatTierName = (tier: string) => getTierDefinition(tier).name
 
   const handleStartTrial = async (tier: 'PREMIUM' | 'PREMIUM_PLUS') => {
     setIsStartingTrial(true)
@@ -141,7 +142,7 @@ export default function SubscriptionPage() {
                 </CardDescription>
               </div>
             </div>
-            <Badge 
+            <Badge
               variant={access.hasPremium ? "default" : "secondary"}
               className="text-sm px-3 py-1"
             >
@@ -159,7 +160,7 @@ export default function SubscriptionPage() {
               </span>
             </div>
           )}
-          
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-3 rounded-lg bg-muted/50">
               <div className="text-2xl font-bold">
@@ -242,8 +243,8 @@ export default function SubscriptionPage() {
           <button
             className={cn(
               "px-4 py-2 rounded-md text-sm font-medium transition-colors",
-              selectedBilling === 'monthly' 
-                ? "bg-background shadow-sm" 
+              selectedBilling === 'monthly'
+                ? "bg-background shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             )}
             onClick={() => setSelectedBilling('monthly')}
@@ -253,8 +254,8 @@ export default function SubscriptionPage() {
           <button
             className={cn(
               "px-4 py-2 rounded-md text-sm font-medium transition-colors",
-              selectedBilling === 'annual' 
-                ? "bg-background shadow-sm" 
+              selectedBilling === 'annual'
+                ? "bg-background shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             )}
             onClick={() => setSelectedBilling('annual')}
@@ -273,16 +274,16 @@ export default function SubscriptionPage() {
           const isPremium = tier.name === 'Premium'
           const isSelected = selectedTierIndex === index
           const price = selectedBilling === 'monthly' ? tier.price.monthly : tier.price.annual
-          
+
           const handleCardClick = () => {
             if (isCurrentTier || tier.name === 'Free') return
             setSelectedTierIndex(index)
             // Navigate to upgrade page with selected tier
             router.push(`/subscription/upgrade?tier=${tierKey}&billing=${selectedBilling}`)
           }
-          
+
           return (
-            <Card 
+            <Card
               key={tier.name}
               onClick={handleCardClick}
               className={cn(
@@ -298,7 +299,7 @@ export default function SubscriptionPage() {
                   Most Popular
                 </div>
               )}
-              
+
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   {tier.name}
@@ -308,7 +309,7 @@ export default function SubscriptionPage() {
                 </CardTitle>
                 <CardDescription>{tier.description}</CardDescription>
               </CardHeader>
-              
+
               <CardContent className="space-y-4">
                 <div className="flex items-baseline gap-1">
                   <span className="text-4xl font-bold">
@@ -316,13 +317,13 @@ export default function SubscriptionPage() {
                   </span>
                   <span className="text-muted-foreground">/month</span>
                 </div>
-                
+
                 {selectedBilling === 'annual' && price > 0 && (
                   <p className="text-sm text-muted-foreground">
                     ${price}/year billed annually
                   </p>
                 )}
-                
+
                 <ul className="space-y-2">
                   {tier.features.map((feature) => (
                     <li key={feature} className="flex items-center gap-2 text-sm">
@@ -332,7 +333,7 @@ export default function SubscriptionPage() {
                   ))}
                 </ul>
               </CardContent>
-              
+
               <CardFooter>
                 {isCurrentTier ? (
                   <Button className="w-full" variant="outline" disabled>
@@ -344,8 +345,8 @@ export default function SubscriptionPage() {
                   </Button>
                 ) : !access.hasPremium && index > 0 ? (
                   <div className="space-y-2 w-full">
-                    <Button 
-                      className="w-full" 
+                    <Button
+                      className="w-full"
                       variant="outline"
                       onClick={(e) => {
                         e.stopPropagation()
@@ -360,9 +361,9 @@ export default function SubscriptionPage() {
                       )}
                       Start 30-Day Trial
                     </Button>
-                    <Button 
-                      className="w-full" 
-                      variant={isPremium ? "default" : "outline"} 
+                    <Button
+                      className="w-full"
+                      variant={isPremium ? "default" : "outline"}
                       onClick={(e) => {
                         e.stopPropagation()
                         router.push(`/subscription/upgrade?tier=${tierKey}&billing=${selectedBilling}`)
@@ -373,9 +374,9 @@ export default function SubscriptionPage() {
                     </Button>
                   </div>
                 ) : (
-                  <Button 
-                    className="w-full" 
-                    variant={isPremium ? "default" : "outline"} 
+                  <Button
+                    className="w-full"
+                    variant={isPremium ? "default" : "outline"}
                     onClick={(e) => {
                       e.stopPropagation()
                       router.push(`/subscription/upgrade?tier=${tierKey}&billing=${selectedBilling}`)
@@ -412,7 +413,7 @@ export default function SubscriptionPage() {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex gap-4">
               <div className="p-2 rounded-lg bg-primary/10 h-fit">
                 <Shield className="h-5 w-5 text-primary" />
@@ -424,7 +425,7 @@ export default function SubscriptionPage() {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex gap-4">
               <div className="p-2 rounded-lg bg-primary/10 h-fit">
                 <Users className="h-5 w-5 text-primary" />
@@ -436,7 +437,7 @@ export default function SubscriptionPage() {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex gap-4">
               <div className="p-2 rounded-lg bg-primary/10 h-fit">
                 <Clock className="h-5 w-5 text-primary" />
@@ -464,8 +465,8 @@ export default function SubscriptionPage() {
               </p>
             </div>
           </div>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => window.open('mailto:info@nexuscmm.com', '_blank')}
           >
             Contact Support
