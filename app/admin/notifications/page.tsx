@@ -1,16 +1,16 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { 
-  Bell, 
-  Mail, 
-  MessageSquare, 
-  Smartphone, 
+import {
+  Bell,
+  Mail,
+  MessageSquare,
+  Smartphone,
   Phone,
-  Settings, 
-  TestTube, 
-  Check, 
-  X, 
+  Settings,
+  TestTube,
+  Check,
+  X,
   Loader2,
   AlertTriangle,
   ExternalLink,
@@ -46,19 +46,19 @@ export default function AdminNotificationsPage() {
   const [services, setServices] = useState<NotificationServices | null>(null)
   const [loading, setLoading] = useState(true)
   const [testing, setTesting] = useState<string | null>(null)
-  
+
   // Twilio (SMS) config
   const [twilioAccountSid, setTwilioAccountSid] = useState('')
   const [twilioAuthToken, setTwilioAuthToken] = useState('')
   const [twilioPhoneNumber, setTwilioPhoneNumber] = useState('')
   const [showTwilioToken, setShowTwilioToken] = useState(false)
-  
+
   // Resend (Email) config
   const [resendApiKey, setResendApiKey] = useState('')
   const [resendFromEmail, setResendFromEmail] = useState('')
   const [resendFromName, setResendFromName] = useState('Togethr')
   const [showResendKey, setShowResendKey] = useState(false)
-  
+
   // Web Push (VAPID) config. Despite the variable names below (kept to
   // avoid a bigger diff), this app does NOT use Firebase Cloud Messaging -
   // see lib/services/push.ts. Push is sent via the standard Web Push
@@ -67,17 +67,17 @@ export default function AdminNotificationsPage() {
   const [vapidPublicKey, setVapidPublicKey] = useState('')
   const [vapidPrivateKey, setVapidPrivateKey] = useState('')
   const [showVapidKey, setShowVapidKey] = useState(false)
-  
+
   // Test message state
   const [testPhone, setTestPhone] = useState('')
   const [testEmail, setTestEmail] = useState('')
   const [sendingTargetedPush, setSendingTargetedPush] = useState(false)
   const [targetedPushResults, setTargetedPushResults] = useState<{email: string, status: string, error?: string}[] | null>(null)
-  
+
   useEffect(() => {
     fetchServiceStatus()
   }, [])
-  
+
   const fetchServiceStatus = async () => {
     try {
       const token = getAdminAccessToken()
@@ -94,30 +94,30 @@ export default function AdminNotificationsPage() {
       setLoading(false)
     }
   }
-  
+
   const testService = async (service: 'sms' | 'email' | 'push') => {
     setTesting(service)
     try {
       const token = getAdminAccessToken()
       const body: Record<string, string> = { service }
-      
+
       if (service === 'sms' && testPhone) {
         body.phone = testPhone
       } else if (service === 'email' && testEmail) {
         body.email = testEmail
       }
-      
+
       const res = await fetch('/api/admin/notifications/test', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}` 
+          Authorization: `Bearer ${token}`
         },
         body: JSON.stringify(body)
       })
-      
+
       const data = await res.json()
-      
+
       if (res.ok && data.success) {
         toast.success(`${service.toUpperCase()} test successful!`)
         fetchServiceStatus()
@@ -130,7 +130,7 @@ export default function AdminNotificationsPage() {
       setTesting(null)
     }
   }
-  
+
   const saveConfig = async (service: 'twilio' | 'resend' | 'vapid') => {
     try {
       const token = getAdminAccessToken()
@@ -158,7 +158,7 @@ export default function AdminNotificationsPage() {
           }
           break
       }
-      
+
       const res = await fetch('/api/admin/notifications/config', {
         method: 'POST',
         headers: {
@@ -167,7 +167,7 @@ export default function AdminNotificationsPage() {
         },
         body: JSON.stringify({ service, config })
       })
-      
+
       if (res.ok) {
         toast.success(`${service} configuration saved`)
         fetchServiceStatus()
@@ -179,7 +179,7 @@ export default function AdminNotificationsPage() {
       toast.error('Failed to save configuration')
     }
   }
-  
+
   const ServiceStatusBadge = ({ status }: { status: ServiceStatus }) => {
     if (!status.configured) {
       return <Badge variant="outline" className="text-muted-foreground">Not Configured</Badge>
@@ -213,7 +213,7 @@ export default function AdminNotificationsPage() {
           Refresh Status
         </Button>
       </div>
-      
+
       {/* Service Overview Cards */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
@@ -224,13 +224,13 @@ export default function AdminNotificationsPage() {
           <CardContent>
             <ServiceStatusBadge status={services?.sms || { configured: false }} />
             <p className="text-xs text-muted-foreground mt-2">
-              {services?.sms?.lastTested 
+              {services?.sms?.lastTested
                 ? `Last tested: ${new Date(services.sms.lastTested).toLocaleString()}`
                 : 'Never tested'}
             </p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Email (Resend)</CardTitle>
@@ -239,13 +239,13 @@ export default function AdminNotificationsPage() {
           <CardContent>
             <ServiceStatusBadge status={services?.email || { configured: false }} />
             <p className="text-xs text-muted-foreground mt-2">
-              {services?.email?.lastTested 
+              {services?.email?.lastTested
                 ? `Last tested: ${new Date(services.email.lastTested).toLocaleString()}`
                 : 'Never tested'}
             </p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Push (Web Push)</CardTitle>
@@ -254,14 +254,14 @@ export default function AdminNotificationsPage() {
           <CardContent>
             <ServiceStatusBadge status={services?.push || { configured: false }} />
             <p className="text-xs text-muted-foreground mt-2">
-              {services?.push?.lastTested 
+              {services?.push?.lastTested
                 ? `Last tested: ${new Date(services.push.lastTested).toLocaleString()}`
                 : 'Never tested'}
             </p>
           </CardContent>
         </Card>
       </div>
-      
+
       {/* Configuration Tabs */}
       <Tabs defaultValue="sms" className="space-y-4">
         <TabsList>
@@ -278,7 +278,7 @@ export default function AdminNotificationsPage() {
             Push (Web Push)
           </TabsTrigger>
         </TabsList>
-        
+
         {/* SMS Configuration */}
         <TabsContent value="sms">
           <Card>
@@ -286,9 +286,9 @@ export default function AdminNotificationsPage() {
               <CardTitle>Twilio SMS Configuration</CardTitle>
               <CardDescription>
                 Configure Twilio for sending SMS alerts and notifications.
-                <a 
-                  href="https://console.twilio.com" 
-                  target="_blank" 
+                <a
+                  href="https://console.twilio.com"
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="ml-2 text-primary inline-flex items-center hover:underline"
                 >
@@ -304,27 +304,35 @@ export default function AdminNotificationsPage() {
                   Add these to your Vercel project settings: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER
                 </AlertDescription>
               </Alert>
-              
+
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="twilioSid">Account SID</Label>
                   <Input
                     id="twilioSid"
+                    name="twilioSid"
                     placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                     value={twilioAccountSid}
                     onChange={(e) => setTwilioAccountSid(e.target.value)}
+                    autoComplete="off"
+                    data-1p-ignore
+                    data-lpignore="true"
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="twilioToken">Auth Token</Label>
                   <div className="relative">
                     <Input
                       id="twilioToken"
+                      name="twilioToken"
                       type={showTwilioToken ? 'text' : 'password'}
                       placeholder="Your auth token"
                       value={twilioAuthToken}
                       onChange={(e) => setTwilioAuthToken(e.target.value)}
+                      autoComplete="new-password"
+                      data-1p-ignore
+                      data-lpignore="true"
                     />
                     <Button
                       type="button"
@@ -337,18 +345,22 @@ export default function AdminNotificationsPage() {
                     </Button>
                   </div>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="twilioPhone">Phone Number</Label>
                   <Input
                     id="twilioPhone"
+                    name="twilioPhone"
                     placeholder="+1234567890"
                     value={twilioPhoneNumber}
                     onChange={(e) => setTwilioPhoneNumber(e.target.value)}
+                    autoComplete="off"
+                    data-1p-ignore
+                    data-lpignore="true"
                   />
                 </div>
               </div>
-              
+
               <div className="border-t pt-4 mt-4">
                 <h4 className="font-medium mb-2">Test SMS</h4>
                 <div className="flex gap-2">
@@ -358,8 +370,8 @@ export default function AdminNotificationsPage() {
                     onChange={(e) => setTestPhone(e.target.value)}
                     className="max-w-xs"
                   />
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={() => testService('sms')}
                     disabled={testing === 'sms' || !testPhone}
                   >
@@ -372,7 +384,7 @@ export default function AdminNotificationsPage() {
                   </Button>
                 </div>
               </div>
-              
+
               <div className="flex justify-end">
                 <Button onClick={() => saveConfig('twilio')}>
                   Save Twilio Configuration
@@ -381,7 +393,7 @@ export default function AdminNotificationsPage() {
             </CardContent>
           </Card>
         </TabsContent>
-        
+
         {/* Email Configuration */}
         <TabsContent value="email">
           <Card>
@@ -389,9 +401,9 @@ export default function AdminNotificationsPage() {
               <CardTitle>Resend Email Configuration</CardTitle>
               <CardDescription>
                 Configure Resend for sending email notifications.
-                <a 
-                  href="https://resend.com/api-keys" 
-                  target="_blank" 
+                <a
+                  href="https://resend.com/api-keys"
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="ml-2 text-primary inline-flex items-center hover:underline"
                 >
@@ -417,7 +429,7 @@ export default function AdminNotificationsPage() {
                   </AlertDescription>
                 </Alert>
               )}
-              
+
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="resendKey">API Key</Label>
@@ -440,7 +452,7 @@ export default function AdminNotificationsPage() {
                     </Button>
                   </div>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="resendFrom">From Email</Label>
                   <Input
@@ -451,7 +463,7 @@ export default function AdminNotificationsPage() {
                     onChange={(e) => setResendFromEmail(e.target.value)}
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="resendName">From Name</Label>
                   <Input
@@ -462,7 +474,7 @@ export default function AdminNotificationsPage() {
                   />
                 </div>
               </div>
-              
+
               <div className="border-t pt-4 mt-4">
                 <h4 className="font-medium mb-2">Test Email</h4>
                 <div className="flex gap-2">
@@ -473,8 +485,8 @@ export default function AdminNotificationsPage() {
                     onChange={(e) => setTestEmail(e.target.value)}
                     className="max-w-xs"
                   />
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={() => testService('email')}
                     disabled={testing === 'email' || !testEmail}
                   >
@@ -487,7 +499,7 @@ export default function AdminNotificationsPage() {
                   </Button>
                 </div>
               </div>
-              
+
               <div className="flex justify-end">
                 <Button onClick={() => saveConfig('resend')}>
                   Save Resend Configuration
@@ -496,7 +508,7 @@ export default function AdminNotificationsPage() {
             </CardContent>
           </Card>
         </TabsContent>
-        
+
         {/* Push Configuration */}
         <TabsContent value="push">
           <Card>
@@ -574,7 +586,7 @@ export default function AdminNotificationsPage() {
                   </div>
                 </div>
               </div>
-              
+
               <div className="border-t pt-4 mt-4">
                 <h4 className="font-medium mb-2">Test Push Notification</h4>
                 <p className="text-sm text-muted-foreground mb-2">
@@ -582,8 +594,8 @@ export default function AdminNotificationsPage() {
                 </p>
                 <div className="space-y-4">
                   <div className="flex gap-2 flex-wrap">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       onClick={() => testService('push')}
                       disabled={testing === 'push'}
                     >
@@ -594,9 +606,9 @@ export default function AdminNotificationsPage() {
                       )}
                       Send to All Devices
                     </Button>
-                    
-                    <Button 
-                      variant="default" 
+
+                    <Button
+                      variant="default"
                       onClick={async () => {
                         setSendingTargetedPush(true)
                         setTargetedPushResults(null)
@@ -608,7 +620,7 @@ export default function AdminNotificationsPage() {
                               'Content-Type': 'application/json',
                               Authorization: `Bearer ${token}`
                             },
-                            body: JSON.stringify({ 
+                            body: JSON.stringify({
             emails: ['ray.jacquet@yahoo.com', 'maximjacquet11@gmail.com', 'info@nexuscmm.com'] })
                           })
                           const data = await res.json()
@@ -635,7 +647,7 @@ export default function AdminNotificationsPage() {
                       Send to Ray & Max
                     </Button>
                   </div>
-                  
+
                   {targetedPushResults && (
                     <div className="bg-muted p-3 rounded-lg text-sm">
                       <p className="font-medium mb-2">Results:</p>
@@ -656,7 +668,7 @@ export default function AdminNotificationsPage() {
                   )}
                 </div>
               </div>
-              
+
               <div className="flex justify-end">
                 <Button onClick={() => saveConfig('vapid')}>
                   Validate VAPID Configuration
@@ -666,7 +678,7 @@ export default function AdminNotificationsPage() {
           </Card>
         </TabsContent>
       </Tabs>
-      
+
       {/* Usage Stats */}
       <Card>
         <CardHeader>
