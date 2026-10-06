@@ -10,12 +10,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { TwoFactorSettings } from '@/components/two-factor-settings'
+import { ChangePasswordButton } from '@/components/change-password-dialog'
 import { ActiveSessions } from '@/components/active-sessions'
 import { usePushNotifications } from '@/hooks/use-push-notifications'
 import { toast } from 'sonner'
@@ -79,6 +81,9 @@ export default function SettingsPage() {
     language: 'en',
   })
   const [settingsLoading, setSettingsLoading] = useState(true)
+  // Default reminder times (minutes before an event) that pre-fill the
+  // reminders on every new event. Saved to reminder_settings.default_reminder_minutes.
+  const [defaultReminders, setDefaultReminders] = useState<number[]>([15])
   const [exporting, setExporting] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [showResetDialog, setShowResetDialog] = useState(false)
@@ -103,6 +108,9 @@ export default function SettingsPage() {
               phoneAlerts: data.data.phoneAlerts ?? false,
               weeklyDigest: data.data.weeklyDigest ?? false,
             }))
+            if (Array.isArray(data.data.defaultReminderMinutes)) {
+              setDefaultReminders(data.data.defaultReminderMinutes)
+            }
           }
         }
       } catch {
@@ -187,6 +195,36 @@ export default function SettingsPage() {
         setSettings(prev => ({ ...prev, [key]: !newValue }))
         toast.error('Failed to save setting')
       }
+    }
+  }
+
+  const DEFAULT_REMINDER_CHOICES = [
+    { value: 0, label: 'At time of event' },
+    { value: 5, label: '5 minutes before' },
+    { value: 15, label: '15 minutes before' },
+    { value: 30, label: '30 minutes before' },
+    { value: 60, label: '1 hour before' },
+    { value: 120, label: '2 hours before' },
+    { value: 1440, label: '1 day before' },
+  ]
+
+  const handleToggleDefaultReminder = async (minutes: number, checked: boolean) => {
+    const previous = defaultReminders
+    const next = checked
+      ? [...previous, minutes].sort((a, b) => a - b)
+      : previous.filter(m => m !== minutes)
+    setDefaultReminders(next)
+    try {
+      const res = await authFetch('/api/user/notification-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ defaultReminderMinutes: next }),
+      })
+      if (!res.ok) throw new Error('Failed to save')
+      toast.success('Default reminders updated')
+    } catch {
+      setDefaultReminders(previous)
+      toast.error('Failed to save default reminders')
     }
   }
 
@@ -682,6 +720,30 @@ export default function SettingsPage() {
                 onCheckedChange={() => handleToggle('weeklyDigest')}
               />
             </div>
+            <Separator />
+            <div className="space-y-3">
+              <div>
+                <Label>Default Reminder Times</Label>
+                <p className="text-sm text-muted-foreground">
+                  New events start with these reminders already selected. You can still change them on each event.
+                </p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {DEFAULT_REMINDER_CHOICES.map((opt) => (
+                  <div key={opt.value} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`default-reminder-${opt.value}`}
+                      checked={defaultReminders.includes(opt.value)}
+                      onCheckedChange={(checked) => handleToggleDefaultReminder(opt.value, checked === true)}
+                      disabled={settingsLoading}
+                    />
+                    <label htmlFor={`default-reminder-${opt.value}`} className="text-sm cursor-pointer">
+                      {opt.label}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -731,7 +793,7 @@ export default function SettingsPage() {
                 <Label>Password</Label>
                 <p className="text-sm text-muted-foreground">Change your account password</p>
               </div>
-              <Button variant="outline">Change Password</Button>
+              <ChangePasswordButton />
             </div>
             <Separator />
             <TwoFactorSettings />

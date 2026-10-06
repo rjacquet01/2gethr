@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
           eventReminders: true,
           locationAlerts: true,
           weeklyDigest: false,
+          defaultReminderMinutes: [15],
         }
       })
     }
@@ -45,6 +46,9 @@ export async function GET(request: NextRequest) {
         eventReminders: true,
         locationAlerts: true,
         weeklyDigest: s.weekly_digest ?? false,
+        defaultReminderMinutes: Array.isArray(s.default_reminder_minutes) && s.default_reminder_minutes.length > 0
+          ? s.default_reminder_minutes
+          : [15],
       }
     })
   } catch (error) {
@@ -75,8 +79,27 @@ export async function PATCH(request: NextRequest) {
       phoneAlerts,
       eventReminders,
       locationAlerts,
-      weeklyDigest 
+      weeklyDigest,
+      defaultReminderMinutes,
     } = body
+
+    // Validate the optional default reminder times: a short list of
+    // non-negative whole minutes (e.g. [15, 60]). Anything else is ignored
+    // rather than stored.
+    let reminderMinutesJson: string | null = null
+    if (defaultReminderMinutes !== undefined) {
+      if (
+        !Array.isArray(defaultReminderMinutes) ||
+        defaultReminderMinutes.length > 10 ||
+        !defaultReminderMinutes.every((m: unknown) => Number.isInteger(m) && (m as number) >= 0 && (m as number) <= 10080)
+      ) {
+        return NextResponse.json(
+          { success: false, error: "Invalid default reminder times" },
+          { status: 400 }
+        )
+      }
+      reminderMinutesJson = JSON.stringify(defaultReminderMinutes)
+    }
 
     // Check if settings exist
     const existing = await sql`
@@ -97,7 +120,10 @@ export async function PATCH(request: NextRequest) {
           ${smsNotifications ?? false},
           ${phoneAlerts ?? false},
           ${weeklyDigest ?? false},
-          ARRAY[15, 60],
+          COALESCE(
+            NULLIF(ARRAY(SELECT jsonb_array_elements_text(${reminderMinutesJson}::jsonb)::int), '{}'::int[]),
+            ARRAY[15, 60]
+          ),
           NOW(),
           NOW()
         )
@@ -106,11 +132,15 @@ export async function PATCH(request: NextRequest) {
       // Update existing settings
       await sql`
         UPDATE reminder_settings SET
-          email_enabled = COALESCE(${emailNotifications}, email_enabled),
-          push_enabled = COALESCE(${pushNotifications}, push_enabled),
-          sms_enabled = COALESCE(${smsNotifications}, sms_enabled),
-          phone_alerts = COALESCE(${phoneAlerts}, phone_alerts),
-          weekly_digest = COALESCE(${weeklyDigest}, weekly_digest),
+          email_enabled = COALESCE(${emailNotifications ?? null}::boolean, email_enabled),
+          push_enabled = COALESCE(${pushNotifications ?? null}::boolean, push_enabled),
+          sms_enabled = COALESCE(${smsNotifications ?? null}::boolean, sms_enabled),
+          phone_alerts = COALESCE(${phoneAlerts ?? null}::boolean, phone_alerts),
+          weekly_digest = COALESCE(${weeklyDigest ?? null}::boolean, weekly_digest),
+          default_reminder_minutes = CASE
+            WHEN ${reminderMinutesJson}::text IS NULL THEN default_reminder_minutes
+            ELSE ARRAY(SELECT jsonb_array_elements_text(${reminderMinutesJson}::jsonb)::int)
+          END,
           updated_at = NOW()
         WHERE user_id = ${user.id}
       `

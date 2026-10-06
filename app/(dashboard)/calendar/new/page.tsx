@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useEffect } from 'react'
+import { Suspense, useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import useSWR, { mutate } from 'swr'
 import { format, addHours } from 'date-fns'
@@ -140,6 +140,29 @@ function NewEventForm() {
     formData.familyId ? `/api/places?familyId=${formData.familyId}` : null,
     placesFetcher
   )
+
+  // Pre-fill reminders from the person's default reminder times (Settings >
+  // Notifications). Only applied once, and only if they haven't already
+  // touched the reminder checkboxes while this loaded.
+  const remindersTouched = useRef(false)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await authFetch('/api/user/notification-settings')
+        if (!res.ok) return
+        const data = await res.json()
+        const defaults = data?.data?.defaultReminderMinutes
+        if (!cancelled && Array.isArray(defaults) && defaults.length > 0) {
+          setSelectedReminders(prev => (remindersTouched.current ? prev : defaults))
+        }
+      } catch {
+        // keep the built-in default
+      }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Set default family when loaded
   useEffect(() => {
@@ -554,6 +577,7 @@ function NewEventForm() {
                       id={`reminder-${opt.value}`}
                       checked={selectedReminders.includes(opt.value)}
                       onCheckedChange={(checked) => {
+                        remindersTouched.current = true
                         if (checked) {
                           setSelectedReminders(prev => [...prev, opt.value].sort((a, b) => a - b))
                         } else {
