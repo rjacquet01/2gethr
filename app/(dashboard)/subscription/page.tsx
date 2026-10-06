@@ -36,7 +36,7 @@ export default function SubscriptionPage() {
   const [selectedTierIndex, setSelectedTierIndex] = useState<number | null>(null)
 
   const primaryFamily = families?.[0]
-  const { subscription, access, isLoading: subLoading, startTrial, cancelSubscription } = useSubscription(primaryFamily?.id || null)
+  const { subscription, access, isLoading: subLoading, startTrial } = useSubscription(primaryFamily?.id || null)
   const tiers = useSubscriptionTiers()
 
   const [isStartingTrial, setIsStartingTrial] = useState(false)

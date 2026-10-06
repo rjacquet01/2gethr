@@ -188,37 +188,6 @@ export function useSubscription(familyId: string | null) {
     }
   }, [familyId, mutate])
   
-  const cancelSubscription = useCallback(async (): Promise<{ 
-    success: boolean; 
-    error?: string; 
-    data?: { ticketNumber?: string; ticketId?: string; currentPeriodEnd?: string } 
-  }> => {
-    if (!familyId) return { success: false, error: 'No family selected' }
-    
-    try {
-      const res = await authFetch(`/api/subscriptions/${familyId}`, {
-        method: 'DELETE',
-      })
-      
-      const responseData = await res.json()
-      
-      if (!res.ok) {
-        return { success: false, error: responseData.error }
-      }
-      
-      await mutate()
-      return { 
-        success: true, 
-        data: {
-          ticketNumber: responseData.data?.ticketNumber,
-          ticketId: responseData.data?.ticketId,
-          currentPeriodEnd: responseData.data?.currentPeriodEnd,
-        }
-      }
-    } catch {
-      return { success: false, error: 'Network error' }
-    }
-  }, [familyId, mutate])
   
   // Checks the real per-capability flag for the family's current tier -
   // e.g. canUseFeature('smsNotifications') - rather than the old
@@ -236,7 +205,6 @@ export function useSubscription(familyId: string | null) {
     isLoading,
     error,
     startTrial,
-    cancelSubscription,
     canUseFeature,
     mutate,
   }
