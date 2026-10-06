@@ -147,7 +147,8 @@ export default function FamilyPage() {
   const getInviteMessage = () => {
     const code = family?.inviteCode
     const familyName = family?.name || 'our family'
-    return `Join ${familyName} on Togethr! Use invite code: ${code}\n\nDownload the app and enter this code to connect with our family.`
+    const link = typeof window !== 'undefined' ? `${window.location.origin}/onboarding?code=${code}` : ''
+    return `Join ${familyName} on Togethr! Tap this link to join: ${link}\n\nOr open the app and enter invite code: ${code}`
   }
 
   const handleShareEmail = () => {

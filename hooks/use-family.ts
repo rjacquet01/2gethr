@@ -1,7 +1,7 @@
 'use client'
 
 import useSWR from 'swr'
-import { useCallback } from 'react'
+import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import { authFetch } from './use-auth'
 
 export interface FamilyMember {
@@ -51,8 +51,57 @@ const fetcher = async (url: string) => {
   return res.json()
 }
 
+// Which family the person has chosen to look at, when they belong to more
+// than one. Kept in localStorage (a per-device viewing preference) and
+// exposed through a tiny external store so every component using
+// useFamilies() updates immediately when it changes. useFamilies() puts the
+// selected family FIRST in the list it returns, so the many pages that use
+// `families[0]` as "the current family" follow the selection with no change.
+const SELECTED_FAMILY_KEY = 'togethr-selected-family-id'
+const selectedFamilyListeners = new Set<() => void>()
+
+function readSelectedFamilyId(): string | null {
+  try {
+    return localStorage.getItem(SELECTED_FAMILY_KEY)
+  } catch {
+    return null
+  }
+}
+
+function subscribeSelectedFamily(listener: () => void) {
+  selectedFamilyListeners.add(listener)
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === SELECTED_FAMILY_KEY) listener()
+  }
+  window.addEventListener('storage', onStorage)
+  return () => {
+    selectedFamilyListeners.delete(listener)
+    window.removeEventListener('storage', onStorage)
+  }
+}
+
+export function setSelectedFamilyId(familyId: string) {
+  try {
+    localStorage.setItem(SELECTED_FAMILY_KEY, familyId)
+  } catch {
+    // storage unavailable (private mode) - selection just won't persist
+  }
+  selectedFamilyListeners.forEach((l) => l())
+}
+
 export function useFamilies() {
   const { data, error, isLoading, mutate } = useSWR<{ families: Family[] }>('/api/families', fetcher)
+  const storedFamilyId = useSyncExternalStore(subscribeSelectedFamily, readSelectedFamilyId, () => null)
+
+  const families = useMemo(() => {
+    const list = data?.families || []
+    if (!storedFamilyId) return list
+    const idx = list.findIndex((f) => f.id === storedFamilyId)
+    if (idx <= 0) return list
+    return [list[idx], ...list.slice(0, idx), ...list.slice(idx + 1)]
+  }, [data, storedFamilyId])
+
+  const selectFamily = useCallback((familyId: string) => setSelectedFamilyId(familyId), [])
   
   const createFamily = useCallback(async (name: string) => {
     try {
@@ -97,7 +146,9 @@ export function useFamilies() {
   }, [mutate])
   
   return {
-    families: data?.families || [],
+    families,
+    selectedFamilyId: families[0]?.id ?? null,
+    selectFamily,
     isLoading,
     error,
     createFamily,

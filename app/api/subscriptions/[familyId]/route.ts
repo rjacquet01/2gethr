@@ -45,6 +45,104 @@ export async function POST(
     }
 
     const body = await request.json()
+
+    // Free trial (the "Start 30-Day Trial" button on the Subscription page).
+    // That button has been posting { action: 'start_trial', tier } here, but
+    // this route only understood plain tier changes - and since the security
+    // fix below rejects any paid tier, every trial attempt failed with a
+    // "must go through Stripe Checkout" error. A trial is a time-limited,
+    // no-payment grant, so it is handled explicitly here instead: owner only,
+    // once per person, and only from the Free plan.
+    if (body?.action === "start_trial") {
+      const trialTier = body.tier === "PREMIUM" || body.tier === "PREMIUM_PLUS" ? body.tier : null
+      if (!trialTier) {
+        return NextResponse.json(
+          { success: false, error: "Choose a plan to try" },
+          { status: 400 }
+        )
+      }
+
+      const priorTrial = await sql`
+        SELECT 1 FROM subscriptions s
+        JOIN families f ON f.id = s.family_id
+        WHERE f.owner_id = ${user.id} AND s.trial_ends_at IS NOT NULL
+        LIMIT 1
+      `
+      if (priorTrial.length > 0) {
+        return NextResponse.json(
+          { success: false, error: "Your free trial has already been used" },
+          { status: 400 }
+        )
+      }
+
+      const existing = await sql`
+        SELECT id, tier, status FROM subscriptions
+        WHERE family_id = ${familyId}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `
+      const onPaidOrTrial =
+        existing.length > 0 &&
+        existing[0].tier !== "FREE" &&
+        (existing[0].status === "ACTIVE" || existing[0].status === "TRIALING")
+      if (onPaidOrTrial) {
+        return NextResponse.json(
+          { success: false, error: "This family is already on a paid plan or trial" },
+          { status: 400 }
+        )
+      }
+
+      const trialEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      let subscriptionId: string
+      if (existing.length > 0) {
+        subscriptionId = existing[0].id
+        await sql`
+          UPDATE subscriptions SET
+            tier = ${trialTier},
+            status = 'TRIALING',
+            trial_ends_at = ${trialEnd.toISOString()},
+            current_period_start = NOW(),
+            current_period_end = ${trialEnd.toISOString()},
+            cancel_at_period_end = false,
+            updated_at = NOW()
+          WHERE id = ${subscriptionId}
+        `
+      } else {
+        subscriptionId = crypto.randomUUID()
+        await sql`
+          INSERT INTO subscriptions (
+            id, family_id, tier, status, trial_ends_at,
+            current_period_start, current_period_end, created_at, updated_at
+          )
+          VALUES (
+            ${subscriptionId}, ${familyId}, ${trialTier}, 'TRIALING', ${trialEnd.toISOString()},
+            NOW(), ${trialEnd.toISOString()}, NOW(), NOW()
+          )
+        `
+      }
+
+      await sql`
+        INSERT INTO subscription_status_history (
+          id, subscription_id, old_status, new_status, source, notes, changed_at
+        ) VALUES (
+          gen_random_uuid(), ${subscriptionId}, ${existing[0]?.status ?? "NONE"}, 'TRIALING',
+          'USER_REQUEST', ${`30-day ${trialTier} trial started`}, NOW()
+        )
+      `
+
+      await logAuditEvent(user.id, "UPDATE", "subscription_trial", familyId, {
+        newValue: { tier: trialTier, trialEndsAt: trialEnd.toISOString() },
+        ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
+        userAgent: request.headers.get("user-agent") || undefined,
+      })
+
+      return NextResponse.json({
+        success: true,
+        subscription: { tier: trialTier, status: "TRIALING", trialEnd: trialEnd.toISOString() },
+        message: "Your 30-day free trial has started",
+      })
+    }
+
     const { tier, billingPeriod } = updateSubscriptionSchema.parse(body)
 
     // SECURITY: this endpoint used to grant ANY tier — including paid ones —

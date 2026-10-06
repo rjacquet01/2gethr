@@ -169,7 +169,7 @@ export default function PricingPage() {
             <div>
               <h3 className="font-semibold mb-2">What happens after my trial ends?</h3>
               <p className="text-muted-foreground">
-                After your 30-day Premium trial, you can choose to subscribe or continue with our Free plan. You can cancel anytime before the trial ends to avoid being charged.
+                After your 30-day Premium trial, you can choose to subscribe or continue with our Free plan. No card is needed to start the trial, so there's nothing to cancel and you won't be charged unless you choose to subscribe.
               </p>
             </div>
             <div>

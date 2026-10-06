@@ -27,6 +27,27 @@ export async function GET(request: NextRequest) {
 
     const now = new Date()
 
+    // End expired free trials: a family still TRIALING past trial_ends_at that
+    // never subscribed through Stripe drops back to the Free plan. (Access is
+    // also cut off immediately by checkFamilySubscription; this keeps the
+    // stored tier/status honest for the subscription page and admin views.)
+    try {
+      const expiredTrials = await sql`
+        UPDATE subscriptions
+        SET tier = 'FREE', status = 'ACTIVE', updated_at = NOW()
+        WHERE status = 'TRIALING'
+          AND trial_ends_at IS NOT NULL
+          AND trial_ends_at < NOW()
+          AND stripe_subscription_id IS NULL
+        RETURNING id
+      `
+      if (expiredTrials.length > 0) {
+        console.log(`[Cron] Ended ${expiredTrials.length} expired free trial(s)`)
+      }
+    } catch (trialError) {
+      console.error("[Cron] Failed to end expired trials:", trialError)
+    }
+
     // Find events that need reminders sent
     // Look for events starting in the next 60 minutes that have reminder_minutes set
     //

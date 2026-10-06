@@ -129,8 +129,14 @@ export async function getFamilyPremiumAccess(familyId: string): Promise<{
     }
   }
   
-  const isActive = subscription.status === SubscriptionStatus.ACTIVE ||
-    subscription.status === SubscriptionStatus.TRIALING
+  const trialExpired =
+    subscription.status === SubscriptionStatus.TRIALING &&
+    !!subscription.trialEnd &&
+    new Date(subscription.trialEnd).getTime() < Date.now()
+  const isActive =
+    (subscription.status === SubscriptionStatus.ACTIVE ||
+      subscription.status === SubscriptionStatus.TRIALING) &&
+    !trialExpired
   
   const effectiveTier = isActive ? subscription.tier : SubscriptionTier.FREE
   

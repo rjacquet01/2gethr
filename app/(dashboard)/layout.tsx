@@ -20,6 +20,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { FavoritesDropdown } from '@/components/favorites-dropdown'
 import { CalendarAutoSync } from '@/components/calendar-auto-sync'
 import { Logo, LogoIcon } from '@/components/logo'
+import { FamilySwitcher } from '@/components/family-switcher'
 import { 
   Home, 
   Calendar, 
@@ -108,6 +109,11 @@ export default function DashboardLayout({
           {/* Logo */}
           <div className="flex h-16 items-center border-b border-sidebar-border px-6">
             <Logo size="md" textClassName="text-sidebar-foreground" />
+          </div>
+
+          {/* Family switcher (only shown when you belong to 2+ families) */}
+          <div className="px-4 pt-4 empty:hidden">
+            <FamilySwitcher variant="sidebar" />
           </div>
 
           {/* Navigation */}
@@ -201,6 +207,7 @@ export default function DashboardLayout({
             <Logo size="xs" />
           </div>
           <div className="flex items-center gap-1">
+            <FamilySwitcher variant="compact" />
             <FavoritesDropdown />
             <Button variant="ghost" size="icon" asChild className="relative h-10 w-10 touch-target">
               <Link href="/notifications">

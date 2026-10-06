@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useFamilies } from '@/hooks/use-family'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,27 @@ export default function OnboardingPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [familyName, setFamilyName] = useState('')
   const [inviteCode, setInviteCode] = useState('')
+
+  // An invite link looks like /onboarding?code=ABCD1234. Jump straight to the
+  // "join" step with the code filled in. The code is also remembered in
+  // localStorage so it survives the sign-up / sign-in detour for someone who
+  // opens the link before they have an account.
+  useEffect(() => {
+    try {
+      const fromLink = new URLSearchParams(window.location.search).get('code')
+      const code = (fromLink || localStorage.getItem('togethr-pending-invite') || '')
+        .trim()
+        .toUpperCase()
+        .slice(0, 8)
+      if (code) {
+        if (fromLink) localStorage.setItem('togethr-pending-invite', code)
+        setInviteCode(code)
+        setStep('join')
+      }
+    } catch {
+      // storage unavailable - fall back to manual entry
+    }
+  }, [])
 
   const handleCreateFamily = async () => {
     if (!familyName.trim()) {
@@ -51,8 +72,14 @@ export default function OnboardingPage() {
     const result = await joinFamily(inviteCode)
 
     if (result.success) {
+      try { localStorage.removeItem('togethr-pending-invite') } catch {}
       toast.success('Joined family successfully!')
       router.push('/dashboard')
+    } else if (/unauthor|authenticat|token/i.test(result.error || '')) {
+      // Opened an invite link without being signed in. The code stays saved
+      // on this device, so sign up / sign in and it will be waiting here.
+      toast.info('Create an account or sign in first - your invite code will be waiting.')
+      router.push('/register')
     } else {
       toast.error(result.error || 'Failed to join family')
     }
