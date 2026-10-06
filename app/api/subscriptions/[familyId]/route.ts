@@ -54,7 +54,9 @@ export async function POST(
     // no-payment grant, so it is handled explicitly here instead: owner only,
     // once per person, and only from the Free plan.
     if (body?.action === "start_trial") {
-      const trialTier = body.tier === "PREMIUM" || body.tier === "PREMIUM_PLUS" ? body.tier : null
+      // Default to Basic if the client doesn't say which plan to try.
+      const requestedTier = body.tier ?? "PREMIUM"
+      const trialTier = requestedTier === "PREMIUM" || requestedTier === "PREMIUM_PLUS" ? requestedTier : null
       if (!trialTier) {
         return NextResponse.json(
           { success: false, error: "Choose a plan to try" },
@@ -141,6 +143,56 @@ export async function POST(
         subscription: { tier: trialTier, status: "TRIALING", trialEnd: trialEnd.toISOString() },
         message: "Your 30-day free trial has started",
       })
+    }
+
+    // End a free trial early (the "Cancel trial" button on the Subscription
+    // page). Trials never touch Stripe, so there is nothing to cancel there:
+    // the family simply drops back to Free right away. Paid subscriptions are
+    // cancelled in the Stripe billing portal instead.
+    if (body?.action === "cancel_trial") {
+      const trialSubs = await sql`
+        SELECT id, tier, status, stripe_subscription_id FROM subscriptions
+        WHERE family_id = ${familyId}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `
+      if (
+        trialSubs.length === 0 ||
+        trialSubs[0].status !== "TRIALING" ||
+        trialSubs[0].stripe_subscription_id
+      ) {
+        return NextResponse.json(
+          { success: false, error: "There is no free trial to cancel. Use Manage Billing to cancel a paid plan." },
+          { status: 400 }
+        )
+      }
+
+      await sql`
+        UPDATE subscriptions SET
+          tier = 'FREE',
+          status = 'CANCELLED',
+          cancel_at_period_end = false,
+          updated_at = NOW()
+        WHERE id = ${trialSubs[0].id}
+      `
+
+      await sql`
+        INSERT INTO subscription_status_history (
+          id, subscription_id, old_status, new_status, source, notes, changed_at
+        ) VALUES (
+          gen_random_uuid(), ${trialSubs[0].id}, 'TRIALING', 'CANCELLED',
+          'USER_REQUEST', 'Free trial cancelled by the family owner', NOW()
+        )
+      `
+
+      await logAuditEvent(user.id, "UPDATE", "subscription_trial", familyId, {
+        oldValue: { tier: trialSubs[0].tier, status: "TRIALING" },
+        newValue: { tier: "FREE", status: "CANCELLED" },
+        ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
+        userAgent: request.headers.get("user-agent") || undefined,
+      })
+
+      return NextResponse.json({ success: true, message: "Your free trial has been cancelled" })
     }
 
     const { tier, billingPeriod } = updateSubscriptionSchema.parse(body)

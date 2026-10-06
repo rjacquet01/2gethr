@@ -11,6 +11,17 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Empty } from '@/components/ui/empty'
 import { toast } from 'sonner'
 import {
@@ -36,11 +47,12 @@ export default function SubscriptionPage() {
   const [selectedTierIndex, setSelectedTierIndex] = useState<number | null>(null)
 
   const primaryFamily = families?.[0]
-  const { subscription, access, isLoading: subLoading, startTrial } = useSubscription(primaryFamily?.id || null)
+  const { subscription, access, isLoading: subLoading, startTrial, cancelTrial } = useSubscription(primaryFamily?.id || null)
   const tiers = useSubscriptionTiers()
 
   const [isStartingTrial, setIsStartingTrial] = useState(false)
   const [isCanceling, setIsCanceling] = useState(false)
+  const [isCancelingTrial, setIsCancelingTrial] = useState(false)
 
   // Map tier names to API tier keys
   const tierNameToKey: Record<string, string> = {
@@ -68,6 +80,17 @@ export default function SubscriptionPage() {
       toast.success('Trial started! Enjoy 30 days of premium features.')
     } else {
       toast.error(result.error || 'Failed to start trial')
+    }
+  }
+
+  const handleCancelTrial = async () => {
+    setIsCancelingTrial(true)
+    const result = await cancelTrial()
+    setIsCancelingTrial(false)
+    if (result.success) {
+      toast.success('Your free trial has been cancelled.')
+    } else {
+      toast.error(result.error || 'Failed to cancel trial')
     }
   }
 
@@ -161,6 +184,19 @@ export default function SubscriptionPage() {
             </div>
           )}
 
+          {subscription?.cancelAtPeriodEnd && !isTrialing && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-warning/10 text-warning-foreground">
+              <AlertCircle className="h-4 w-4" />
+              <span className="text-sm">
+                Your subscription is cancelled
+                {subscription.currentPeriodEnd
+                  ? ` and ends on ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`
+                  : ' and will end at the close of the billing period'}
+                . You keep your premium features until then.
+              </span>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-3 rounded-lg bg-muted/50">
               <div className="text-2xl font-bold">
@@ -223,7 +259,7 @@ export default function SubscriptionPage() {
           </div>
         </CardContent>
         {access.hasPremium && !isTrialing && (
-          <CardFooter>
+          <CardFooter className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -231,8 +267,49 @@ export default function SubscriptionPage() {
               disabled={isCanceling}
             >
               {isCanceling ? <Spinner className="h-4 w-4 mr-2" /> : <CreditCard className="h-4 w-4 mr-2" />}
-              Manage Billing
+              {subscription?.cancelAtPeriodEnd ? 'Resume or Manage Billing' : 'Manage Billing'}
             </Button>
+            {!subscription?.cancelAtPeriodEnd && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={handleManageBilling}
+                disabled={isCanceling}
+              >
+                Cancel Subscription
+              </Button>
+            )}
+          </CardFooter>
+        )}
+        {isTrialing && (
+          <CardFooter>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  disabled={isCancelingTrial}
+                >
+                  Cancel Trial
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Cancel your free trial?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Your family will move to the Free plan right away and lose the premium
+                    features. You won&apos;t be charged, and you can subscribe at any time.
+                    The free trial can only be used once.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep my trial</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleCancelTrial}>Cancel trial</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </CardFooter>
         )}
       </Card>

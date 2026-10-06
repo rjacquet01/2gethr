@@ -165,14 +165,32 @@ export function useSubscription(familyId: string | null) {
     fetcher
   )
   
-  const startTrial = useCallback(async () => {
+  const cancelTrial = useCallback(async () => {
     if (!familyId) return { success: false, error: 'No family selected' }
-    
+
     try {
       const res = await authFetch(`/api/subscriptions/${familyId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'start_trial' }),
+        body: JSON.stringify({ action: 'cancel_trial' }),
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error }
+      await mutate()
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Network error' }
+    }
+  }, [familyId, mutate])
+
+  const startTrial = useCallback(async (tier: 'PREMIUM' | 'PREMIUM_PLUS' = 'PREMIUM') => {
+    if (!familyId) return { success: false, error: 'No family selected' }
+
+    try {
+      const res = await authFetch(`/api/subscriptions/${familyId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start_trial', tier }),
       })
       
       const data = await res.json()
@@ -205,6 +223,7 @@ export function useSubscription(familyId: string | null) {
     isLoading,
     error,
     startTrial,
+    cancelTrial,
     canUseFeature,
     mutate,
   }
