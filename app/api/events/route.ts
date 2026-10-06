@@ -427,6 +427,42 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Who is actually invited. The event form sends `participants`
+    // ({ userId } for adult members, { childProfileId } for children), but
+    // this route only ever looked at `participantIds`, so anyone picked on
+    // the form was silently dropped - no participant rows, no conflict check
+    // for them, nothing in their member activity. Merge both shapes, map a
+    // child to their linked user account when they have one (a child profile
+    // with no login has no user_id to store), and keep only people who are
+    // active members of THIS family.
+    const requestedUserIds = new Set<string>(validatedData.participantIds || [])
+    const requestedChildIds: string[] = []
+    for (const p of validatedData.participants || []) {
+      if (p.userId) requestedUserIds.add(p.userId)
+      if (p.childProfileId) requestedChildIds.push(p.childProfileId)
+    }
+    if (requestedChildIds.length > 0) {
+      const childUsers = await sql`
+        SELECT fm.user_id
+        FROM child_profiles cp
+        JOIN family_members fm ON cp.family_member_id = fm.id
+        WHERE cp.id = ANY(${requestedChildIds}::text[])
+        AND fm.family_id = ${calendar.family_id}
+        AND fm.user_id IS NOT NULL
+      `
+      for (const row of childUsers) requestedUserIds.add(row.user_id)
+    }
+    let participantUserIds: string[] = []
+    if (requestedUserIds.size > 0) {
+      const validMembers = await sql`
+        SELECT DISTINCT user_id FROM family_members
+        WHERE family_id = ${calendar.family_id}
+        AND is_active = true
+        AND user_id = ANY(${Array.from(requestedUserIds)}::text[])
+      `
+      participantUserIds = validMembers.map((m) => m.user_id as string)
+    }
+
     // Work out the recurrence (if any) and every occurrence's start/end up
     // front. The first occurrence becomes the "main" event row below; the
     // rest are copied from it after it is inserted. (The form used to send
@@ -471,7 +507,7 @@ export async function POST(request: NextRequest) {
     const conflicts = await checkEventConflicts(
       mainStart,
       mainEnd,
-      validatedData.participantIds || [user.id],
+      participantUserIds.length > 0 ? participantUserIds : [user.id],
       null
     )
 
@@ -544,13 +580,12 @@ export async function POST(request: NextRequest) {
     `
 
     // Add participants
-    if (validatedData.participantIds && validatedData.participantIds.length > 0) {
-      for (const participantId of validatedData.participantIds) {
-        await sql`
-          INSERT INTO event_participants (id, event_id, user_id, status, created_at, updated_at)
-          VALUES (${crypto.randomUUID()}, ${eventId}, ${participantId}, 'PENDING', NOW(), NOW())
-        `
-      }
+    if (participantUserIds.length > 0) {
+      await sql`
+        INSERT INTO event_participants (id, event_id, user_id, status, created_at, updated_at)
+        SELECT gen_random_uuid(), ${eventId}, pid, 'PENDING', NOW(), NOW()
+        FROM unnest(${participantUserIds}::text[]) AS pid
+      `
     }
 
     // Create event request if pending approval
