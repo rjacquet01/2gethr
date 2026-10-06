@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { notifyFamilyAboutEvent, type NotificationChannel } from "@/lib/notifications" // Event notifications
 import { z } from "zod"
+import { generateOccurrences, isValidTimeZone, recurrenceFromPreset, type RecurrenceInput } from "@/lib/recurrence"
 
 const createEventSchema = z.object({
   calendarId: z.string().uuid("Invalid calendar ID").optional(),
@@ -38,6 +39,13 @@ const createEventSchema = z.object({
     endDate: z.string().datetime().optional(),
     occurrenceCount: z.number().int().min(1).optional(),
   }).optional(),
+  // Older clients (and cached app builds) send a preset string such as
+  // "weekly" or "weekdays" plus isRecurring instead of a recurrence object.
+  isRecurring: z.boolean().optional(),
+  recurrenceRule: z.string().optional().nullable(),
+  // IANA zone of the creator's device, so repeats keep the same wall-clock
+  // time across daylight saving changes.
+  timeZone: z.string().optional(),
 })
 
 // Get events
@@ -419,10 +427,50 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Work out the recurrence (if any) and every occurrence's start/end up
+    // front. The first occurrence becomes the "main" event row below; the
+    // rest are copied from it after it is inserted. (The form used to send
+    // isRecurring/recurrenceRule, which this route silently dropped, so
+    // "recurring" events were only ever created once.)
+    let recurrenceInput: RecurrenceInput | null = validatedData.recurrence
+      ? {
+          frequency: validatedData.recurrence.frequency,
+          interval: validatedData.recurrence.interval,
+          daysOfWeek: validatedData.recurrence.daysOfWeek,
+          endDate: validatedData.recurrence.endDate,
+          occurrenceCount: validatedData.recurrence.occurrenceCount,
+        }
+      : validatedData.isRecurring && validatedData.recurrenceRule
+        ? recurrenceFromPreset(validatedData.recurrenceRule)
+        : null
+
+    const eventTimeZone = isValidTimeZone(validatedData.timeZone)
+      ? validatedData.timeZone
+      : isValidTimeZone(user.timezone)
+        ? user.timezone
+        : "UTC"
+
+    let occurrenceStarts: string[] = [validatedData.startTime]
+    let occurrenceEnds: string[] = [validatedData.endTime]
+    let occurrencesTruncated = false
+    if (recurrenceInput) {
+      const generated = generateOccurrences(
+        validatedData.startTime,
+        validatedData.endTime,
+        recurrenceInput,
+        eventTimeZone
+      )
+      occurrenceStarts = generated.starts
+      occurrenceEnds = generated.ends
+      occurrencesTruncated = generated.truncated
+    }
+    const mainStart = occurrenceStarts[0]
+    const mainEnd = occurrenceEnds[0]
+
     // Check for conflicts
     const conflicts = await checkEventConflicts(
-      validatedData.startTime,
-      validatedData.endTime,
+      mainStart,
+      mainEnd,
       validatedData.participantIds || [user.id],
       null
     )
@@ -443,7 +491,7 @@ export async function POST(request: NextRequest) {
 
     // Create recurrence rule if recurring
     let recurrenceRuleId = null
-    if (validatedData.recurrence) {
+    if (recurrenceInput) {
       recurrenceRuleId = crypto.randomUUID()
       await sql`
         INSERT INTO recurrence_rules (
@@ -452,13 +500,13 @@ export async function POST(request: NextRequest) {
         )
         VALUES (
           ${recurrenceRuleId},
-          ${validatedData.recurrence.frequency},
-          ${validatedData.recurrence.interval},
-          ${validatedData.recurrence.daysOfWeek || null},
-          ${validatedData.recurrence.dayOfMonth || null},
-          ${validatedData.recurrence.monthOfYear || null},
-          ${validatedData.recurrence.endDate || null},
-          ${validatedData.recurrence.occurrenceCount || null},
+          ${recurrenceInput.frequency},
+          ${recurrenceInput.interval},
+          ${recurrenceInput.daysOfWeek || null},
+          ${validatedData.recurrence?.dayOfMonth || null},
+          ${validatedData.recurrence?.monthOfYear || null},
+          ${recurrenceInput.endDate || null},
+          ${recurrenceInput.occurrenceCount || null},
           NOW(), NOW()
         )
       `
@@ -481,15 +529,15 @@ export async function POST(request: NextRequest) {
   ${validatedData.description || null},
   ${validatedData.location || null},
   ${validatedData.savedPlaceId || null},
-  ${validatedData.startTime},
-  ${validatedData.endTime},
+  ${mainStart},
+  ${mainEnd},
   ${isAllDay},
   ${status},
         ${validatedData.visibility},
         ${validatedData.color || null},
         ${validatedData.reminderMinutes || [15]},
         ${validatedData.notifyChannels && validatedData.notifyChannels.length > 0 ? validatedData.notifyChannels : null},
-        ${!!validatedData.recurrence},
+        ${!!recurrenceInput},
         ${recurrenceRuleId},
         NOW(), NOW()
       )
@@ -515,6 +563,51 @@ export async function POST(request: NextRequest) {
           ${crypto.randomUUID()}, ${eventId}, ${user.id}, 'PENDING', NOW()
         )
       `
+    }
+
+    // Copy the remaining occurrences from the main event row. One bulk
+    // statement per table (not one INSERT per occurrence) so a year of daily
+    // repeats doesn't turn into hundreds of round trips.
+    let occurrencesCreated = 1
+    if (recurrenceRuleId && occurrenceStarts.length > 1) {
+      const restStarts = occurrenceStarts.slice(1)
+      const restEnds = occurrenceEnds.slice(1)
+
+      await sql`
+        INSERT INTO events (
+          id, calendar_id, created_by_id, title, description, location,
+          saved_place_id, start_time, end_time, is_all_day, status, visibility,
+          color, reminder_minutes, notify_channels, is_recurring, recurrence_rule_id,
+          created_at, updated_at
+        )
+        SELECT
+          gen_random_uuid(), e0.calendar_id, e0.created_by_id, e0.title, e0.description, e0.location,
+          e0.saved_place_id, t.s, t.e, e0.is_all_day, e0.status, e0.visibility,
+          e0.color, e0.reminder_minutes, e0.notify_channels, e0.is_recurring, e0.recurrence_rule_id,
+          NOW(), NOW()
+        FROM events e0
+        CROSS JOIN unnest(${restStarts}::timestamptz[], ${restEnds}::timestamptz[]) AS t(s, e)
+        WHERE e0.id = ${eventId}
+      `
+
+      await sql`
+        INSERT INTO event_participants (id, event_id, user_id, status, created_at, updated_at)
+        SELECT gen_random_uuid(), ne.id, ep.user_id, 'PENDING', NOW(), NOW()
+        FROM events ne
+        JOIN event_participants ep ON ep.event_id = ${eventId}
+        WHERE ne.recurrence_rule_id = ${recurrenceRuleId} AND ne.id <> ${eventId}
+      `
+
+      if (status === "PENDING") {
+        await sql`
+          INSERT INTO event_requests (id, event_id, requestor_id, status, requested_at)
+          SELECT gen_random_uuid(), ne.id, ${user.id}::uuid, 'PENDING', NOW()
+          FROM events ne
+          WHERE ne.recurrence_rule_id = ${recurrenceRuleId} AND ne.id <> ${eventId}
+        `
+      }
+
+      occurrencesCreated = occurrenceStarts.length
     }
 
     // Audit log
@@ -543,6 +636,8 @@ export async function POST(request: NextRequest) {
         id: eventId,
         status,
         requiresApproval: status === "PENDING",
+        occurrencesCreated,
+        occurrencesTruncated,
       },
       message: status === "PENDING" 
         ? "Event created and pending approval" 

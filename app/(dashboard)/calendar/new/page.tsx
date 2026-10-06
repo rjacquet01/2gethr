@@ -93,6 +93,12 @@ function NewEventForm() {
   const [allDay, setAllDay] = useState(false)
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurrenceRule, setRecurrenceRule] = useState('weekly')
+  // Which weekdays a weekly/custom repeat lands on (0 = Sunday). Empty means
+  // "same weekday as the start date".
+  const [recurrenceDays, setRecurrenceDays] = useState<number[]>([])
+  const [recurrenceEndMode, setRecurrenceEndMode] = useState<'never' | 'date' | 'count'>('never')
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState('')
+  const [recurrenceCount, setRecurrenceCount] = useState('10')
   const [selectedReminders, setSelectedReminders] = useState<number[]>([15]) // Default: 15 min reminder
   const [notifyChannels, setNotifyChannels] = useState<NotificationChannelValue[]>([])
   const [selectedParticipants, setSelectedParticipants] = useState<Array<{ 
@@ -201,6 +207,41 @@ function NewEventForm() {
     setSelectedParticipants(prev => prev.filter(p => !(p.id === id && p.type === type)))
   }
 
+  // Builds the recurrence object the API expects from the repeat controls.
+  const buildRecurrence = () => {
+    let frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' = 'WEEKLY'
+    let interval = 1
+    let daysOfWeek: number[] | undefined
+
+    switch (recurrenceRule) {
+      case 'daily': frequency = 'DAILY'; break
+      case 'weekly': frequency = 'WEEKLY'; daysOfWeek = recurrenceDays.length > 0 ? recurrenceDays : undefined; break
+      case 'biweekly': frequency = 'WEEKLY'; interval = 2; daysOfWeek = recurrenceDays.length > 0 ? recurrenceDays : undefined; break
+      case 'weekdays': frequency = 'WEEKLY'; daysOfWeek = [1, 2, 3, 4, 5]; break
+      case 'custom': frequency = 'WEEKLY'; daysOfWeek = recurrenceDays; break
+      case 'monthly': frequency = 'MONTHLY'; break
+      case 'yearly': frequency = 'YEARLY'; break
+    }
+
+    return {
+      frequency,
+      interval,
+      daysOfWeek,
+      endDate: recurrenceEndMode === 'date' && recurrenceEndDate
+        ? localEndOfDayToISO(recurrenceEndDate)
+        : undefined,
+      occurrenceCount: recurrenceEndMode === 'count' ? parseInt(recurrenceCount, 10) : undefined,
+    }
+  }
+
+  const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+  const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  const toggleRecurrenceDay = (day: number) => {
+    setRecurrenceDays(prev =>
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort((a, b) => a - b)
+    )
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -214,6 +255,28 @@ function NewEventForm() {
       return
     }
     
+    if (isRecurring && recurrenceEndMode === 'date') {
+      if (!recurrenceEndDate) {
+        toast.error('Please choose an end date for the repeat')
+        return
+      }
+      if (recurrenceEndDate < formData.startDate) {
+        toast.error('The repeat end date must be on or after the start date')
+        return
+      }
+    }
+    if (isRecurring && recurrenceEndMode === 'count') {
+      const n = parseInt(recurrenceCount, 10)
+      if (!Number.isInteger(n) || n < 1 || n > 366) {
+        toast.error('Number of occurrences must be between 1 and 366')
+        return
+      }
+    }
+    if (isRecurring && recurrenceRule === 'custom' && recurrenceDays.length === 0) {
+      toast.error('Pick at least one day of the week for the custom repeat')
+      return
+    }
+
     setIsSubmitting(true)
     
     try {
@@ -244,8 +307,8 @@ function NewEventForm() {
           visibility: formData.visibility,
           reminderMinutes: selectedReminders,
           notifyChannels: notifyChannels.length > 0 ? notifyChannels : undefined,
-          isRecurring,
-          recurrenceRule: isRecurring ? recurrenceRule : null,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          recurrence: isRecurring ? buildRecurrence() : undefined,
           participants: selectedParticipants.map(p => ({
             userId: p.userId,
             childProfileId: p.childProfileId,
@@ -558,8 +621,73 @@ function NewEventForm() {
                       <SelectItem value="monthly">Monthly</SelectItem>
                       <SelectItem value="yearly">Yearly</SelectItem>
                       <SelectItem value="weekdays">Weekdays (Mon-Fri)</SelectItem>
+                      <SelectItem value="custom">Custom days of the week</SelectItem>
                     </SelectContent>
                   </Select>
+
+                  {(recurrenceRule === 'weekly' || recurrenceRule === 'biweekly' || recurrenceRule === 'custom') && (
+                    <div className="space-y-2 pt-2">
+                      <Label>
+                        {recurrenceRule === 'custom' ? 'Repeat on' : 'Repeat on (optional - defaults to the start day)'}
+                      </Label>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {WEEKDAY_LABELS.map((label, day) => (
+                          <button
+                            key={day}
+                            type="button"
+                            aria-label={WEEKDAY_NAMES[day]}
+                            aria-pressed={recurrenceDays.includes(day)}
+                            onClick={() => toggleRecurrenceDay(day)}
+                            className={`h-9 w-9 rounded-full border text-sm font-medium transition-colors ${
+                              recurrenceDays.includes(day)
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'border-input hover:bg-muted'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2 pt-2">
+                    <Label>Ends</Label>
+                    <Select
+                      value={recurrenceEndMode}
+                      onValueChange={(v) => setRecurrenceEndMode(v as 'never' | 'date' | 'count')}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="never">Never (schedules the next year)</SelectItem>
+                        <SelectItem value="date">On a date</SelectItem>
+                        <SelectItem value="count">After a number of occurrences</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {recurrenceEndMode === 'date' && (
+                      <Input
+                        type="date"
+                        value={recurrenceEndDate}
+                        min={formData.startDate}
+                        onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                      />
+                    )}
+                    {recurrenceEndMode === 'count' && (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={366}
+                          className="w-24"
+                          value={recurrenceCount}
+                          onChange={(e) => setRecurrenceCount(e.target.value)}
+                        />
+                        <span className="text-sm text-muted-foreground">occurrences</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
