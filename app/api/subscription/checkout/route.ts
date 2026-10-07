@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
+import { purchaseBlockedForRequest } from "@/lib/android-app"
 import { stripe, getPriceId } from "@/lib/stripe"
 
 // POST - Create a Stripe Checkout Session for a subscription upgrade.
@@ -13,6 +14,9 @@ import { stripe, getPriceId } from "@/lib/stripe"
 // reaches our server or database.
 export async function POST(request: NextRequest) {
   try {
+    if (purchaseBlockedForRequest(request)) {
+      return NextResponse.json({ error: "Not available in this app" }, { status: 403 })
+    }
     const { user } = await getUserFromRequest(request)
 
     if (!user) {

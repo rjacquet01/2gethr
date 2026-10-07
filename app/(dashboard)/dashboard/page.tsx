@@ -4,6 +4,7 @@ import { useFamilies } from '@/hooks/use-family'
 import { useEvents } from '@/hooks/use-events'
 
 import { useSubscription } from '@/hooks/use-subscription'
+import { usePurchaseUi } from '@/hooks/use-purchase-ui'
 import { useTasks, updateTask } from '@/hooks/use-tasks'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -58,6 +59,7 @@ export default function DashboardPage() {
 
 
   const { access } = useSubscription(primaryFamily?.id || null)
+  const purchaseUi = usePurchaseUi()
   const { tasks, isLoading: tasksLoading, mutate: mutateTasks } = useTasks(primaryFamily?.id)
   const [processingTaskId, setProcessingTaskId] = useState<string | null>(null)
 
@@ -432,7 +434,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Premium Banner */}
-      {!access.hasPremium && (
+      {!access.hasPremium && purchaseUi.canPurchase && (
         <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/20">
           <CardContent className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 sm:p-6">
             <div className="flex items-center gap-3 sm:gap-4">

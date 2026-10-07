@@ -37,10 +37,12 @@ import {
   X
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { usePurchaseUi } from '@/hooks/use-purchase-ui'
 import { getTierDefinition } from '@/lib/subscription-tiers'
 
 export default function SubscriptionPage() {
   const router = useRouter()
+  const { canPurchase } = usePurchaseUi()
   const { user, isLoading: authLoading } = useAuth()
   const { families, isLoading: familiesLoading } = useFamilies()
   const [selectedBilling, setSelectedBilling] = useState<'monthly' | 'annual'>('annual')
@@ -258,7 +260,7 @@ export default function SubscriptionPage() {
             </ul>
           </div>
         </CardContent>
-        {access.hasPremium && !isTrialing && (
+        {canPurchase && access.hasPremium && !isTrialing && (
           <CardFooter className="flex flex-wrap gap-2">
             <Button
               variant="outline"
@@ -315,6 +317,7 @@ export default function SubscriptionPage() {
       </Card>
 
       {/* Billing Toggle */}
+      {canPurchase && (<>
       <div className="flex justify-center">
         <div className="inline-flex items-center gap-2 p-1 rounded-lg bg-muted">
           <button
@@ -468,6 +471,8 @@ export default function SubscriptionPage() {
           )
         })}
       </div>
+
+      </>)}
 
       {/* Features Comparison */}
       <Card>

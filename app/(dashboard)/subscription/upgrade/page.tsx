@@ -1,7 +1,8 @@
 'use client'
 
 import { Suspense, useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { usePurchaseUi } from '@/hooks/use-purchase-ui'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/use-auth'
 import { useFamilies } from '@/hooks/use-family'
@@ -62,6 +63,11 @@ export default function UpgradePage() {
 
 function UpgradeForm() {
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const { ready, canPurchase } = usePurchaseUi()
+  useEffect(() => {
+    if (ready && !canPurchase) router.replace('/subscription')
+  }, [ready, canPurchase, router])
   const rawTierParam = searchParams.get('tier')?.toUpperCase()
 
   // Map URL params to internal tier keys
@@ -81,6 +87,14 @@ function UpgradeForm() {
 
   const primaryFamily = families?.[0]
   const tier = tiers[selectedTier] ?? tiers.PREMIUM
+
+  if (!ready || !canPurchase) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Spinner className="h-8 w-8 text-muted-foreground" />
+      </div>
+    )
+  }
 
   // Safety check - if tier is somehow undefined, show loading state
   if (!tier) {

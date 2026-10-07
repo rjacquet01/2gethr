@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Check, Sparkles } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import { cn } from '@/lib/utils'
+import { usePurchaseUi } from '@/hooks/use-purchase-ui'
 import { listTierDefinitions } from '@/lib/subscription-tiers'
 
 // Pulled from lib/subscription-tiers.ts (the same data the in-app
@@ -26,6 +27,18 @@ const tiers = listTierDefinitions().map((def) => ({
 
 export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual')
+  const { isAndroidApp, canPurchase } = usePurchaseUi()
+  if (isAndroidApp && !canPurchase) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 text-center">
+        <div className="space-y-4">
+          <Logo size="xs" />
+          <p className="text-muted-foreground">Open the Togethr app to see your plan.</p>
+          <Button asChild><Link href="/dashboard">Back to app</Link></Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">

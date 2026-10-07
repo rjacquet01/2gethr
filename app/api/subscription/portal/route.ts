@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
+import { purchaseBlockedForRequest } from "@/lib/android-app"
 import { stripe } from "@/lib/stripe"
 
 // POST - Create a Stripe Customer Portal session so a family owner can
@@ -8,6 +9,9 @@ import { stripe } from "@/lib/stripe"
 // view invoices, cancel) without needing an admin to process anything.
 export async function POST(request: NextRequest) {
   try {
+    if (purchaseBlockedForRequest(request)) {
+      return NextResponse.json({ error: "Not available in this app" }, { status: 403 })
+    }
     const { user } = await getUserFromRequest(request)
 
     if (!user) {
