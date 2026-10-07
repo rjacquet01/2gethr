@@ -22,6 +22,16 @@ import {
 } from '@/components/ui/dialog'
 import { Spinner } from '@/components/ui/spinner'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -29,8 +39,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'sonner'
-import useSWR from 'swr'
-import { authFetch } from '@/hooks/use-auth'
+import useSWR, { mutate as globalMutate } from 'swr'
+import { authFetch, useAuth } from '@/hooks/use-auth'
 import { 
   Users, 
   UserPlus, 
@@ -50,7 +60,9 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
-  AlertCircle
+  AlertCircle,
+  UserMinus,
+  LogOut
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -65,7 +77,8 @@ import { JoinFamilyButton } from '@/components/join-family-dialog'
 export default function FamilyPage() {
   const { families, isLoading: familiesLoading } = useFamilies()
   const primaryFamily = families[0]
-  const { family, generateInviteCode, addChild, isLoading: familyLoading } = useFamily(primaryFamily?.id || null)
+  const { user } = useAuth()
+  const { family, generateInviteCode, addChild, removeMember, isLoading: familyLoading } = useFamily(primaryFamily?.id || null)
   const { access } = useSubscription(primaryFamily?.id || null)
   
   const [copiedCode, setCopiedCode] = useState(false)
@@ -76,6 +89,28 @@ export default function FamilyPage() {
   const [selectedMemberId, setSelectedMemberId] = useState<string>('')
   const [addMode, setAddMode] = useState<'select' | 'create'>('select')
   const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set())
+
+  const [memberToRemove, setMemberToRemove] = useState<{ id: string; name: string; isSelf: boolean } | null>(null)
+  const [isRemovingMember, setIsRemovingMember] = useState(false)
+
+  const handleConfirmRemove = async () => {
+    if (!memberToRemove) return
+    setIsRemovingMember(true)
+    const result = await removeMember(memberToRemove.id)
+    setIsRemovingMember(false)
+    if (result.success) {
+      if (memberToRemove.isSelf) {
+        toast.success('You have left the family')
+        // Our membership is gone - refresh the family list so we fall back to another family.
+        globalMutate('/api/families')
+      } else {
+        toast.success(`${memberToRemove.name} was removed from the family`)
+      }
+      setMemberToRemove(null)
+    } else {
+      toast.error(result.error || 'Failed to remove member')
+    }
+  }
 
   const toggleMemberExpanded = (memberId: string) => {
     setExpandedMembers(prev => {
@@ -603,6 +638,32 @@ export default function FamilyPage() {
         </CardContent>
       </Card>
 
+      <AlertDialog open={!!memberToRemove} onOpenChange={(open) => { if (!open && !isRemovingMember) setMemberToRemove(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {memberToRemove?.isSelf ? 'Leave this family?' : `Remove ${memberToRemove?.name}?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {memberToRemove?.isSelf
+                ? 'You will lose access to this family\'s calendar, tasks and locations. You can rejoin later with a new invite code.'
+                : 'They will immediately lose access to this family\'s calendar, tasks and locations. They can only rejoin with an invite code. Consider generating a new code if you don\'t want them to rejoin.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRemovingMember}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isRemovingMember}
+              onClick={(e) => { e.preventDefault(); handleConfirmRemove() }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isRemovingMember ? <Spinner className="w-4 h-4 mr-2" /> : null}
+              {memberToRemove?.isSelf ? 'Leave Family' : 'Remove Member'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Family Members */}
         <Card>
@@ -640,9 +701,43 @@ export default function FamilyPage() {
                         {member.role}
                       </Badge>
                     </div>
-                    {member.role === 'PARENT' && family.ownerId === member.userId && (
+                    {family.ownerId === member.userId && (
                       <Badge variant="outline" className="text-xs">Owner</Badge>
                     )}
+                    {(() => {
+                      const isSelf = member.userId === user?.id
+                      const isMemberOwner = family.ownerId === member.userId
+                      const viewerIsAdmin =
+                        family.ownerId === user?.id ||
+                        family.members?.some(m => m.userId === user?.id && m.role === 'PARENT')
+                      if (isMemberOwner) return null
+                      if (isSelf) {
+                        return (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground"
+                            onClick={() => setMemberToRemove({ id: member.id, name: member.displayName, isSelf: true })}
+                          >
+                            <LogOut className="w-4 h-4 mr-1" />
+                            Leave
+                          </Button>
+                        )
+                      }
+                      if (!viewerIsAdmin) return null
+                      return (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setMemberToRemove({ id: member.id, name: member.displayName, isSelf: false })}
+                          aria-label={`Remove ${member.displayName}`}
+                        >
+                          <UserMinus className="w-4 h-4 mr-1" />
+                          Remove
+                        </Button>
+                      )
+                    })()}
                   </div>
                 )
               })}
