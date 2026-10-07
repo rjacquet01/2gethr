@@ -187,9 +187,29 @@ export async function DELETE(
       WHERE id = ${memberId}
     `
 
+    // When someone is removed by an admin, rotate the invite code so they
+    // can't simply walk back in with the code they already have. (Leaving on
+    // your own doesn't rotate it.)
+    let inviteCodeRotated = false
+    if (!isSelf) {
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+      let newCode = ""
+      for (let i = 0; i < 8; i++) {
+        newCode += chars.charAt(Math.floor(Math.random() * chars.length))
+      }
+      const expiresAt = new Date()
+      expiresAt.setDate(expiresAt.getDate() + 7)
+      await sql`
+        UPDATE families
+        SET invite_code = ${newCode}, invite_expires_at = ${expiresAt.toISOString()}, updated_at = NOW()
+        WHERE id = ${familyId}
+      `
+      inviteCodeRotated = true
+    }
+
     // Audit log
     await logAuditEvent(user.id, "DELETE", "family_member", memberId, {
-      metadata: { targetUserId: member.user_id, isSelf },
+      metadata: { targetUserId: member.user_id, isSelf, inviteCodeRotated },
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
     })
@@ -197,6 +217,7 @@ export async function DELETE(
     return NextResponse.json({
       success: true,
       message: isSelf ? "You have left the family" : "Member removed successfully",
+      inviteCodeRotated,
     })
   } catch (error) {
     console.error("Remove member error:", error)

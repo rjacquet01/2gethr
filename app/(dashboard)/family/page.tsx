@@ -104,7 +104,7 @@ export default function FamilyPage() {
         // Our membership is gone - refresh the family list so we fall back to another family.
         globalMutate('/api/families')
       } else {
-        toast.success(`${memberToRemove.name} was removed from the family`)
+        toast.success(`${memberToRemove.name} was removed. A new invite code was generated.`)
       }
       setMemberToRemove(null)
     } else {
@@ -647,7 +647,7 @@ export default function FamilyPage() {
             <AlertDialogDescription>
               {memberToRemove?.isSelf
                 ? 'You will lose access to this family\'s calendar, tasks and locations. You can rejoin later with a new invite code.'
-                : 'They will immediately lose access to this family\'s calendar, tasks and locations. They can only rejoin with an invite code. Consider generating a new code if you don\'t want them to rejoin.'}
+                : 'They will immediately lose access to this family\'s calendar, tasks and locations. A new invite code will be generated so they can\'t rejoin with the old one.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
