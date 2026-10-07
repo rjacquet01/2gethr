@@ -5,7 +5,7 @@ import { getAdminAccessToken } from '@/hooks/use-admin-auth'
 import Link from 'next/link'
 import {
   Users, Home, CreditCard, TicketIcon, AlertTriangle,
-  TrendingUp, Clock, ArrowRight, Wallet, ArrowUpCircle
+  TrendingUp, Clock, ArrowRight, ArrowUpCircle
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -192,18 +192,6 @@ export default function AdminDashboard() {
               <div>
                 <p className="font-medium text-sm">Upgrade Requests</p>
                 <p className="text-xs text-muted-foreground">Review pending subscription upgrade requests</p>
-              </div>
-              <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground" />
-            </CardContent>
-          </Card>
-        </Link>
-        <Link href="/admin/payments">
-          <Card className="hover:bg-muted/50 transition-colors">
-            <CardContent className="flex items-center gap-3 py-4">
-              <Wallet className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="font-medium text-sm">Payment Processing</p>
-                <p className="text-xs text-muted-foreground">View and manage payment transactions</p>
               </div>
               <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground" />
             </CardContent>
