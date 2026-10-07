@@ -30,9 +30,10 @@ import {
 export default function FamilySettingsPage() {
   const router = useRouter()
   const { user } = useAuth()
-  const { families, isLoading: familiesLoading } = useFamilies()
+  // The selected family is shared with the sidebar family switcher, so
+  // switching there (or on this page) changes it everywhere.
+  const { families, selectedFamilyId, selectFamily, isLoading: familiesLoading } = useFamilies()
   
-  const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null)
   const { family, isLoading: familyLoading, mutate } = useFamily(selectedFamilyId || undefined)
   
   const [saving, setSaving] = useState(false)
@@ -44,13 +45,6 @@ export default function FamilySettingsPage() {
     requiresEventApproval: false,
     allowChildLocation: true,
   })
-
-  // Set selected family when families load
-  useEffect(() => {
-    if (families.length > 0 && !selectedFamilyId) {
-      setSelectedFamilyId(families[0].id)
-    }
-  }, [families, selectedFamilyId])
 
   // Update form when family data loads
   useEffect(() => {
@@ -220,7 +214,7 @@ export default function FamilySettingsPage() {
               key={f.id}
               variant={selectedFamilyId === f.id ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setSelectedFamilyId(f.id)}
+              onClick={() => selectFamily(f.id)}
             >
               {f.name}
             </Button>
