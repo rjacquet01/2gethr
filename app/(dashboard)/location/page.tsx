@@ -223,11 +223,41 @@ export default function LocationPage() {
       return
     }
 
-    const updateInterval = (mySettings.updateIntervalSec || 60) * 1000
+    const userIntervalMs = (mySettings.updateIntervalSec || 60) * 1000
+    const MIN_GAP_MS = 10_000 // never send faster than this
+    const MOVE_SEND_METERS = 50 // also report promptly after real movement
 
-    const sendLocation = async (position: GeolocationPosition) => {
+    let suggestedMs: number | null = null // server hint: shorten near a geofence
+    let lastSentAt = 0
+    let lastSent: { lat: number; lng: number } | null = null
+    let sending = false
+
+    const effectiveIntervalMs = () =>
+      Math.max(MIN_GAP_MS, suggestedMs ? Math.min(userIntervalMs, suggestedMs) : userIntervalMs)
+
+    const metersBetween = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+      const R = 6371e3
+      const p1 = (a.lat * Math.PI) / 180
+      const p2 = (b.lat * Math.PI) / 180
+      const dp = ((b.lat - a.lat) * Math.PI) / 180
+      const dl = ((b.lng - a.lng) * Math.PI) / 180
+      const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2
+      return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))
+    }
+
+    const sendLocation = async (position: GeolocationPosition, force = false) => {
+      const now = Date.now()
+      const here = { lat: position.coords.latitude, lng: position.coords.longitude }
+      const sinceLast = now - lastSentAt
+      const moved = lastSent ? metersBetween(lastSent, here) : Infinity
+      const due = sinceLast >= effectiveIntervalMs() - 1000
+      const movedEnough = moved >= MOVE_SEND_METERS && sinceLast >= MIN_GAP_MS
+      if (sending || !(force || due || movedEnough)) return
+      sending = true
+      lastSentAt = now
+      lastSent = here
       try {
-        await authFetch('/api/location', {
+        const res = await authFetch('/api/location', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -241,15 +271,27 @@ export default function LocationPage() {
             familyId: mySettings.familyId,
           }),
         })
+        const json = await res.json().catch(() => null)
+        const hint = json?.data?.suggestedIntervalSec
+        suggestedMs = typeof hint === 'number' && hint > 0 ? hint * 1000 : null
       } catch (error) {
         // Silent fail for live tracking
+      } finally {
+        sending = false
       }
     }
 
-    // Get initial position
-    navigator.geolocation.getCurrentPosition(sendLocation, () => {}, { enableHighAccuracy: true })
+    const poll = (force = false) =>
+      navigator.geolocation.getCurrentPosition((pos) => sendLocation(pos, force), () => {}, {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 5000,
+      })
 
-    // Set up continuous tracking
+    // Initial fix right away.
+    poll(true)
+
+    // Movement-driven updates (throttled in sendLocation).
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         sendLocation(position)
@@ -257,11 +299,31 @@ export default function LocationPage() {
       () => {
         // Geolocation errors are handled silently for continuous tracking
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: updateInterval }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     )
+
+    // Heartbeat so a stationary device still reports on schedule (watchPosition
+    // only fires when the position changes), at the adaptive interval.
+    let heartbeat: ReturnType<typeof setTimeout>
+    const schedule = () => {
+      heartbeat = setTimeout(() => {
+        if (!document.hidden) poll()
+        schedule()
+      }, Math.min(effectiveIntervalMs(), 30_000))
+    }
+    schedule()
+
+    // Coming back to the app after being backgrounded: report immediately
+    // instead of waiting out the interval.
+    const onVisible = () => {
+      if (!document.hidden) poll(true)
+    }
+    document.addEventListener('visibilitychange', onVisible)
 
     return () => {
       navigator.geolocation.clearWatch(watchId)
+      clearTimeout(heartbeat)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [mySettings?.mode, mySettings?.updateIntervalSec, mySettings?.shareWithFamily, mySettings?.memberId, mySettings?.familyId])
 

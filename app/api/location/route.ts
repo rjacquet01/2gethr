@@ -5,6 +5,7 @@ import { z } from "zod"
 import { sendSMS, SMS_TEMPLATES, isTwilioConfigured } from "@/lib/services/sms"
 import { sendEmail, EMAIL_TEMPLATES, isResendConfigured } from "@/lib/services/email"
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
+import { distanceMeters, evaluateGeofence, suggestedPingIntervalSec } from "@/lib/geofence"
 
 const locationPingSchema = z.object({
   latitude: z.number().min(-90).max(90),
@@ -199,6 +200,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Previous ping (before this one is stored) - used to require two
+    // consecutive "outside" fixes before declaring a departure, so a single
+    // wild GPS/Wi-Fi outlier can't trigger a false "left" alert.
+    const prevPings = await sql`
+      SELECT latitude, longitude, timestamp FROM location_pings
+      WHERE user_id = ${user.id}
+      ORDER BY timestamp DESC
+      LIMIT 1
+    `
+    const prevPing = prevPings[0]
+      ? {
+          latitude: Number(prevPings[0].latitude),
+          longitude: Number(prevPings[0].longitude),
+          ageSec: (Date.now() - new Date(prevPings[0].timestamp).getTime()) / 1000,
+        }
+      : null
+
     // Store location ping - use text-based ID to match column type
     const pingId = `ping_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
     await sql`
@@ -226,13 +244,32 @@ export async function POST(request: NextRequest) {
     }
 
     // Check geofences if enabled (Premium feature)
+    let suggestedIntervalSec: number | null = null
     if (subscription.features.geofencing) {
-      await checkGeofences(user.id, setting.family_id, validatedData.latitude, validatedData.longitude, validatedData.accuracy)
+      const gap = await checkGeofences(
+        user.id,
+        setting.family_id,
+        validatedData.latitude,
+        validatedData.longitude,
+        validatedData.accuracy,
+        prevPing
+      )
+      suggestedIntervalSec = suggestedPingIntervalSec(gap)
+    }
+
+    // Keep paid-plan history within the plan's window. Runs on ~2% of pings
+    // so it doesn't add a write to every ping.
+    if (subscription.tier !== "FREE" && Math.random() < 0.02) {
+      await sql`
+        DELETE FROM location_pings
+        WHERE user_id = ${user.id}
+          AND timestamp < NOW() - make_interval(days => ${subscription.features.historyDays})
+      `
     }
 
     return NextResponse.json({
       success: true,
-      data: { pingId },
+      data: { pingId, suggestedIntervalSec },
     })
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -255,74 +292,85 @@ async function checkGeofences(
   familyId: string,
   latitude: number,
   longitude: number,
-  accuracy?: number | null
-) {
+  accuracy?: number | null,
+  prevPing?: { latitude: number; longitude: number; ageSec: number } | null
+): Promise<number | null> {
   // Get all geofence-enabled places for this family
   const places = await sql`
     SELECT id, name, latitude, longitude, radius, alert_on_arrival, alert_on_departure, notify_channels
     FROM saved_places
     WHERE family_id = ${familyId} AND geofence_enabled = true
   `
+  if (places.length === 0) return null
+
+  // Last arrival/departure state per place for this user, in one query.
+  const lastRows = await sql`
+    SELECT DISTINCT ON (saved_place_id) saved_place_id, event_type
+    FROM geofence_events
+    WHERE user_id = ${userId}
+    ORDER BY saved_place_id, timestamp DESC
+  `
+  const lastByPlace = new Map<string, string>()
+  for (const r of lastRows) lastByPlace.set(r.saved_place_id, r.event_type)
+
+  let nearestGap: number | null = null
 
   for (const place of places) {
-    const distance = calculateDistance(
-      latitude, longitude,
-      place.latitude, place.longitude
-    )
+    const radius = Number(place.radius)
+    const distance = distanceMeters(latitude, longitude, Number(place.latitude), Number(place.longitude))
+    const gap = distance - radius
+    if (nearestGap === null || gap < nearestGap) nearestGap = gap
 
-    // Get last geofence event for this place/user
-    const lastEvents = await sql`
-      SELECT event_type FROM geofence_events
-      WHERE user_id = ${userId} AND saved_place_id = ${place.id}
-      ORDER BY timestamp DESC
-      LIMIT 1
-    `
-    const wasInside = lastEvents.length > 0 && lastEvents[0].event_type === "ARRIVAL"
+    const wasInside = lastByPlace.get(place.id) === "ARRIVAL"
 
-    // GPS is noisy right at a boundary. A device reporting ±accuracy meters
-    // can flip a hard "distance <= radius" check back and forth on every
-    // ping even while the person hasn't moved, spamming arrival/departure
-    // alerts. Two guards against that:
-    //
-    // 1. Hysteresis: once inside, require crossing further out (radius +
-    //    buffer) before counting as "left", and vice versa. This makes the
-    //    boundary "sticky" instead of a single hard line.
-    // 2. Accuracy gating: if the ping's own reported accuracy radius is too
-    //    large relative to the geofence radius, the fix isn't precise enough
-    //    to trust a transition either way, so skip evaluating this place for
-    //    this ping rather than risk a false alert.
-    const hysteresisBuffer = Math.max(20, place.radius * 0.15)
-    const threshold = wasInside ? place.radius + hysteresisBuffer : place.radius
-    const isInside = distance <= threshold
+    // Hysteresis + accuracy gating live in lib/geofence.ts (unit tested).
+    const transition = evaluateGeofence({ distance, accuracy, radius, wasInside })
+    if (!transition) continue
 
-    if (accuracy && accuracy > place.radius * 1.5) {
-      // Too imprecise to trust either way — don't flip state on this ping.
-      continue
+    // A departure also needs the previous fix (if it's recent) to be outside
+    // the radius, so a one-off outlier fix can't fire a false "left".
+    if (transition === "DEPARTURE" && prevPing && prevPing.ageSec < 600) {
+      const prevDistance = distanceMeters(prevPing.latitude, prevPing.longitude, Number(place.latitude), Number(place.longitude))
+      if (prevDistance <= radius) continue
     }
 
-    // Detect arrival or departure
-    if (isInside && !wasInside && place.alert_on_arrival) {
-      await recordGeofenceEvent(userId, place.id, "ARRIVAL", latitude, longitude)
-      await createGeofenceNotification(userId, familyId, place.name, "ARRIVAL", place.notify_channels)
-    } else if (!isInside && wasInside && place.alert_on_departure) {
-      await recordGeofenceEvent(userId, place.id, "DEPARTURE", latitude, longitude)
-      await createGeofenceNotification(userId, familyId, place.name, "DEPARTURE", place.notify_channels)
+    // State is always recorded so arrival/departure tracking stays correct
+    // even when only one of the two alerts is enabled (previously a place
+    // with arrival alerts off could never report a departure). The insert is
+    // skipped if the same event was just written, which stops two
+    // overlapping pings from double-alerting.
+    const recorded = await recordGeofenceEvent(userId, place.id, transition, latitude, longitude)
+    if (!recorded) continue
+
+    const wantsAlert = transition === "ARRIVAL" ? place.alert_on_arrival : place.alert_on_departure
+    if (wantsAlert) {
+      await createGeofenceNotification(userId, familyId, place.name, transition, place.notify_channels)
     }
   }
+
+  return nearestGap
 }
 
 async function recordGeofenceEvent(
-  userId: string, 
-  placeId: string, 
+  userId: string,
+  placeId: string,
   eventType: "ARRIVAL" | "DEPARTURE",
   latitude: number,
   longitude: number
-) {
+): Promise<boolean> {
   const eventId = `gfe_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-  await sql`
+  const rows = await sql`
     INSERT INTO geofence_events (id, user_id, saved_place_id, event_type, latitude, longitude, timestamp)
-    VALUES (${eventId}, ${userId}, ${placeId}, ${eventType}, ${latitude}, ${longitude}, NOW())
+    SELECT ${eventId}, ${userId}, ${placeId}, ${eventType}, ${latitude}, ${longitude}, NOW()
+    WHERE NOT EXISTS (
+      SELECT 1 FROM geofence_events
+      WHERE user_id = ${userId} AND saved_place_id = ${placeId}
+        AND event_type = ${eventType}
+        AND timestamp > NOW() - INTERVAL '45 seconds'
+    )
+    RETURNING id
   `
+  return rows.length > 0
 }
 
 async function createGeofenceNotification(
