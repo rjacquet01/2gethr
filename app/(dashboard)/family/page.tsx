@@ -60,6 +60,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import Link from 'next/link'
+import { JoinFamilyButton } from '@/components/join-family-dialog'
 
 export default function FamilyPage() {
   const { families, isLoading: familiesLoading } = useFamilies()
@@ -328,12 +329,15 @@ export default function FamilyPage() {
           <h1 className="text-2xl font-bold text-foreground">{family.name}</h1>
           <p className="text-muted-foreground">Manage your family members</p>
         </div>
-        <Button variant="outline" asChild>
-          <Link href="/family/settings">
-            <Settings className="w-4 h-4 mr-2" />
-            Family Settings
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <JoinFamilyButton />
+          <Button variant="outline" asChild>
+            <Link href="/family/settings">
+              <Settings className="w-4 h-4 mr-2" />
+              Family Settings
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Invite Card */}
