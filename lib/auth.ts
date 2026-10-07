@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify } from "jose"
 import { cookies } from "next/headers"
 import bcrypt from "bcryptjs"
 import { sql } from "./db"
+import { getTierDefinition } from "./subscription-tiers"
 
 // JWT Configuration
 // SECURITY FIX: these used to fall back to hardcoded, publicly-known strings
@@ -515,68 +516,51 @@ export async function checkFamilySubscription(familyId: string): Promise<{
   }
 }> {
   const subscriptions = await sql`
-    SELECT tier, status 
+    SELECT tier, status, trial_ends_at
     FROM subscriptions 
     WHERE family_id = ${familyId} 
     AND status IN ('ACTIVE', 'TRIALING')
-    AND NOT (status = 'TRIALING' AND trial_ends_at IS NOT NULL AND trial_ends_at < NOW())
     ORDER BY created_at DESC
     LIMIT 1
   `
 
-  const defaultFeatures = {
-    maxFamilyMembers: 4,
-    maxChildren: 2,
-    maxSavedPlaces: 5,
-    maxCalendars: 2,
-    locationSharing: false,
-    geofencing: false,
-    phoneAlerts: false,
-    smsNotifications: false,
-    customReminderTimes: false,
-    historyDays: 30,
+  // Limits and feature flags come from lib/subscription-tiers.ts (the single
+  // source of truth) instead of a second hand-maintained copy here.
+  const toFeatures = (tier: string) => {
+    const def = getTierDefinition(tier)
+    return {
+      maxFamilyMembers: def.limits.maxFamilyMembers,
+      maxChildren: def.limits.maxChildren,
+      maxSavedPlaces: def.limits.maxSavedPlaces,
+      maxCalendars: def.limits.maxCalendars,
+      locationSharing: def.features.locationSharing,
+      geofencing: def.features.geofencing,
+      phoneAlerts: def.features.phoneAlerts,
+      smsNotifications: def.features.smsNotifications,
+      customReminderTimes: def.features.customReminderTimes,
+      historyDays: def.limits.historyDays,
+    }
   }
 
   if (subscriptions.length === 0) {
-    return { tier: "FREE", isActive: true, features: defaultFeatures }
+    return { tier: "FREE", isActive: true, features: toFeatures("FREE") }
   }
 
   const sub = subscriptions[0]
-  const isActive = sub.status === "ACTIVE" || sub.status === "TRIALING"
 
-  // Feature gates based on tier
-  // FREE: $0, PREMIUM (Basic): $3.99/mo, PREMIUM_PLUS (Premium): $7.99/mo
-  const tierFeatures: Record<string, typeof defaultFeatures> = {
-    FREE: defaultFeatures,
-    PREMIUM: {
-      maxFamilyMembers: 6,
-      maxChildren: 5,
-      maxSavedPlaces: 15,
-      maxCalendars: 5,
-      locationSharing: false, // Basic tier doesn't include location sharing
-      geofencing: false,
-      phoneAlerts: false,
-      smsNotifications: true,
-      customReminderTimes: false,
-      historyDays: 90,
-    },
-    PREMIUM_PLUS: {
-      maxFamilyMembers: 12,
-      maxChildren: -1, // Unlimited
-      maxSavedPlaces: 50,
-      maxCalendars: 20,
-      locationSharing: true,
-      geofencing: true,
-      phoneAlerts: true,
-      smsNotifications: true,
-      customReminderTimes: true,
-      historyDays: 365,
-    },
+  // A trial whose end date has passed is no longer premium, even if the row
+  // still says TRIALING (nothing may have flipped it yet).
+  const trialExpired =
+    sub.status === "TRIALING" &&
+    !!sub.trial_ends_at &&
+    new Date(sub.trial_ends_at).getTime() < Date.now()
+  if (trialExpired) {
+    return { tier: "FREE", isActive: true, features: toFeatures("FREE") }
   }
 
   return {
     tier: sub.tier,
-    isActive,
-    features: tierFeatures[sub.tier] || defaultFeatures,
+    isActive: true,
+    features: toFeatures(sub.tier),
   }
 }

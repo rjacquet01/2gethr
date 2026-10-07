@@ -444,7 +444,7 @@ export default function DashboardPage() {
               <div>
                 <h3 className="font-semibold text-foreground text-sm sm:text-base">Upgrade to Premium</h3>
                 <p className="text-xs sm:text-sm text-muted-foreground">
-                  Unlock location sharing and more
+                  Unlock geofence alerts, more places and more
                 </p>
               </div>
             </div>

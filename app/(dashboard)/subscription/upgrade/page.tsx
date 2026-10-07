@@ -252,7 +252,7 @@ function UpgradeForm() {
                       : "border-border hover:border-primary/50"
                   )}
                 >
-                  <Badge className="absolute top-2 right-2 bg-green-500">Save 17%</Badge>
+                  <Badge className="absolute top-2 right-2 bg-green-500">Save up to 33%</Badge>
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-semibold">Annual</span>
                     {billingCycle === 'annual' && (

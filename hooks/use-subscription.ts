@@ -94,8 +94,8 @@ const FREE_ACCESS_FALLBACK: PremiumAccess = {
   hasPremium: false,
   tier: 'FREE',
   features: [],
-  featureFlags: DEFAULT_FEATURE_FLAGS,
-  limits: { maxChildren: 2, historyDays: 30, maxSavedPlaces: 5, maxFamilyMembers: 4, maxCalendars: 2 },
+  featureFlags: { ...DEFAULT_FEATURE_FLAGS, locationSharing: true },
+  limits: { maxChildren: 2, historyDays: 30, maxSavedPlaces: 2, maxFamilyMembers: 4, maxCalendars: 2 },
 }
 
 const fetcher = async (url: string): Promise<{ subscription: Subscription | null; access: PremiumAccess }> => {

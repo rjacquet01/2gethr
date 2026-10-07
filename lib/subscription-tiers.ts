@@ -60,12 +60,12 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
     limits: {
       maxFamilyMembers: 4,
       maxChildren: 2,
-      maxSavedPlaces: 5,
+      maxSavedPlaces: 2,
       maxCalendars: 2,
       historyDays: 30,
     },
     features: {
-      locationSharing: false,
+      locationSharing: true,
       geofencing: false,
       advancedRecurrence: false,
       exportCalendar: false,
@@ -77,6 +77,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
     featureList: [
       "Up to 2 children",
       "Shared family calendar",
+      "Live family location (2 saved places)",
       "Basic event notifications",
       "30 days history",
       "Email support",
@@ -86,8 +87,8 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
     key: "PREMIUM",
     name: "Basic",
     description: "Enhanced family features",
-    priceMonthlyCents: 399, // $3.99
-    priceAnnualCents: 3990, // $39.90
+    priceMonthlyCents: 299, // $2.99
+    priceAnnualCents: 2499, // $24.99 (~30% off)
     limits: {
       maxFamilyMembers: 6,
       maxChildren: 5,
@@ -96,7 +97,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       historyDays: 90,
     },
     features: {
-      locationSharing: false,
+      locationSharing: true,
       geofencing: false,
       advancedRecurrence: true,
       exportCalendar: true,
@@ -107,6 +108,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
     },
     featureList: [
       "Up to 5 children",
+      "Live family location (15 saved places)",
       "Advanced reminder settings",
       "Complex recurring events",
       "90 days history",
@@ -118,8 +120,8 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
     key: "PREMIUM_PLUS",
     name: "Premium",
     description: "Full family safety suite",
-    priceMonthlyCents: 799, // $7.99
-    priceAnnualCents: 7990, // $79.90
+    priceMonthlyCents: 499, // $4.99
+    priceAnnualCents: 3999, // $39.99 (~33% off)
     limits: {
       maxFamilyMembers: 12,
       maxChildren: -1, // Unlimited
@@ -139,8 +141,8 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
     },
     featureList: [
       "Unlimited children",
-      "Real-time location sharing",
-      "Geofence alerts",
+      "Live family location (50 saved places)",
+      "Geofence arrival & departure alerts",
       "1 year history",
       "Phone alert notifications",
       "Custom reminder times",

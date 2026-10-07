@@ -341,7 +341,7 @@ export default function SubscriptionPage() {
             onClick={() => setSelectedBilling('annual')}
           >
             Annual
-            <Badge variant="secondary" className="ml-2 text-xs">Save 17%</Badge>
+            <Badge variant="secondary" className="ml-2 text-xs">Save up to 33%</Badge>
           </button>
         </div>
       </div>

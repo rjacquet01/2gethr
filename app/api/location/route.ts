@@ -220,6 +220,11 @@ export async function POST(request: NextRequest) {
       )
     `
 
+    // Free tier gets live location only, not history: keep just the latest ping.
+    if (subscription.tier === "FREE") {
+      await sql`DELETE FROM location_pings WHERE user_id = ${user.id} AND id != ${pingId}`
+    }
+
     // Check geofences if enabled (Premium feature)
     if (subscription.features.geofencing) {
       await checkGeofences(user.id, setting.family_id, validatedData.latitude, validatedData.longitude, validatedData.accuracy)

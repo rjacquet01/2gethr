@@ -17,15 +17,15 @@ const faqs = [
     questions: [
       {
         question: 'How do I create a family account?',
-        answer: 'Sign up with your email address, then choose "Create a Family" during onboarding. Once your family exists, open the Family page to invite members.'
+        answer: 'To create a family account, sign up with your email address and follow the onboarding process. You can then invite family members by going to Settings > Family > Invite Members and sharing the generated invite code or link.'
       },
       {
         question: 'How do I invite family members?',
-        answer: 'Open the Family page and use the invite code card. Tap Share Invite to send a join link plus the code by email or text, or copy the code. The link opens Togethr with the code already filled in. Only the family owner can generate invites, and each invite code expires after 7 days (use New Code to make a fresh one).'
+        answer: 'Navigate to Settings > Family > Invite Members. You can generate an invite code that family members can use to join, or send them a direct invite link via email. Each invite code expires after 7 days for security.'
       },
       {
         question: 'Can I be part of multiple families?',
-        answer: 'Yes. If you belong to more than one family, a family switcher appears at the top of the sidebar (and in the mobile header). Pick a family and the Calendar, Tasks, Family, Location and Places pages show that family. Each family has its own calendar, tasks, and settings.'
+        answer: 'Yes, you can be a member of multiple family groups. Switch between families using the family selector in the top navigation. Each family has its own calendar, tasks, and settings.'
       },
     ]
   },
@@ -34,19 +34,19 @@ const faqs = [
     questions: [
       {
         question: 'How do I create a new event?',
-        answer: 'Open the Calendar and tap New Event (or use the + button). Fill in the title, date and time, and optionally add a location, description, participants, or a repeat schedule.'
+        answer: 'Click the "+" button on the calendar page or navigate to Calendar > New Event. Fill in the event details including title, date, time, and optionally add a location, description, or recurring schedule.'
       },
       {
         question: 'How do recurring events work?',
-        answer: 'When creating an event, turn on Recurring Event and choose daily, weekly, every 2 weeks, monthly, yearly, weekdays, or custom days of the week. Then choose when it ends: never (the next 12 months are scheduled), on a date, or after a number of occurrences. Each occurrence is created as its own event.'
+        answer: 'When creating an event, you can set it to repeat daily, weekly, monthly, or yearly. You can also customize which days of the week it occurs and set an end date or number of occurrences.'
       },
       {
         question: 'Can I sync with Google Calendar or other calendars?',
-        answer: 'Yes. Go to Settings > Calendar & Task Sync to connect Google or Apple Calendar, or to import a .ics file from Outlook, Android, or iOS.'
+        answer: 'Calendar sync with external providers like Google Calendar and Apple Calendar is planned for a future update. Currently, you can manually add events or use our mobile app for quick entry.'
       },
       {
         question: 'How do I set up event reminders?',
-        answer: 'When creating an event, choose one or more reminders and the channels to notify through (in-app, push, email, or SMS - SMS is available on the Basic and Premium plans). To change the reminders new events start with, go to Settings > Notifications > Default Reminder Times.'
+        answer: 'When creating or editing an event, you can add reminders that will notify you via push notification, email, or SMS (Premium feature) before the event starts. Default reminder times can be set in Settings > Notifications.'
       },
     ]
   },
@@ -55,15 +55,15 @@ const faqs = [
     questions: [
       {
         question: 'How do I assign a task to a family member?',
-        answer: 'When creating a task, use the "Assign to Family Member" dropdown (or "Or Assign to Child") to choose who it\'s for. They are notified about the new task and it appears in their task list.'
+        answer: 'When creating a task, use the "Assign to" dropdown to select a family member. They will receive a notification about the new task and it will appear in their task list.'
       },
       {
         question: 'What do the different task statuses mean?',
-        answer: 'Pending (not started), In Progress (being worked on), On Hold (temporarily paused), Awaiting Approval (finished and waiting for a parent to review), Completed (done and approved), and Cancelled (no longer needed). Use the Status menu on a task to change it.'
+        answer: 'Tasks can have the following statuses: Pending (not started), In Progress (being worked on), On Hold (temporarily paused), Pending Approval (awaiting parent/admin review), and Completed (finished).'
       },
       {
         question: 'How does the approval workflow work?',
-        answer: 'Turn on "Require Approval" when creating a task. When the assignee marks it complete, it moves to Awaiting Approval, and a parent can approve it or send it back.'
+        answer: 'For families with children, tasks can be set to require parent approval when marked complete. The parent will receive a notification and can approve or request revisions before the task is fully completed.'
       },
     ]
   },
@@ -72,7 +72,7 @@ const faqs = [
     questions: [
       {
         question: 'How do I enable location sharing?',
-        answer: 'Go to the Location page and click "Enable Location Sharing". You\'ll need to grant location permission in your browser or mobile app. Location sharing is available on the Premium plan and can be turned off at any time.'
+        answer: 'Go to the Location page and click "Enable Location Sharing". You\'ll need to grant location permissions in your browser or mobile app. Basic live location is included on every plan (with 2 saved places) and can be disabled at any time.'
       },
       {
         question: 'Who can see my location?',
@@ -80,7 +80,7 @@ const faqs = [
       },
       {
         question: 'How do geofences work?',
-        answer: 'Geofences are virtual boundaries around saved places like home, school, or work. When a family member arrives at or leaves a geofenced place, parents and guardians in the family are notified. Turn geofencing on for a place on the Places page. Geofence alerts are included in the Premium plan.'
+        answer: 'Geofences are virtual boundaries around locations like home, school, or work. When a family member enters or leaves a geofenced area, designated family members receive a notification. Set up geofences in Location > Saved Places.'
       },
     ]
   },
@@ -89,11 +89,11 @@ const faqs = [
     questions: [
       {
         question: 'What features are included in each plan?',
-        answer: 'Free: shared family calendar and tasks, up to 4 family members and 2 children, 30 days of history. Basic: up to 6 family members and 5 children, SMS notifications, advanced recurring events, calendar export, and priority support. Premium: up to 12 family members and unlimited children, plus real-time location sharing, geofence alerts, phone call alerts, custom reminder times, and a year of history. Open the Subscription page for current pricing.'
+        answer: 'Free: shared calendar, tasks, and basic live location with 2 saved places. Basic: more members, 15 saved places, SMS notifications, advanced reminders. Premium: geofence arrival and departure alerts, 50 saved places, phone alerts, and 1 year of history.'
       },
       {
         question: 'How do I upgrade my subscription?',
-        answer: 'Open Subscription in the main menu to view plans and upgrade. Payment is processed securely through Stripe, and we never see or store your card number. Plan changes take effect at the start of your next billing cycle.'
+        answer: 'Go to Settings > Subscription to view available plans and upgrade. Payment is processed securely through Stripe. You can upgrade, downgrade, or cancel at any time.'
       },
       {
         question: 'Can I get a refund?',
@@ -101,7 +101,7 @@ const faqs = [
       },
       {
         question: 'How do I cancel my subscription?',
-        answer: 'Open Subscription and choose Manage Billing to open the secure Stripe billing portal, where you can cancel. Your plan stays active until the end of the current billing period, then reverts to Free.'
+        answer: 'Navigate to Settings > Subscription > Manage Subscription and click "Cancel Plan". Your subscription will remain active until the end of your current billing period, then revert to the free plan.'
       },
     ]
   },
@@ -110,15 +110,15 @@ const faqs = [
     questions: [
       {
         question: 'How do I change my password?',
-        answer: 'Go to Settings > Security and click "Change Password". Enter your current password, then your new password twice. Your other devices will be signed out. If you\'ve forgotten your password, use "Forgot password" on the sign-in page.'
+        answer: 'Go to Settings > Profile > Security and click "Change Password". You\'ll need to enter your current password and then your new password twice to confirm.'
       },
       {
         question: 'How do I enable two-factor authentication?',
-        answer: 'Two-factor authentication (2FA) can be turned on in Settings > Security. It works with authenticator apps like Google Authenticator or Authy.'
+        answer: 'Two-factor authentication (2FA) can be enabled in Settings > Profile > Security. We support authenticator apps like Google Authenticator or Authy for an extra layer of security.'
       },
       {
         question: 'How do I delete my account?',
-        answer: 'Go to Settings and scroll to the Danger Zone, then choose Delete Account and confirm with your email address. This is permanent. If you own a family that has other members, ownership is transferred to another member automatically; if you\'re the only member, the family and its subscription are deleted.'
+        answer: 'To delete your account, go to Settings > Profile > Delete Account. This action is permanent and will remove all your data. If you\'re the only admin of a family, you\'ll need to transfer ownership or delete the family first.'
       },
       {
         question: 'What data do you collect?',
