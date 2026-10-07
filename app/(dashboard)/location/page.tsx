@@ -24,6 +24,29 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SUBSCRIPTION_TIERS, centsToDisplay } from '@/lib/subscription-tiers'
 import { BackgroundLocationCard } from '@/components/background-location-card'
 
+// High-accuracy GPS often times out on laptops/desktops and indoors. Try it
+// first, then fall back to a coarser (Wi-Fi/cell/IP) fix so sharing still works.
+function getPositionWithFallback(
+  onSuccess: PositionCallback,
+  onError: PositionErrorCallback
+) {
+  navigator.geolocation.getCurrentPosition(
+    onSuccess,
+    (err) => {
+      if (err.code === err.PERMISSION_DENIED) {
+        onError(err)
+        return
+      }
+      navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+        enableHighAccuracy: false,
+        timeout: 30000,
+        maximumAge: 5 * 60 * 1000,
+      })
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+  )
+}
+
 interface FamilyMemberLocation {
   memberId: string
   userId: string
@@ -283,11 +306,7 @@ export default function LocationPage() {
     }
 
     const poll = (force = false) =>
-      navigator.geolocation.getCurrentPosition((pos) => sendLocation(pos, force), () => {}, {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 5000,
-      })
+      getPositionWithFallback((pos) => sendLocation(pos, force), () => {})
 
     // Initial fix right away.
     poll(true)
@@ -352,7 +371,7 @@ export default function LocationPage() {
 
     toast.promise(
       new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
+        getPositionWithFallback(
           async (position) => {
             try {
               const res = await authFetch('/api/location', {
@@ -382,9 +401,12 @@ export default function LocationPage() {
             }
           },
           (error) => {
-            reject(new Error(error.message))
-          },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            reject(new Error(
+              error.code === error.PERMISSION_DENIED
+                ? 'Location permission is blocked. Allow location for this site in your browser or phone settings.'
+                : 'Could not get your location. Check that location services are on and try again.'
+            ))
+          }
         )
       }),
       {
