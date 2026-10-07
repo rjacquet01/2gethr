@@ -149,8 +149,28 @@ export default function PrivacyPage() {
             </p>
           </section>
 
+          <section className="space-y-4" id="sms">
+            <h2 className="text-xl font-semibold">11. Text Messaging (SMS)</h2>
+            <p>
+              If you choose to receive text messages, we use the mobile phone number you give us to send
+              notifications you asked for, such as event and task reminders, schedule changes and
+              family alerts. Text messages are optional: we only send them after you turn on SMS
+              notifications in Settings and provide your number, and you can turn them off there at any time.
+            </p>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>Message frequency varies based on your reminders and family activity.</li>
+              <li>Message and data rates may apply.</li>
+              <li>Reply STOP at any time to unsubscribe, or HELP for help.</li>
+              <li>
+                No mobile information will be shared with third parties or affiliates for
+                marketing or promotional purposes. Text messaging opt-in data and consent are not shared
+                with any third parties, except service providers that deliver the messages for us.
+              </li>
+            </ul>
+          </section>
+
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">11. Contact Us</h2>
+            <h2 className="text-xl font-semibold">12. Contact Us</h2>
             <p>
               If you have questions about this Privacy Policy or your data, please contact us at{' '}
               <a href="mailto:info@nexuscmm.com" className="text-primary hover:underline">

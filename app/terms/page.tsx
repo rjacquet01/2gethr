@@ -120,8 +120,31 @@ export default function TermsPage() {
             </p>
           </section>
 
+          <section className="space-y-4" id="sms">
+            <h2 className="text-xl font-semibold">10. Text Messaging (SMS) Terms</h2>
+            <p>
+              By turning on SMS notifications in Settings and providing your mobile number, you agree to
+              receive text messages from Togethr such as event and task reminders, schedule changes and
+              family alerts. Consent to receive text messages is not a condition of using the Service.
+            </p>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>Message frequency varies based on your reminders and family activity.</li>
+              <li>Message and data rates may apply, according to your mobile plan.</li>
+              <li>
+                Reply STOP at any time to cancel text messages. Reply HELP for help, or contact us at
+                info@nexuscmm.com.
+              </li>
+              <li>Carriers are not liable for delayed or undelivered messages.</li>
+              <li>
+                See our <a href="/privacy#sms" className="text-primary hover:underline">Privacy Policy</a> for
+                how we handle your phone number. We do not share mobile information with third parties
+                for marketing or promotional purposes.
+              </li>
+            </ul>
+          </section>
+
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">10. Contact Us</h2>
+            <h2 className="text-xl font-semibold">11. Contact Us</h2>
             <p>
               If you have questions about these Terms, please contact us at{' '}
               <a href="mailto:info@nexuscmm.com" className="text-primary hover:underline">
