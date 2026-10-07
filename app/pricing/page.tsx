@@ -53,7 +53,7 @@ export default function PricingPage() {
             Simple, transparent pricing
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Choose the plan that fits your family. New members get a 30-day free Premium trial.
+            Choose the plan that fits your family. New members get a 14-day free Premium trial.
           </p>
         </div>
 
@@ -169,7 +169,7 @@ export default function PricingPage() {
             <div>
               <h3 className="font-semibold mb-2">What happens after my trial ends?</h3>
               <p className="text-muted-foreground">
-                After your 30-day Premium trial, you can choose to subscribe or continue with our Free plan. No card is needed to start the trial, so there's nothing to cancel and you won't be charged unless you choose to subscribe.
+                After your 14-day Premium trial, you can choose to subscribe or continue with our Free plan. No card is needed to start the trial, so there's nothing to cancel and you won't be charged unless you choose to subscribe.
               </p>
             </div>
             <div>

@@ -181,20 +181,61 @@ export async function POST(request: NextRequest) {
       VALUES (${calendarId}, ${familyId}, 'Family Calendar', '#3B82F6', true, true, NOW(), NOW())
     `
 
-    // Create FREE subscription for the family
+    // Every new family starts on a 14-day free Premium trial, no card needed.
+    // When it ends the cron job (app/api/cron/reminders) drops the family to
+    // Free, and the owner can subscribe from the Subscription page. A user can
+    // only own one family, so this is one trial per owner. If the insert
+    // fails the family is still created on the Free plan.
     const subscriptionId = crypto.randomUUID()
-    await sql`
-      INSERT INTO subscriptions (
-        id, family_id, tier, status, 
-        current_period_start, current_period_end,
-        created_at, updated_at
-      )
-      VALUES (
-        ${subscriptionId}, ${familyId}, 'FREE', 'ACTIVE',
-        NOW(), ${new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()},
-        NOW(), NOW()
-      )
-    `
+    const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+    let trialStarted = false
+    try {
+      const priorTrial = await sql`
+        SELECT 1 FROM subscriptions s
+        JOIN families f ON f.id = s.family_id
+        WHERE f.owner_id = ${user.id} AND s.trial_ends_at IS NOT NULL
+        LIMIT 1
+      `
+      if (priorTrial.length === 0) {
+        await sql`
+          INSERT INTO subscriptions (
+            id, family_id, tier, status, trial_ends_at,
+            current_period_start, current_period_end,
+            created_at, updated_at
+          )
+          VALUES (
+            ${subscriptionId}, ${familyId}, 'PREMIUM_PLUS', 'TRIALING', ${trialEnd.toISOString()},
+            NOW(), ${trialEnd.toISOString()}, NOW(), NOW()
+          )
+        `
+        await sql`
+          INSERT INTO subscription_status_history (
+            id, subscription_id, old_status, new_status, source, notes, changed_at
+          ) VALUES (
+            gen_random_uuid(), ${subscriptionId}, 'NONE', 'TRIALING',
+            'SYSTEM', '14-day PREMIUM_PLUS trial started automatically at sign-up', NOW()
+          )
+        `
+        trialStarted = true
+      }
+    } catch (trialError) {
+      console.error("Auto-trial failed, falling back to Free plan:", trialError)
+    }
+
+    if (!trialStarted) {
+      await sql`
+        INSERT INTO subscriptions (
+          id, family_id, tier, status,
+          current_period_start, current_period_end,
+          created_at, updated_at
+        )
+        VALUES (
+          ${crypto.randomUUID()}, ${familyId}, 'FREE', 'ACTIVE',
+          NOW(), ${new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()},
+          NOW(), NOW()
+        )
+      `
+    }
 
     // Audit log
     await logAuditEvent(user.id, "CREATE", "family", familyId, {
@@ -214,7 +255,8 @@ export async function POST(request: NextRequest) {
         membershipId: memberId,
         calendarId,
       },
-      message: "Family created successfully",
+      trialStarted,
+      message: trialStarted ? "Family created. Your 14-day free trial has started." : "Family created successfully",
     })
   } catch (error) {
     if (error instanceof z.ZodError) {

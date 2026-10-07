@@ -337,7 +337,7 @@ export async function syncSubscription(
 export async function startFreeTrial(
   familyId: string,
   userId: string,
-  trialDays: number = 30
+  trialDays: number = 14
 ): Promise<SubscriptionInfo> {
   const trialEnd = new Date()
   trialEnd.setDate(trialEnd.getDate() + trialDays)

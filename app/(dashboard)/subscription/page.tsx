@@ -77,7 +77,7 @@ export default function SubscriptionPage() {
     setIsStartingTrial(false)
 
     if (result.success) {
-      toast.success('Trial started! Enjoy 30 days of premium features.')
+      toast.success('Trial started! Enjoy 14 days of premium features.')
     } else {
       toast.error(result.error || 'Failed to start trial')
     }
@@ -436,7 +436,7 @@ export default function SubscriptionPage() {
                       ) : (
                         <Sparkles className="h-4 w-4 mr-2" />
                       )}
-                      Start 30-Day Trial
+                      Start 14-Day Trial
                     </Button>
                     <Button
                       className="w-full"
