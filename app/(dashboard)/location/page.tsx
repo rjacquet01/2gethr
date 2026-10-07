@@ -22,6 +22,7 @@ import {
 import { Spinner } from '@/components/ui/spinner'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SUBSCRIPTION_TIERS, centsToDisplay } from '@/lib/subscription-tiers'
+import { BackgroundLocationCard } from '@/components/background-location-card'
 
 interface FamilyMemberLocation {
   memberId: string
@@ -979,6 +980,12 @@ export default function LocationPage() {
                 ))}
               </div>
             </div>
+
+            <BackgroundLocationCard
+              memberId={mySettings?.memberId}
+              familyId={mySettings?.familyId}
+              intervalSec={mySettings?.updateIntervalSec || 300}
+            />
 
             <div className="space-y-3">
               <Label>Update Frequency</Label>

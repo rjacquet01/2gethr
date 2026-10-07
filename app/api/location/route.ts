@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
-import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
+import { getUserFromRequest, getUserWithFamily, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
+import { verifyDeviceToken } from "@/lib/device-token"
 import { z } from "zod"
 import { sendSMS, SMS_TEMPLATES, isTwilioConfigured } from "@/lib/services/sms"
 import { sendEmail, EMAIL_TEMPLATES, isResendConfigured } from "@/lib/services/email"
@@ -138,7 +139,20 @@ export async function GET(request: NextRequest) {
 // Post location ping (from mobile app)
 export async function POST(request: NextRequest) {
   try {
-    const { user, error } = await getUserFromRequest(request)
+    // The native Android app's background service has no web session; it
+    // authenticates with a scoped device token instead (lib/device-token.ts).
+    const deviceTokenHeader = request.headers.get("x-device-token")
+    let deviceScope: { memberId: string; familyId: string } | null = null
+    let user: Awaited<ReturnType<typeof getUserFromRequest>>["user"]
+    let error: string | null
+    if (deviceTokenHeader) {
+      const info = await verifyDeviceToken(deviceTokenHeader)
+      user = info ? await getUserWithFamily(info.userId) : null
+      error = user ? null : "Invalid or revoked device token"
+      if (info && user) deviceScope = { memberId: info.memberId, familyId: info.familyId }
+    } else {
+      ;({ user, error } = await getUserFromRequest(request))
+    }
 
     if (!user) {
       return NextResponse.json(
@@ -149,6 +163,11 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const validatedData = locationPingSchema.parse(body)
+    if (deviceScope) {
+      // A device token can only ever report for the member it was issued to.
+      validatedData.memberId = deviceScope.memberId
+      validatedData.familyId = deviceScope.familyId
+    }
 
     // Build query to find the correct location settings
     // If memberId/familyId provided, use those; otherwise fall back to first match
