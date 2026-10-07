@@ -4,7 +4,8 @@
     "namespace": "android_app",
     "package_name": "com.togethrapp.mobile",
     "sha256_cert_fingerprints": [
-      "47:0C:74:1D:D3:87:28:27:AC:EE:19:76:D2:8F:9D:23:D6:E7:5C:0C:80:AA:EB:10:E7:C8:7A:33:60:60:0F:87"
+      "47:0C:74:1D:D3:87:28:27:AC:EE:19:76:D2:8F:9D:23:D6:E7:5C:0C:80:AA:EB:10:E7:C8:7A:33:60:60:0F:87",
+      "9A:24:D4:24:42:A6:8B:24:EA:4E:B0:7D:8A:0C:F0:83:47:6C:FD:E6:B5:A2:AB:9E:BE:85:93:77:B6:AD:4B:78"
     ]
   }
 }]
