@@ -8,6 +8,8 @@ import { useTask, updateTask } from '@/hooks/use-tasks'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CategoryPicker } from '@/components/category-picker'
+import { cleanCustomCategory } from '@/lib/categories'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -87,7 +89,7 @@ export default function EditTaskPage({ params }: { params: Promise<{ taskId: str
         assignedToChildId: assignedToChildId || null,
         dueDate: fullDueDate,
         priority: priority.toUpperCase(),
-        category: category.toUpperCase(),
+        category: cleanCustomCategory(category).toUpperCase() || 'GENERAL',
         requiresApproval,
         isRecurring,
         recurrenceRule: isRecurring ? recurrenceRule : null,
@@ -249,18 +251,22 @@ export default function EditTaskPage({ params }: { params: Promise<{ taskId: str
 
               <div className="space-y-2">
                 <Label>Category</Label>
-                <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="general">General</SelectItem>
-                    <SelectItem value="chore">Chore</SelectItem>
-                    <SelectItem value="homework">Homework</SelectItem>
-                    <SelectItem value="errand">Errand</SelectItem>
-                    <SelectItem value="appointment">Appointment</SelectItem>
-                  </SelectContent>
-                </Select>
+                <CategoryPicker
+                  value={category}
+                  onChange={setCategory}
+                  options={[
+                    { value: 'general', label: 'General' },
+                    { value: 'chore', label: 'Chore' },
+                    { value: 'chores', label: 'Chores' },
+                    { value: 'homework', label: 'Homework' },
+                    { value: 'health', label: 'Health' },
+                    { value: 'errand', label: 'Errand' },
+                    { value: 'errands', label: 'Errands' },
+                    { value: 'self-care', label: 'Self Care' },
+                    { value: 'appointment', label: 'Appointment' },
+                    { value: 'other', label: 'Other' },
+                  ]}
+                />
               </div>
             </div>
 

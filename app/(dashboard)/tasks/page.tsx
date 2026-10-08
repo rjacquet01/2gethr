@@ -1,5 +1,6 @@
 'use client'
 
+import { formatCategory } from '@/lib/categories'
 import { useState } from 'react'
 import { useFamilies } from '@/hooks/use-family'
 import { useTasks, updateTask } from '@/hooks/use-tasks'
@@ -328,7 +329,7 @@ export default function TasksPage() {
                             </span>
                           )}
                           {task.category && (
-                            <Badge variant="outline" className="text-xs capitalize">{task.category}</Badge>
+                            <Badge variant="outline" className="text-xs">{formatCategory(task.category)}</Badge>
                           )}
                         </div>
                       </div>

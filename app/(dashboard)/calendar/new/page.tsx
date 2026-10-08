@@ -10,6 +10,8 @@ import { toast } from 'sonner'
 import { localDateTimeToISO, localStartOfDayToISO, localEndOfDayToISO } from '@/lib/datetime'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CategoryPicker } from '@/components/category-picker'
+import { cleanCustomCategory } from '@/lib/categories'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -303,7 +305,7 @@ function NewEventForm() {
           endTime,
           allDay,
           location: formData.location.trim() || null,
-          category: formData.category,
+          category: cleanCustomCategory(formData.category) || 'GENERAL',
           visibility: formData.visibility,
           reminderMinutes: selectedReminders,
           notifyChannels: notifyChannels.length > 0 ? notifyChannels : undefined,
@@ -546,24 +548,11 @@ function NewEventForm() {
                 <Tag className="h-4 w-4 inline mr-1" />
                 Category
               </Label>
-              <Select
+              <CategoryPicker
                 value={formData.category}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {EVENT_CATEGORIES.map((cat) => (
-                    <SelectItem key={cat.value} value={cat.value}>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${cat.color}`} />
-                        {cat.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
+                options={EVENT_CATEGORIES}
+              />
             </div>
 
             {/* Visibility */}

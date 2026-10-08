@@ -1,5 +1,6 @@
 'use client'
 
+import { customCategoryColor, formatCategory } from '@/lib/categories'
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -34,11 +35,13 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 const CATEGORIES = [
+  { value: 'GENERAL', label: 'General', color: 'bg-slate-500' },
   { value: 'SCHOOL', label: 'School', color: 'bg-blue-500' },
   { value: 'SPORTS', label: 'Sports', color: 'bg-green-500' },
   { value: 'MEDICAL', label: 'Medical', color: 'bg-red-500' },
   { value: 'SOCIAL', label: 'Social', color: 'bg-purple-500' },
   { value: 'WORK', label: 'Work', color: 'bg-orange-500' },
+  { value: 'TRAVEL', label: 'Travel', color: 'bg-cyan-500' },
   { value: 'OTHER', label: 'Other', color: 'bg-gray-500' },
 ]
 
@@ -64,7 +67,7 @@ export default function EventDetailPage() {
   }
   
   const getCategoryInfo = (category: string) => {
-    return CATEGORIES.find(c => c.value === category) || { value: category, label: category, color: 'bg-gray-500' }
+    return CATEGORIES.find(c => c.value === category) || { value: category, label: formatCategory(category), color: customCategoryColor(category) }
   }
 
   if (isLoading) {

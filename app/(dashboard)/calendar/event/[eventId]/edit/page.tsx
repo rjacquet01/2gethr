@@ -8,6 +8,8 @@ import { authFetch } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { CategoryPicker } from '@/components/category-picker'
+import { cleanCustomCategory } from '@/lib/categories'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
@@ -26,11 +28,13 @@ import { toast } from 'sonner'
 import { localDateTimeToISO, localStartOfDayToISO, localEndOfDayToISO } from '@/lib/datetime'
 
 const CATEGORIES = [
+  { value: 'GENERAL', label: 'General' },
   { value: 'SCHOOL', label: 'School' },
   { value: 'SPORTS', label: 'Sports' },
   { value: 'MEDICAL', label: 'Medical' },
   { value: 'SOCIAL', label: 'Social' },
   { value: 'WORK', label: 'Work' },
+  { value: 'TRAVEL', label: 'Travel' },
   { value: 'OTHER', label: 'Other' },
 ]
 
@@ -117,6 +121,7 @@ export default function EditEventPage() {
           endTime,
           isAllDay: formData.allDay,
           visibility: formData.visibility,
+          category: cleanCustomCategory(formData.category) || 'OTHER',
         }),
       })
       
@@ -286,21 +291,11 @@ export default function EditEventPage() {
             {/* Category */}
             <div className="space-y-2">
               <Label>Category</Label>
-              <Select
+              <CategoryPicker
                 value={formData.category}
-                onValueChange={(value) => setFormData({ ...formData, category: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((cat) => (
-                    <SelectItem key={cat.value} value={cat.value}>
-                      {cat.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(value) => setFormData({ ...formData, category: value })}
+                options={CATEGORIES}
+              />
             </div>
 
             {/* Visibility */}

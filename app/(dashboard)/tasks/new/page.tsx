@@ -7,6 +7,8 @@ import { createTask } from '@/hooks/use-tasks'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CategoryPicker } from '@/components/category-picker'
+import { cleanCustomCategory } from '@/lib/categories'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -87,7 +89,7 @@ export default function NewTaskPage() {
         reminderAt: fullReminderAt || undefined,
         priority,
         requiresApproval,
-        category: category === 'general' ? undefined : category,
+        category: category === 'general' || !cleanCustomCategory(category) ? undefined : cleanCustomCategory(category),
         isRecurring,
         recurrenceRule: isRecurring ? recurrenceRule : undefined,
         notifyChannels: notifyChannels.length > 0 ? notifyChannels : undefined,
@@ -282,20 +284,19 @@ export default function NewTaskPage() {
               </div>
               <div className="space-y-2">
                 <Label>Category</Label>
-                <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="general">General</SelectItem>
-                    <SelectItem value="chores">Chores</SelectItem>
-                    <SelectItem value="homework">Homework</SelectItem>
-                    <SelectItem value="health">Health</SelectItem>
-                    <SelectItem value="errands">Errands</SelectItem>
-                    <SelectItem value="self-care">Self Care</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
+                <CategoryPicker
+                  value={category}
+                  onChange={setCategory}
+                  options={[
+                    { value: 'general', label: 'General' },
+                    { value: 'chores', label: 'Chores' },
+                    { value: 'homework', label: 'Homework' },
+                    { value: 'health', label: 'Health' },
+                    { value: 'errands', label: 'Errands' },
+                    { value: 'self-care', label: 'Self Care' },
+                    { value: 'other', label: 'Other' },
+                  ]}
+                />
               </div>
             </div>
 

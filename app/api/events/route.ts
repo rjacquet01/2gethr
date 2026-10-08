@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { ensureEventCategoryColumn } from "@/lib/event-category-column"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { notifyFamilyAboutEvent, type NotificationChannel } from "@/lib/notifications" // Event notifications
@@ -21,7 +22,7 @@ const createEventSchema = z.object({
   allDay: z.boolean().default(false),
   isAllDay: z.boolean().default(false),
   visibility: z.enum(["FAMILY", "PRIVATE", "SELECTED_MEMBERS"]).default("FAMILY"),
-  category: z.string().optional(),
+  category: z.string().max(40).optional().nullable(),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   reminderMinutes: z.array(z.number().int().min(0)).optional(),
   notifyChannels: z.array(z.enum(["in_app", "push", "email", "sms"])).optional(),
@@ -50,6 +51,7 @@ const createEventSchema = z.object({
 
 // Get events
 export async function GET(request: NextRequest) {
+  await ensureEventCategoryColumn()
   try {
     const { user, error } = await getUserFromRequest(request)
 
@@ -104,7 +106,7 @@ export async function GET(request: NextRequest) {
         SELECT 
           e.id, e.calendar_id, e.title, e.description, e.location,
           e.start_time, e.end_time, e.is_all_day, e.status, e.visibility,
-          e.color, e.reminder_minutes, e.is_recurring, e.created_by_id,
+          e.color, e.category, e.reminder_minutes, e.is_recurring, e.created_by_id,
           e.saved_place_id, e.recurrence_rule_id, e.created_at,
           c.name as calendar_name, c.color as calendar_color,
           u.first_name as creator_first_name, u.last_name as creator_last_name,
@@ -128,7 +130,7 @@ export async function GET(request: NextRequest) {
           SELECT 
             e.id, e.calendar_id, e.title, e.description, e.location,
             e.start_time, e.end_time, e.is_all_day, e.status, e.visibility,
-            e.color, e.reminder_minutes, e.is_recurring, e.created_by_id,
+            e.color, e.category, e.reminder_minutes, e.is_recurring, e.created_by_id,
             e.saved_place_id, e.recurrence_rule_id, e.created_at,
             c.name as calendar_name, c.color as calendar_color,
             u.first_name as creator_first_name, u.last_name as creator_last_name,
@@ -148,7 +150,7 @@ export async function GET(request: NextRequest) {
           SELECT 
             e.id, e.calendar_id, e.title, e.description, e.location,
             e.start_time, e.end_time, e.is_all_day, e.status, e.visibility,
-            e.color, e.reminder_minutes, e.is_recurring, e.created_by_id,
+            e.color, e.category, e.reminder_minutes, e.is_recurring, e.created_by_id,
             e.saved_place_id, e.recurrence_rule_id, e.created_at,
             c.name as calendar_name, c.color as calendar_color,
             u.first_name as creator_first_name, u.last_name as creator_last_name,
@@ -166,7 +168,7 @@ export async function GET(request: NextRequest) {
           SELECT 
             e.id, e.calendar_id, e.title, e.description, e.location,
             e.start_time, e.end_time, e.is_all_day, e.status, e.visibility,
-            e.color, e.reminder_minutes, e.is_recurring, e.created_by_id,
+            e.color, e.category, e.reminder_minutes, e.is_recurring, e.created_by_id,
             e.saved_place_id, e.recurrence_rule_id, e.created_at,
             c.name as calendar_name, c.color as calendar_color,
             u.first_name as creator_first_name, u.last_name as creator_last_name,
@@ -186,7 +188,7 @@ export async function GET(request: NextRequest) {
           SELECT 
             e.id, e.calendar_id, e.title, e.description, e.location,
             e.start_time, e.end_time, e.is_all_day, e.status, e.visibility,
-            e.color, e.reminder_minutes, e.is_recurring, e.created_by_id,
+            e.color, e.category, e.reminder_minutes, e.is_recurring, e.created_by_id,
             e.saved_place_id, e.recurrence_rule_id, e.created_at,
             c.name as calendar_name, c.color as calendar_color,
             u.first_name as creator_first_name, u.last_name as creator_last_name,
@@ -206,7 +208,7 @@ export async function GET(request: NextRequest) {
         SELECT 
           e.id, e.calendar_id, e.title, e.description, e.location,
           e.start_time, e.end_time, e.is_all_day, e.status, e.visibility,
-          e.color, e.reminder_minutes, e.is_recurring, e.created_by_id,
+          e.color, e.category, e.reminder_minutes, e.is_recurring, e.created_by_id,
           e.saved_place_id, e.recurrence_rule_id, e.created_at,
           c.name as calendar_name, c.color as calendar_color, c.family_id,
           u.first_name as creator_first_name, u.last_name as creator_last_name,
@@ -293,6 +295,7 @@ export async function GET(request: NextRequest) {
         status: e.status,
         visibility: e.visibility,
         color: e.color || e.calendar_color,
+        category: e.category || null,
         reminderMinutes: e.reminder_minutes,
         isRecurring: e.is_recurring,
         createdById: e.created_by_id,
@@ -321,6 +324,7 @@ export async function GET(request: NextRequest) {
 
 // Create event
 export async function POST(request: NextRequest) {
+  await ensureEventCategoryColumn()
   try {
   const { user, error } = await getUserFromRequest(request)
 
@@ -554,7 +558,7 @@ export async function POST(request: NextRequest) {
       INSERT INTO events (
         id, calendar_id, created_by_id, title, description, location,
         saved_place_id, start_time, end_time, is_all_day, status, visibility,
-        color, reminder_minutes, notify_channels, is_recurring, recurrence_rule_id,
+        color, category, reminder_minutes, notify_channels, is_recurring, recurrence_rule_id,
         created_at, updated_at
       )
   VALUES (
@@ -571,6 +575,7 @@ export async function POST(request: NextRequest) {
   ${status},
         ${validatedData.visibility},
         ${validatedData.color || null},
+        ${validatedData.category ? validatedData.category.replace(/\s+/g, ' ').trim().slice(0, 30) || null : null},
         ${validatedData.reminderMinutes || [15]},
         ${validatedData.notifyChannels && validatedData.notifyChannels.length > 0 ? validatedData.notifyChannels : null},
         ${!!recurrenceInput},
@@ -612,13 +617,13 @@ export async function POST(request: NextRequest) {
         INSERT INTO events (
           id, calendar_id, created_by_id, title, description, location,
           saved_place_id, start_time, end_time, is_all_day, status, visibility,
-          color, reminder_minutes, notify_channels, is_recurring, recurrence_rule_id,
+          color, category, reminder_minutes, notify_channels, is_recurring, recurrence_rule_id,
           created_at, updated_at
         )
         SELECT
           gen_random_uuid(), e0.calendar_id, e0.created_by_id, e0.title, e0.description, e0.location,
           e0.saved_place_id, t.s, t.e, e0.is_all_day, e0.status, e0.visibility,
-          e0.color, e0.reminder_minutes, e0.notify_channels, e0.is_recurring, e0.recurrence_rule_id,
+          e0.color, e0.category, e0.reminder_minutes, e0.notify_channels, e0.is_recurring, e0.recurrence_rule_id,
           NOW(), NOW()
         FROM events e0
         CROSS JOIN unnest(${restStarts}::timestamptz[], ${restEnds}::timestamptz[]) AS t(s, e)

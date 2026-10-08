@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useFamilies } from '@/hooks/use-family'
 import { useEvents } from '@/hooks/use-events'
+import { customCategoryColor, formatCategory } from '@/lib/categories'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -90,6 +91,20 @@ export default function CalendarPage() {
     category: selectedCategory !== 'ALL' ? selectedCategory : undefined,
   })
 
+  // Filter choices: the built-in categories plus any custom ones in use.
+  const categoryOptions = useMemo(() => {
+    const known = new Set(CATEGORIES.map(c => c.value.toLowerCase()))
+    const custom = new Map<string, string>()
+    for (const e of events || []) {
+      const c = (e.category || '').trim()
+      if (c && !known.has(c.toLowerCase()) && !custom.has(c.toLowerCase())) custom.set(c.toLowerCase(), c)
+    }
+    return [
+      ...CATEGORIES,
+      ...[...custom.values()].map(c => ({ value: c, label: formatCategory(c), color: customCategoryColor(c) })),
+    ]
+  }, [events])
+
   const calendarDays = useMemo(() => {
     if (viewMode === 'month') {
       return eachDayOfInterval({
@@ -103,13 +118,16 @@ export default function CalendarPage() {
   const getEventsForDay = (day: Date) => {
     return events.filter(event => {
       const eventDate = parseISO(event.startTime)
-      return isSameDay(eventDate, day) && (event.status === 'APPROVED' || event.status === 'ACTIVE')
+      const matchesCategory =
+        selectedCategory === 'ALL' ||
+        (event.category || 'OTHER').toLowerCase() === selectedCategory.toLowerCase()
+      return matchesCategory && isSameDay(eventDate, day) && (event.status === 'APPROVED' || event.status === 'ACTIVE')
     })
   }
 
   const getCategoryColor = (category: string) => {
     const cat = CATEGORIES.find(c => c.value === category)
-    return cat?.color || 'bg-gray-500'
+    return cat?.color || customCategoryColor(category)
   }
 
   const navigatePrevious = () => {
@@ -192,7 +210,7 @@ export default function CalendarPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {CATEGORIES.map(cat => (
+              {categoryOptions.map(cat => (
                 <SelectItem key={cat.value} value={cat.value}>
                   <div className="flex items-center gap-2">
                     {cat.color && <div className={`w-3 h-3 rounded-full ${cat.color}`} />}

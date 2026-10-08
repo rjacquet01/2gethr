@@ -1,5 +1,6 @@
 'use client'
 
+import { formatCategory } from '@/lib/categories'
 import { use, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/use-auth'
@@ -272,7 +273,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                 <ListTodo className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm">
                   <span className="text-muted-foreground">Category:</span>{' '}
-                  <span className="font-medium capitalize">{task.category}</span>
+                  <span className="font-medium">{formatCategory(task.category)}</span>
                 </span>
               </div>
             )}

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { ensureEventCategoryColumn } from "@/lib/event-category-column"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
@@ -13,6 +14,7 @@ const updateEventSchema = z.object({
   isAllDay: z.boolean().optional(),
   visibility: z.enum(["FAMILY", "PRIVATE", "SELECTED_MEMBERS"]).optional(),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional().nullable(),
+  category: z.string().max(40).optional().nullable(),
   reminderMinutes: z.array(z.number().int().min(0)).optional(),
   status: z.enum(["APPROVED", "CANCELLED"]).optional(),
 })
@@ -23,6 +25,7 @@ export async function GET(
   { params }: { params: Promise<{ eventId: string }> }
 ) {
   try {
+    await ensureEventCategoryColumn()
     const { eventId } = await params
     const { user, error } = await getUserFromRequest(request)
 
@@ -108,7 +111,7 @@ export async function GET(
         status: event.status,
         visibility: event.visibility,
         color: event.color || event.calendar_color,
-        category: event.category || 'OTHER', // add category for display
+        category: event.category || 'OTHER',
         reminderMinutes: event.reminder_minutes,
         isRecurring: event.is_recurring,
         recurrenceId: event.recurrence_rule_id, // alias for frontend compatibility
@@ -166,6 +169,7 @@ export async function PATCH(
   { params }: { params: Promise<{ eventId: string }> }
 ) {
   try {
+    await ensureEventCategoryColumn()
     const { eventId } = await params
     const { user, error } = await getUserFromRequest(request)
 
@@ -219,6 +223,7 @@ export async function PATCH(
         is_all_day = COALESCE(${validatedData.isAllDay}, is_all_day),
         visibility = COALESCE(${validatedData.visibility}, visibility),
         color = CASE WHEN ${validatedData.color !== undefined} THEN ${validatedData.color} ELSE color END,
+        category = CASE WHEN ${validatedData.category !== undefined} THEN ${validatedData.category ? validatedData.category.replace(/\s+/g, ' ').trim().slice(0, 30) || null : null} ELSE category END,
         reminder_minutes = COALESCE(${validatedData.reminderMinutes}, reminder_minutes),
         status = COALESCE(${validatedData.status}, status),
         updated_at = NOW()
