@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { sendPushToUser } from "@/lib/services/push"
 import { sendEmail, isResendConfigured } from "@/lib/services/email"
 import { sendSMS, isTwilioConfigured } from "@/lib/services/sms"
+import { isQuietNow } from "@/lib/quiet-hours"
 
 // Delivers standalone reminders (lib: see app/api/reminders) - the
 // "just remind me of a thing" feature that isn't tied to a task or a
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
     const due = await sql`
       SELECT r.id, r.title, r.description, r.remind_at, r.user_id,
              r.is_recurring, r.recurrence_rule, r.notify_channels,
-             u.email, u.phone
+             u.email, u.phone, u.timezone
       FROM reminders r
       JOIN users u ON u.id = r.user_id
       WHERE r.status = 'PENDING'
@@ -57,13 +58,8 @@ export async function GET(request: NextRequest) {
 
       // Respect quiet hours the same way the event-reminder cron does,
       // rather than waking someone up for a personal reminder at 3am.
-      if (userSettings.quiet_hours_start && userSettings.quiet_hours_end) {
-        const currentHour = new Date().getHours()
-        const startHour = parseInt(userSettings.quiet_hours_start.split(':')[0])
-        const endHour = parseInt(userSettings.quiet_hours_end.split(':')[0])
-        if (startHour <= currentHour && currentHour < endHour) {
-          continue
-        }
+      if (isQuietNow(userSettings.quiet_hours_start, userSettings.quiet_hours_end, reminder.timezone)) {
+        continue
       }
 
       // In-app notification row, always written (matches createNotification's

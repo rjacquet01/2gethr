@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { sendPushToUser } from "@/lib/services/push"
 import { sendEmail, isResendConfigured } from "@/lib/services/email"
 import { sendSMS, isTwilioConfigured } from "@/lib/services/sms"
+import { isQuietNow } from "@/lib/quiet-hours"
 import { tierHasFeature } from "@/lib/subscription-tiers"
 
 // This endpoint processes event reminders, refreshes the digest recipients
@@ -124,15 +125,10 @@ export async function GET(request: NextRequest) {
 
         const userSettings = settings[0] || { push_enabled: true, email_enabled: true, sms_enabled: false }
 
-        // Check quiet hours
-        if (userSettings.quiet_hours_start && userSettings.quiet_hours_end) {
-          const currentHour = now.getHours()
-          const startHour = parseInt(userSettings.quiet_hours_start.split(':')[0])
-          const endHour = parseInt(userSettings.quiet_hours_end.split(':')[0])
-
-          if (startHour <= currentHour && currentHour < endHour) {
-            continue // Skip during quiet hours
-          }
+        // Check quiet hours (in the user's own timezone)
+        const tzRow = await sql`SELECT timezone FROM users WHERE id = ${participant.id}`
+        if (isQuietNow(userSettings.quiet_hours_start, userSettings.quiet_hours_end, tzRow[0]?.timezone)) {
+          continue // Skip during quiet hours
         }
 
         // Create in-app notification
