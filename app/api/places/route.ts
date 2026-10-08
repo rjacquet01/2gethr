@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { ensurePlaceNotifyChannelsColumn } from "@/lib/place-schema"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
@@ -24,6 +25,7 @@ const createPlaceSchema = z.object({
 
 // Get saved places for a family
 export async function GET(request: NextRequest) {
+  await ensurePlaceNotifyChannelsColumn()
   try {
     const { user, error } = await getUserFromRequest(request)
 
@@ -92,6 +94,7 @@ export async function GET(request: NextRequest) {
 
 // Create a new saved place
 export async function POST(request: NextRequest) {
+  await ensurePlaceNotifyChannelsColumn()
   try {
     const { user, error } = await getUserFromRequest(request)
 

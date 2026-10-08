@@ -170,7 +170,10 @@ export default function EventDetailPage() {
       <Card>
         <CardHeader>
           <div className="flex items-start gap-4">
-            <div className={cn('w-2 rounded-full self-stretch min-h-16', categoryInfo.color)} />
+            <div
+              className={cn('w-2 rounded-full self-stretch min-h-16', (event as unknown as { customColor?: string | null }).customColor ? '' : categoryInfo.color)}
+              style={(event as unknown as { customColor?: string | null }).customColor ? { backgroundColor: (event as unknown as { customColor?: string | null }).customColor as string } : undefined}
+            />
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
                 <Badge variant="secondary">{categoryInfo.label}</Badge>

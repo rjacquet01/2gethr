@@ -48,6 +48,7 @@ import { useFavorites } from '@/components/favorites-dropdown'
 import useSWR from 'swr'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
+import { ColorPicker, IconPicker, getPlaceIcon } from '@/components/customization'
 
 interface SavedPlace {
   id: string
@@ -82,24 +83,6 @@ const NOTIFY_CHANNEL_OPTIONS: { value: NotifyChannel; label: string; icon: typeo
 ]
 
 const DEFAULT_NOTIFY_CHANNELS: NotifyChannel[] = ['in_app', 'push', 'email']
-
-const placeIcons: { [key: string]: typeof MapPin } = {
-  home: Home,
-  work: Building,
-  school: GraduationCap,
-  shopping: ShoppingBag,
-  medical: Heart,
-  default: MapPin,
-}
-
-const defaultColors = [
-  '#3B82F6', // blue
-  '#10B981', // green
-  '#F59E0B', // amber
-  '#EF4444', // red
-  '#8B5CF6', // purple
-  '#EC4899', // pink
-]
 
 const fetcher = async (url: string) => {
   const res = await authFetch(url, { credentials: 'include' })
@@ -481,38 +464,18 @@ export default function PlacesPage() {
               </div>
               <div className="space-y-2">
                 <Label>Icon</Label>
-                <div className="flex gap-2 flex-wrap">
-                  {Object.entries(placeIcons).map(([key, Icon]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setNewPlace({ ...newPlace, icon: key })}
-                      className={`p-2 rounded-lg border ${
-                        newPlace.icon === key
-                          ? 'border-primary bg-primary/10'
-                          : 'border-border hover:bg-muted'
-                      }`}
-                    >
-                      <Icon className="w-5 h-5" />
-                    </button>
-                  ))}
-                </div>
+                <IconPicker
+                  value={newPlace.icon}
+                  color={newPlace.color}
+                  onChange={(key) => setNewPlace({ ...newPlace, icon: key })}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Color</Label>
-                <div className="flex gap-2">
-                  {defaultColors.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => setNewPlace({ ...newPlace, color })}
-                      className={`w-8 h-8 rounded-full border-2 ${
-                        newPlace.color === color ? 'border-foreground' : 'border-transparent'
-                      }`}
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
-                </div>
+                <ColorPicker
+                  value={newPlace.color}
+                  onChange={(color) => setNewPlace({ ...newPlace, color })}
+                />
               </div>
               {access.hasPremium && (
                 <>
@@ -685,38 +648,18 @@ export default function PlacesPage() {
               </div>
               <div className="space-y-2">
                 <Label>Icon</Label>
-                <div className="flex gap-2 flex-wrap">
-                  {Object.entries(placeIcons).map(([key, Icon]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setEditPlace({ ...editPlace, icon: key })}
-                      className={`p-2 rounded-lg border ${
-                        editPlace.icon === key
-                          ? 'border-primary bg-primary/10'
-                          : 'border-border hover:bg-muted'
-                      }`}
-                    >
-                      <Icon className="w-5 h-5" />
-                    </button>
-                  ))}
-                </div>
+                <IconPicker
+                  value={editPlace.icon}
+                  color={editPlace.color}
+                  onChange={(key) => setEditPlace({ ...editPlace, icon: key })}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Color</Label>
-                <div className="flex gap-2">
-                  {defaultColors.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => setEditPlace({ ...editPlace, color })}
-                      className={`w-8 h-8 rounded-full border-2 ${
-                        editPlace.color === color ? 'border-foreground' : 'border-transparent'
-                      }`}
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
-                </div>
+                <ColorPicker
+                  value={editPlace.color}
+                  onChange={(color) => setEditPlace({ ...editPlace, color })}
+                />
               </div>
               {access.hasPremium && (
                 <>
@@ -871,7 +814,7 @@ export default function PlacesPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {places?.map((place) => {
-            const IconComponent = placeIcons[place.icon || 'default'] || MapPin
+            const IconComponent = getPlaceIcon(place.icon)
             return (
               <Card key={place.id} className="overflow-hidden">
                 <div

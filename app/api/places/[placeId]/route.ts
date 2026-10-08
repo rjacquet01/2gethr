@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { ensurePlaceNotifyChannelsColumn } from "@/lib/place-schema"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
@@ -23,6 +24,7 @@ export async function GET(
   { params }: { params: Promise<{ placeId: string }> }
 ) {
   try {
+    await ensurePlaceNotifyChannelsColumn()
     const { placeId } = await params
     const { user, error } = await getUserFromRequest(request)
 
@@ -83,6 +85,7 @@ export async function PATCH(
   { params }: { params: Promise<{ placeId: string }> }
 ) {
   try {
+    await ensurePlaceNotifyChannelsColumn()
     const { placeId } = await params
     const { user, error } = await getUserFromRequest(request)
 

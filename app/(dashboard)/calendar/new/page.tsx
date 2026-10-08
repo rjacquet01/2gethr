@@ -11,6 +11,7 @@ import { localDateTimeToISO, localStartOfDayToISO, localEndOfDayToISO } from '@/
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CategoryPicker } from '@/components/category-picker'
+import { ColorPicker } from '@/components/customization'
 import { cleanCustomCategory } from '@/lib/categories'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -122,6 +123,7 @@ function NewEventForm() {
     endTime: format(addHours(initialDate, 1), 'HH:mm'),
     location: '',
     category: 'GENERAL',
+    color: '',
     visibility: 'FAMILY',
     familyId: '',
   })
@@ -306,6 +308,7 @@ function NewEventForm() {
           allDay,
           location: formData.location.trim() || null,
           category: cleanCustomCategory(formData.category) || 'GENERAL',
+          color: formData.color || undefined,
           visibility: formData.visibility,
           reminderMinutes: selectedReminders,
           notifyChannels: notifyChannels.length > 0 ? notifyChannels : undefined,
@@ -552,6 +555,20 @@ function NewEventForm() {
                 value={formData.category}
                 onChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
                 options={EVENT_CATEGORIES}
+              />
+            </div>
+
+            {/* Event color */}
+            <div className="space-y-2">
+              <Label>Event color</Label>
+              <p className="text-xs text-muted-foreground">
+                Optional. Pick a color to make this event stand out on the calendar.
+              </p>
+              <ColorPicker
+                value={formData.color}
+                onChange={(color) => setFormData(prev => ({ ...prev, color }))}
+                onClear={() => setFormData(prev => ({ ...prev, color: '' }))}
+                clearLabel="Category color"
               />
             </div>
 

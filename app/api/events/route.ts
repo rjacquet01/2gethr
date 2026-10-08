@@ -296,6 +296,7 @@ export async function GET(request: NextRequest) {
         visibility: e.visibility,
         color: e.color || e.calendar_color,
         category: e.category || null,
+        customColor: e.color || null,
         reminderMinutes: e.reminder_minutes,
         isRecurring: e.is_recurring,
         createdById: e.created_by_id,

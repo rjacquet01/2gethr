@@ -130,6 +130,16 @@ export default function CalendarPage() {
     return cat?.color || customCategoryColor(category)
   }
 
+  // A color picked on the event itself wins over its category color.
+  const customColorOf = (event: { customColor?: string | null }) =>
+    event.customColor && /^#[0-9A-Fa-f]{6}$/.test(event.customColor) ? event.customColor : null
+  const eventBg = (event: { category: string; customColor?: string | null }) =>
+    customColorOf(event) ? '' : getCategoryColor(event.category)
+  const eventStyle = (event: { customColor?: string | null }) => {
+    const c = customColorOf(event)
+    return c ? { backgroundColor: c } : undefined
+  }
+
   const navigatePrevious = () => {
     if (viewMode === 'month') {
       setCurrentDate(subMonths(currentDate, 1))
@@ -283,8 +293,9 @@ export default function CalendarPage() {
                                   key={event.id}
                                   className={cn(
                                     'w-2 h-2 rounded-full',
-                                    getCategoryColor(event.category)
+                                    eventBg(event)
                                   )}
+                                  style={eventStyle(event)}
                                 />
                               ))}
                             </div>
@@ -303,8 +314,9 @@ export default function CalendarPage() {
                             key={event.id}
                             className={cn(
                               'text-xs px-1.5 py-0.5 rounded truncate text-white',
-                              getCategoryColor(event.category)
+                              eventBg(event)
                             )}
+                            style={eventStyle(event)}
                           >
                             {event.title}
                           </div>
@@ -350,7 +362,7 @@ export default function CalendarPage() {
                       className="block p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
                     >
                       <div className="flex items-start gap-3">
-                        <div className={cn('w-1 h-full min-h-12 rounded-full', getCategoryColor(event.category))} />
+                        <div className={cn('w-1 h-full min-h-12 rounded-full', eventBg(event))} style={eventStyle(event)} />
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-foreground">{event.title}</p>
                           {!event.allDay && (
@@ -423,7 +435,7 @@ export default function CalendarPage() {
                     className="block p-4 rounded-xl border border-border active:bg-muted/50 transition-colors"
                   >
                     <div className="flex items-start gap-3">
-                      <div className={cn('w-1.5 self-stretch rounded-full', getCategoryColor(event.category))} />
+                      <div className={cn('w-1.5 self-stretch rounded-full', eventBg(event))} style={eventStyle(event)} />
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-foreground text-base">{event.title}</p>
                         {!event.allDay && (

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { CategoryPicker } from '@/components/category-picker'
+import { ColorPicker } from '@/components/customization'
 import { cleanCustomCategory } from '@/lib/categories'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -56,6 +57,7 @@ export default function EditEventPage() {
     endTime: '',
     allDay: false,
     category: 'OTHER',
+    color: '',
     visibility: 'FAMILY',
     isRecurring: false,
     recurrenceRule: 'weekly',
@@ -77,6 +79,7 @@ export default function EditEventPage() {
         endTime: event.allDay ? '' : format(endDate, 'HH:mm'),
         allDay: event.allDay || false,
         category: event.category || 'OTHER',
+        color: (event as unknown as { customColor?: string | null }).customColor || '',
         visibility: event.visibility || 'FAMILY',
         isRecurring: event.isRecurring || false,
         recurrenceRule: event.recurrence?.frequency?.toLowerCase() || 'weekly',
@@ -122,6 +125,7 @@ export default function EditEventPage() {
           isAllDay: formData.allDay,
           visibility: formData.visibility,
           category: cleanCustomCategory(formData.category) || 'OTHER',
+          color: formData.color || null,
         }),
       })
       
@@ -295,6 +299,20 @@ export default function EditEventPage() {
                 value={formData.category}
                 onChange={(value) => setFormData({ ...formData, category: value })}
                 options={CATEGORIES}
+              />
+            </div>
+
+            {/* Event color */}
+            <div className="space-y-2">
+              <Label>Event color</Label>
+              <p className="text-xs text-muted-foreground">
+                Optional. Pick a color to make this event stand out on the calendar.
+              </p>
+              <ColorPicker
+                value={formData.color}
+                onChange={(color) => setFormData({ ...formData, color })}
+                onClear={() => setFormData({ ...formData, color: '' })}
+                clearLabel="Category color"
               />
             </div>
 

@@ -111,6 +111,7 @@ export async function GET(
         status: event.status,
         visibility: event.visibility,
         color: event.color || event.calendar_color,
+        customColor: event.color || null,
         category: event.category || 'OTHER',
         reminderMinutes: event.reminder_minutes,
         isRecurring: event.is_recurring,

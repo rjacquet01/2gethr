@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { ensurePlaceNotifyChannelsColumn } from "@/lib/place-schema"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, getUserWithFamily, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { verifyDeviceToken } from "@/lib/device-token"
@@ -315,6 +316,7 @@ async function checkGeofences(
   prevPing?: { latitude: number; longitude: number; ageSec: number } | null
 ): Promise<number | null> {
   // Get all geofence-enabled places for this family
+  await ensurePlaceNotifyChannelsColumn()
   const places = await sql`
     SELECT id, name, latitude, longitude, radius, alert_on_arrival, alert_on_departure, notify_channels
     FROM saved_places
