@@ -89,7 +89,7 @@ export async function sendEmail(payload: EmailPayload): Promise<EmailResult> {
  * (new signups, support tickets, cancellations, tier changes) — distinct
  * from any user-facing email, which always goes to that user's own address.
  */
-export const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'rjacquet01@gmail.com'
+export const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@mytogethr.com'
 
 /**
  * Send an operational alert to the admin address. Failures are logged but
