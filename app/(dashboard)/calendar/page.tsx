@@ -59,6 +59,8 @@ const CATEGORIES = [
   { value: 'MEDICAL', label: 'Medical', color: 'bg-red-500' },
   { value: 'SOCIAL', label: 'Social', color: 'bg-purple-500' },
   { value: 'WORK', label: 'Work', color: 'bg-orange-500' },
+  { value: 'TRAVEL', label: 'Travel', color: 'bg-cyan-500' },
+  { value: 'GENERAL', label: 'General', color: 'bg-slate-500' },
   { value: 'OTHER', label: 'Other', color: 'bg-gray-500' },
 ]
 
@@ -242,7 +244,7 @@ export default function CalendarPage() {
                       onClick={() => handleDayClick(day)}
                       className={cn(
                         'min-h-16 sm:min-h-24 p-1.5 sm:p-2 flex flex-col bg-background transition-colors active:bg-muted/70',
-                        !isCurrentMonth && 'bg-muted/30 text-muted-foreground',
+                        !isCurrentMonth && 'bg-muted/20 text-muted-foreground/60',
                         isSelected && 'ring-2 ring-primary ring-inset bg-primary/10',
                         isToday(day) && !isSelected && 'bg-primary/5'
                       )}
