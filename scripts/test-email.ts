@@ -5,7 +5,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 async function sendTestEmail() {
   try {
     const { data, error } = await resend.emails.send({
-      from: process.env.EMAIL_FROM || 'Togethr <noreply@nexuscmm.com>',
+      from: process.env.EMAIL_FROM || 'Togethr <admin@mytogethr.com>',
       to: 'ray.jacquet@yahoo.com',
       subject: 'Togethr Test Email',
       html: `

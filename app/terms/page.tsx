@@ -132,7 +132,7 @@ export default function TermsPage() {
               <li>Message and data rates may apply, according to your mobile plan.</li>
               <li>
                 Reply STOP at any time to cancel text messages. Reply HELP for help, or contact us at
-                info@nexuscmm.com.
+                admin@mytogethr.com.
               </li>
               <li>Carriers are not liable for delayed or undelivered messages.</li>
               <li>
@@ -147,8 +147,8 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold">11. Contact Us</h2>
             <p>
               If you have questions about these Terms, please contact us at{' '}
-              <a href="mailto:info@nexuscmm.com" className="text-primary hover:underline">
-                info@nexuscmm.com
+              <a href="mailto:admin@mytogethr.com" className="text-primary hover:underline">
+                admin@mytogethr.com
               </a>
             </p>
           </section>

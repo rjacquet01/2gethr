@@ -4,7 +4,7 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 
 async function sendWeeklyDigestTest() {
   const to = 'ray.jacquet@yahoo.com'
-  const from = process.env.EMAIL_FROM || 'Togethr <noreply@nexuscmm.com>'
+  const from = process.env.EMAIL_FROM || 'Togethr <admin@mytogethr.com>'
 
   // Sample data for test
   const userName = 'Ray'

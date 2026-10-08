@@ -194,7 +194,7 @@ export default function PricingPage() {
             <div>
               <h3 className="font-semibold mb-2">How do I contact support?</h3>
               <p className="text-muted-foreground">
-                You can reach our support team at <a href="mailto:info@nexuscmm.com" className="text-primary hover:underline">info@nexuscmm.com</a>. Premium members get 24/7 priority support.
+                You can reach our support team at <a href="mailto:admin@mytogethr.com" className="text-primary hover:underline">admin@mytogethr.com</a>. Premium members get 24/7 priority support.
               </p>
             </div>
           </div>
@@ -209,7 +209,7 @@ export default function PricingPage() {
             <div className="flex items-center gap-4 sm:gap-6 text-sm text-muted-foreground">
               <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
               <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
-              <a href="mailto:info@nexuscmm.com" className="hover:text-foreground transition-colors">Contact</a>
+              <a href="mailto:admin@mytogethr.com" className="hover:text-foreground transition-colors">Contact</a>
             </div>
             <p className="text-xs sm:text-sm text-muted-foreground">
               &copy; {new Date().getFullYear()} Togethr

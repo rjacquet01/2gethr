@@ -2,7 +2,7 @@ import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const testEmail = 'ray.jacquet@yahoo.com'
-const fromEmail = process.env.EMAIL_FROM || 'Togethr <noreply@nexuscmm.com>'
+const fromEmail = process.env.EMAIL_FROM || 'Togethr <admin@mytogethr.com>'
 
 async function sendTestEmails() {
   console.log('Sending test emails to:', testEmail)

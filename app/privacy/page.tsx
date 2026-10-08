@@ -173,8 +173,8 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-semibold">12. Contact Us</h2>
             <p>
               If you have questions about this Privacy Policy or your data, please contact us at{' '}
-              <a href="mailto:info@nexuscmm.com" className="text-primary hover:underline">
-                info@nexuscmm.com
+              <a href="mailto:admin@mytogethr.com" className="text-primary hover:underline">
+                admin@mytogethr.com
               </a>
             </p>
           </section>

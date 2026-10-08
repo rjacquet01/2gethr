@@ -1,7 +1,7 @@
 const { Resend } = require('resend');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const EMAIL_FROM = 'Togethr <noreply@nexuscmm.com>';
+const EMAIL_FROM = 'Togethr <admin@mytogethr.com>';
 const TEST_EMAIL = 'ray.jacquet@yahoo.com';
 
 async function sendTestNotifications() {

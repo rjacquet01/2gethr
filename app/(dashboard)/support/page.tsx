@@ -148,7 +148,7 @@ export default function SupportPage() {
             </div>
           </CardContent>
         </Card>
-        <a href="mailto:info@nexuscmm.com" target="_blank" rel="noopener noreferrer">
+        <a href="mailto:admin@mytogethr.com" target="_blank" rel="noopener noreferrer">
           <Card className="border-dashed hover:border-purple-500/50 hover:bg-muted/50 transition-colors cursor-pointer">
             <CardContent className="flex items-center gap-4 p-4">
               <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/20">
@@ -156,7 +156,7 @@ export default function SupportPage() {
               </div>
               <div>
                 <p className="font-medium text-sm">Email Us</p>
-                <p className="text-xs text-muted-foreground">info@nexuscmm.com</p>
+                <p className="text-xs text-muted-foreground">admin@mytogethr.com</p>
               </div>
               <ArrowRight className="w-4 h-4 ml-auto text-muted-foreground" />
             </CardContent>

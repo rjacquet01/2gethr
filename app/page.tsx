@@ -168,7 +168,7 @@ export default function HomePage() {
             <div className="flex items-center gap-4 sm:gap-6 text-sm text-muted-foreground">
               <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
               <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
-              <a href="mailto:info@nexuscmm.com" className="hover:text-foreground transition-colors">Contact</a>
+              <a href="mailto:admin@mytogethr.com" className="hover:text-foreground transition-colors">Contact</a>
             </div>
             <p className="text-xs sm:text-sm text-muted-foreground">
               &copy; {new Date().getFullYear()} Togethr

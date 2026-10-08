@@ -183,7 +183,7 @@ export default function FAQsPage() {
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
             <Button variant="outline" asChild>
-              <a href="mailto:info@nexuscmm.com">
+              <a href="mailto:admin@mytogethr.com">
                 <Mail className="w-4 h-4 mr-2" />
                 Email Us
               </a>

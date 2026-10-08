@@ -417,7 +417,7 @@ export default function AdminNotificationsPage() {
                   <Check className="w-4 h-4 text-green-600" />
                   <AlertTitle className="text-green-800">Email Configured</AlertTitle>
                   <AlertDescription className="text-green-700">
-                    Resend API key is configured and your domain (nexuscmm.com) is verified.
+                    Resend API key is configured and your domain (mytogethr.com) is verified.
                   </AlertDescription>
                 </Alert>
               ) : (
@@ -621,7 +621,7 @@ export default function AdminNotificationsPage() {
                               Authorization: `Bearer ${token}`
                             },
                             body: JSON.stringify({
-            emails: ['ray.jacquet@yahoo.com', 'maximjacquet11@gmail.com', 'info@nexuscmm.com'] })
+            emails: ['ray.jacquet@yahoo.com', 'maximjacquet11@gmail.com', 'admin@mytogethr.com'] })
                           })
                           const data = await res.json()
                           if (data.success) {

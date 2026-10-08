@@ -90,7 +90,7 @@ async function sendGeofenceAlertEmail() {
   try {
     // Send arrival notification
     const arrivalResult = await resend.emails.send({
-      from: 'Togethr <noreply@nexuscmm.com>',
+      from: 'Togethr <admin@mytogethr.com>',
       to: 'ray.jacquet@yahoo.com',
       subject: `📍 ${childName} arrived at ${placeName}`,
       html: html,
@@ -111,7 +111,7 @@ async function sendGeofenceAlertEmail() {
       .replace('Arrived', 'Departed');
 
     const departureResult = await resend.emails.send({
-      from: 'Togethr <noreply@nexuscmm.com>',
+      from: 'Togethr <admin@mytogethr.com>',
       to: 'ray.jacquet@yahoo.com',
       subject: `📍 ${childName} left ${placeName}`,
       html: departureHtml,
