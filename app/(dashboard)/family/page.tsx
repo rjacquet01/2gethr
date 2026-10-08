@@ -662,7 +662,7 @@ export default function FamilyPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 [&>*]:min-w-0">
         {/* Family Members */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
