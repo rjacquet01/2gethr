@@ -312,7 +312,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                 onValueChange={handleStatusChange}
                 disabled={processing || task.status?.toLowerCase() === 'pending_approval'}
               >
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-full sm:w-[200px]">
                   {processing ? (
                     <div className="flex items-center gap-2">
                       <Spinner className="w-4 h-4" />

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
+import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
 import { notifyTaskAssigned, type NotificationChannel } from '@/lib/notifications'
 
 // GET - List tasks for the current user's families
@@ -171,6 +172,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not a member of this family' }, { status: 403 })
     }
     
+    await ensureTaskEventNotifyChannelsColumns()
+
     // Create the task
     const task = await sql`
       INSERT INTO tasks (

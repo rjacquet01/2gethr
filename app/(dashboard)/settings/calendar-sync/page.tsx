@@ -431,7 +431,7 @@ function CalendarSyncContent() {
                       updateConnection(googleConnection.id, { syncDirection: value })
                     }
                   >
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-full sm:w-[180px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -453,7 +453,7 @@ function CalendarSyncContent() {
                       updateConnection(googleConnection.id, { syncIntervalMinutes: Number(value) })
                     }
                   >
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-full sm:w-[180px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -510,7 +510,7 @@ function CalendarSyncContent() {
                           updateConnection(googleConnection.id, { taskSyncIntervalMinutes: Number(value) })
                         }
                       >
-                        <SelectTrigger className="w-[180px]">
+                        <SelectTrigger className="w-full sm:w-[180px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -920,7 +920,7 @@ function AppleCalendarCard() {
                 value={String(appleConnection.syncIntervalMinutes ?? 30)}
                 onValueChange={(value) => updateConnection(appleConnection.id, { syncIntervalMinutes: Number(value) })}
               >
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -955,7 +955,7 @@ function AppleCalendarCard() {
                   value={String(appleConnection.taskSyncIntervalMinutes ?? 30)}
                   onValueChange={(value) => updateConnection(appleConnection.id, { taskSyncIntervalMinutes: Number(value) })}
                 >
-                  <SelectTrigger className="w-[180px]">
+                  <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

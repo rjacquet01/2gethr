@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ensureEventCategoryColumn } from "@/lib/event-category-column"
+import { ensureTaskEventNotifyChannelsColumns } from "@/lib/notify-channels-schema"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { notifyFamilyAboutEvent, type NotificationChannel } from "@/lib/notifications" // Event notifications
@@ -325,8 +326,9 @@ export async function GET(request: NextRequest) {
 
 // Create event
 export async function POST(request: NextRequest) {
-  await ensureEventCategoryColumn()
   try {
+  await ensureEventCategoryColumn()
+  await ensureTaskEventNotifyChannelsColumns()
   const { user, error } = await getUserFromRequest(request)
 
     if (!user) {
