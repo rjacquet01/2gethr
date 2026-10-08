@@ -206,20 +206,40 @@ export async function POST(request: NextRequest) {
         if (mapped.length > 0) {
           const row = mapped[0]
           const lastSynced = row.last_synced_at ? new Date(row.last_synced_at) : new Date(0)
-          const willPull = googleUpdated > lastSynced
           // Only pull if Google's own "updated" timestamp is newer than our
           // last sync checkpoint - otherwise this is just Google echoing
-          // back a change the push loop already sent it, and re-applying it
-          // here would stomp a more recent local edit with stale data.
-          if (willPull) {
-            await sql`
-              UPDATE tasks
-              SET title = ${gTask.title}, description = ${gTask.notes || null},
-                  due_date = ${googleDue}, status = ${googleStatus}, updated_at = NOW()
-              WHERE id = ${row.familyhub_task_id}
+          // back a change the push loop already sent it.
+          if (googleUpdated > lastSynced) {
+            const local = await sql`
+              SELECT status, updated_at FROM tasks WHERE id = ${row.familyhub_task_id}
             `
-            await sql`UPDATE synced_tasks SET last_synced_at = NOW() WHERE id = ${row.sync_id}`
-            pulled++
+            if (local.length > 0) {
+              const localStatus = local[0].status as string
+              const localNewer = new Date(local[0].updated_at) > lastSynced
+              // Local edits made since the last sync win; the push loop below
+              // sends them to Google. Otherwise Google's stale copy would
+              // stomp a status the user just set in Togethr.
+              if (!localNewer) {
+                // Google only knows completed / not completed. Keep richer
+                // Togethr statuses (IN_PROGRESS, ON_HOLD, PENDING_APPROVAL,
+                // APPROVED, REJECTED) unless Google actually changed the
+                // completed state.
+                let nextStatus = localStatus
+                if (googleStatus === 'COMPLETED' && localStatus !== 'COMPLETED' && localStatus !== 'APPROVED' && localStatus !== 'ARCHIVED') {
+                  nextStatus = 'COMPLETED'
+                } else if (googleStatus === 'PENDING' && (localStatus === 'COMPLETED' || localStatus === 'APPROVED')) {
+                  nextStatus = 'PENDING'
+                }
+                await sql`
+                  UPDATE tasks
+                  SET title = ${gTask.title}, description = ${gTask.notes || null},
+                      due_date = ${googleDue}, status = ${nextStatus}, updated_at = NOW()
+                  WHERE id = ${row.familyhub_task_id}
+                `
+                await sql`UPDATE synced_tasks SET last_synced_at = NOW() WHERE id = ${row.sync_id}`
+                pulled++
+              }
+            }
           }
           continue
         }

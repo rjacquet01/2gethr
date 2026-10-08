@@ -11,23 +11,13 @@ async function syncTaskStatusUpdate(
   task: Record<string, unknown>,
   additionalData: Record<string, unknown> = {}
 ) {
-  // 1. Update synced_tasks if this task is synced with Google Tasks
-  const syncedTask = await sql`
-    SELECT st.*, csc.user_id as connection_user_id
-    FROM synced_tasks st
-    JOIN calendar_sync_connections csc ON st.connection_id = csc.id
-    WHERE st.familyhub_task_id = ${taskId}
-  `
-  
-  if (syncedTask.length > 0) {
-    // Mark the sync as needing update
-    await sql`
-      UPDATE synced_tasks 
-      SET last_synced_at = NULL
-      WHERE familyhub_task_id = ${taskId}
-    `
-  }
-  
+  // 1. Google Tasks sync: nothing to do here. tasks.updated_at has already been
+  // bumped by the caller, and the sync's push loop sends any task whose
+  // updated_at is newer than synced_tasks.last_synced_at. This used to set
+  // last_synced_at = NULL, which made the pull step treat Google's copy as
+  // "newer than never" and overwrite the status we had just saved (reverting
+  // In Progress / Hold / Complete back to Pending on the next auto-sync).
+
   // 2. Create status change notification for relevant users
   const notifyUsers: string[] = []
   
