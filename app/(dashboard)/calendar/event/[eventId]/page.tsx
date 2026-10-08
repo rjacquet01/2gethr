@@ -178,7 +178,7 @@ export default function EventDetailPage() {
                     Recurring
                   </Badge>
                 )}
-                {event.status === 'PENDING_APPROVAL' && (
+                {event.status === 'PENDING' && (
                   <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
                     Pending Approval
                   </Badge>

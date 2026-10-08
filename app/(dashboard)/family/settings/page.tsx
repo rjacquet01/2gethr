@@ -58,9 +58,9 @@ export default function FamilySettingsPage() {
     }
   }, [family])
 
-  const isOwner = family?.members?.some(
-    m => m.userId === user?.id && m.role === 'OWNER'
-  )
+  // Ownership is tracked on the family itself (owner_id), not as a member role
+  // (member roles are PARENT / CHILD / GUARDIAN).
+  const isOwner = !!family && !!user && family.ownerId === user.id
 
   const handleSave = async () => {
     if (!selectedFamilyId) return
@@ -324,54 +324,6 @@ export default function FamilySettingsPage() {
               <p className="text-sm text-muted-foreground">
                 Anyone with this code can request to join your family.
               </p>
-            </CardContent>
-          </Card>
-
-          {/* Privacy & Safety */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Privacy & Safety
-              </CardTitle>
-              <CardDescription>
-                Control privacy settings for your family
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="requires-approval">Require Event Approval</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Children's events need parent approval
-                  </p>
-                </div>
-                <Switch
-                  id="requires-approval"
-                  checked={formData.requiresEventApproval}
-                  onCheckedChange={(checked) => 
-                    setFormData(prev => ({ ...prev, requiresEventApproval: checked }))
-                  }
-                  disabled={!isOwner}
-                />
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="child-location">Allow Child Location Sharing</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Enable location tracking for children
-                  </p>
-                </div>
-                <Switch
-                  id="child-location"
-                  checked={formData.allowChildLocation}
-                  onCheckedChange={(checked) => 
-                    setFormData(prev => ({ ...prev, allowChildLocation: checked }))
-                  }
-                  disabled={!isOwner}
-                />
-              </div>
             </CardContent>
           </Card>
 

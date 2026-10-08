@@ -2,7 +2,13 @@ import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '@/lib/utils'
 
-function Empty({ className, ...props }: React.ComponentProps<'div'>) {
+type EmptyProps = Omit<React.ComponentProps<'div'>, 'title'> & {
+  icon?: React.ComponentType<{ className?: string }>
+  title?: React.ReactNode
+  description?: React.ReactNode
+}
+
+function Empty({ className, icon: Icon, title, description, children, ...props }: EmptyProps) {
   return (
     <div
       data-slot="empty"
@@ -11,7 +17,16 @@ function Empty({ className, ...props }: React.ComponentProps<'div'>) {
         className,
       )}
       {...props}
-    />
+    >
+      {(Icon || title || description) && (
+        <div className="flex max-w-sm flex-col items-center gap-2 text-center">
+          {Icon && <Icon className="h-10 w-10 text-muted-foreground" />}
+          {title && <div className="text-lg font-medium tracking-tight">{title}</div>}
+          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+        </div>
+      )}
+      {children}
+    </div>
   )
 }
 
