@@ -621,7 +621,7 @@ export default function AdminNotificationsPage() {
                               Authorization: `Bearer ${token}`
                             },
                             body: JSON.stringify({
-            emails: ['ray.jacquet@yahoo.com', 'maximjacquet11@gmail.com', 'admin@mytogethr.com'] })
+            emails: ['ray.jacquet@yahoo.com', 'maximjacquet11@gmail.com', 'info@nexuscmm.com'] })
                           })
                           const data = await res.json()
                           if (data.success) {
