@@ -124,7 +124,7 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold">10. Text Messaging (SMS) Terms</h2>
             <p>
               By turning on SMS notifications in Settings and providing your mobile number, you agree to
-              receive text messages from Togethr such as event and task reminders, schedule changes and
+              receive text messages from Togethr, operated by Nexus Calibration Maintenance Management, LLC, such as event and task reminders, schedule changes and
               family alerts. Consent to receive text messages is not a condition of using the Service.
             </p>
             <ul className="list-disc pl-6 space-y-2">

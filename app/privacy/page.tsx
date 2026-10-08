@@ -152,7 +152,7 @@ export default function PrivacyPage() {
           <section className="space-y-4" id="sms">
             <h2 className="text-xl font-semibold">11. Text Messaging (SMS)</h2>
             <p>
-              If you choose to receive text messages, we use the mobile phone number you give us to send
+              If you choose to receive text messages from Togethr (operated by Nexus Calibration Maintenance Management, LLC), we use the mobile phone number you give us to send
               notifications you asked for, such as event and task reminders, schedule changes and
               family alerts. Text messages are optional: we only send them after you turn on SMS
               notifications in Settings and provide your number, and you can turn them off there at any time.

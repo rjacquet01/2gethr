@@ -143,7 +143,7 @@ export default function RegisterPage() {
                     className="mt-0.5"
                   />
                   <Label htmlFor="sms-consent" className="text-xs font-normal leading-snug text-muted-foreground">
-                    I agree to receive SMS text messages from Togethr (family coordination reminders and
+                    I agree to receive SMS text messages from Togethr, operated by Nexus Calibration Maintenance Management, LLC (family coordination reminders and
                     account alerts) at the phone number provided above. Message frequency varies. Message and
                     data rates may apply. Reply STOP to cancel, HELP for help. View our{' '}
                     <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>
