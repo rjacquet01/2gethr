@@ -92,7 +92,8 @@ export function AppearanceButton({ familyId, memberId, name, avatarUrl, color, e
   }
 
   return (
-    <>
+    // Stop clicks (including ones from the dialog portal) from reaching a parent link/button.
+    <span className="contents" onClick={(ev) => ev.stopPropagation()}>
       <Button
         type="button"
         variant="ghost"
@@ -149,6 +150,6 @@ export function AppearanceButton({ familyId, memberId, name, avatarUrl, color, e
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </span>
   )
 }
