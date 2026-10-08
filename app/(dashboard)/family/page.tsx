@@ -72,6 +72,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import Link from 'next/link'
+import { MemberAvatar, AppearanceButton } from '@/components/member-avatar'
 import { JoinFamilyButton } from '@/components/join-family-dialog'
 
 export default function FamilyPage() {
@@ -151,6 +152,8 @@ export default function FamilyPage() {
     userId: string | null
     displayName: string
     avatarUrl: string | null
+    color?: string | null
+    emoji?: string | null
     role: string
     childProfileId: string | null
     tasks: Array<{
@@ -480,12 +483,7 @@ export default function FamilyPage() {
                       onClick={() => toggleMemberExpanded(member.memberId)}
                       className="flex items-center gap-3 p-3 bg-muted/30 w-full text-left hover:bg-muted/50 transition-colors"
                     >
-                      <Avatar className="w-10 h-10">
-                        <AvatarImage src={member.avatarUrl ? `/api/files?pathname=${encodeURIComponent(member.avatarUrl)}` : undefined} />
-                        <AvatarFallback className={member.role === 'CHILD' ? 'bg-primary/10 text-primary' : ''}>
-                          {initials}
-                        </AvatarFallback>
-                      </Avatar>
+                      <MemberAvatar name={member.displayName} avatarUrl={member.avatarUrl} color={member.color} emoji={member.emoji} />
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-foreground truncate">
                           {member.displayName}
@@ -688,10 +686,7 @@ export default function FamilyPage() {
                     key={member.id}
                     className="flex items-center gap-3 p-3 rounded-lg border border-border"
                   >
-                    <Avatar className="w-10 h-10">
-                      <AvatarImage src={member.avatarUrl ? `/api/files?pathname=${encodeURIComponent(member.avatarUrl)}` : undefined} />
-                      <AvatarFallback>{initials}</AvatarFallback>
-                    </Avatar>
+                    <MemberAvatar name={member.displayName} avatarUrl={member.avatarUrl} color={member.color} emoji={member.emoji} />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-foreground truncate">
                         {member.displayName}
@@ -703,6 +698,11 @@ export default function FamilyPage() {
                     </div>
                     {family.ownerId === member.userId && (
                       <Badge variant="outline" className="text-xs">Owner</Badge>
+                    )}
+                    {(member.userId === user?.id ||
+                      family.ownerId === user?.id ||
+                      family.members?.some(m => m.userId === user?.id && m.role === 'PARENT')) && (
+                      <AppearanceButton familyId={family.id} memberId={member.id} name={member.displayName} avatarUrl={member.avatarUrl} color={member.color} emoji={member.emoji} />
                     )}
                     {(() => {
                       const isSelf = member.userId === user?.id
@@ -892,12 +892,7 @@ export default function FamilyPage() {
                       href={`/family/child/${child.id}`}
                       className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
                     >
-                      <Avatar className="w-10 h-10">
-                        <AvatarImage src={child.avatarUrl ? `/api/files?pathname=${encodeURIComponent(child.avatarUrl)}` : undefined} />
-                        <AvatarFallback className="bg-primary/10 text-primary">
-                          {initials}
-                        </AvatarFallback>
-                      </Avatar>
+                      <MemberAvatar name={child.displayName} avatarUrl={child.avatarUrl} color={child.color} emoji={child.emoji} />
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-foreground truncate">
                           {child.displayName}
@@ -916,6 +911,9 @@ export default function FamilyPage() {
                           )}
                         </div>
                       </div>
+                      {child.familyMemberId && (
+                        <AppearanceButton familyId={family.id} memberId={child.familyMemberId} name={child.displayName} avatarUrl={child.avatarUrl} color={child.color} emoji={child.emoji} />
+                      )}
                     </Link>
                   )
                 })}

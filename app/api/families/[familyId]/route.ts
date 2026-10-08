@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
+import { ensureMemberAppearanceColumns } from "@/lib/member-appearance"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 
@@ -59,12 +60,14 @@ export async function GET(
       }
     }
 
+    await ensureMemberAppearanceColumns()
+
     // Get members
     const members = await sql`
       SELECT 
         fm.id, fm.user_id, fm.role, fm.nickname, fm.is_active, fm.joined_at,
         fm.can_create_events, fm.requires_event_approval, fm.can_override_conflicts,
-        fm.can_view_family_calendar, fm.can_invite_members,
+        fm.can_view_family_calendar, fm.can_invite_members, fm.color, fm.emoji,
         u.email, u.first_name, u.last_name, u.profile_photo_path,
         cp.id as child_profile_id, cp.display_name, cp.age, cp.school, cp.grade
       FROM family_members fm
@@ -79,7 +82,7 @@ export async function GET(
       SELECT 
         cp.id, cp.display_name, cp.age, cp.school, cp.grade,
         cp.avatar_url, cp.created_at,
-        fm.id as family_member_id
+        fm.id as family_member_id, fm.color, fm.emoji
       FROM child_profiles cp
       JOIN family_members fm ON cp.family_member_id = fm.id
       WHERE fm.family_id = ${familyId}
@@ -106,6 +109,8 @@ export async function GET(
           role: m.role,
           displayName: m.nickname || [m.first_name, m.last_name].filter(Boolean).join(' ') || 'Unknown',
           avatarUrl: m.profile_photo_path,
+          color: m.color || null,
+          emoji: m.emoji || null,
           isActive: m.is_active,
           joinedAt: m.joined_at,
           permissions: {
@@ -122,6 +127,9 @@ export async function GET(
           displayName: c.display_name,
           birthDate: null,
           avatarUrl: c.avatar_url,
+          familyMemberId: c.family_member_id,
+          color: c.color || null,
+          emoji: c.emoji || null,
           grade: c.grade,
           permissions: {
             canCreateEvents: false,

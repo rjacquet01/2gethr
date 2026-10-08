@@ -11,6 +11,8 @@ export interface FamilyMember {
   role: 'PARENT' | 'GUARDIAN' | 'CHILD'
   displayName: string
   avatarUrl: string | null
+  color?: string | null
+  emoji?: string | null
   permissions: Record<string, boolean>
   isActive: boolean
   joinedAt: string
@@ -21,7 +23,10 @@ export interface ChildProfile {
   familyId: string
   displayName: string
   birthDate: string | null
+  familyMemberId?: string
   avatarUrl: string | null
+  color?: string | null
+  emoji?: string | null
   grade: string | null
   permissions: {
     canCreateEvents: boolean

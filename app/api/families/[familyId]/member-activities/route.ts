@@ -26,12 +26,14 @@ export async function GET(
       return NextResponse.json({ error: 'Not a member of this family' }, { status: 403 })
     }
 
+    await ensureMemberAppearanceColumns()
+
     // Get all family members with their tasks and upcoming events
     const members = await sql`
       SELECT 
         fm.id as member_id,
         fm.user_id,
-        fm.role,
+        fm.role, fm.color, fm.emoji,
         u.first_name,
         u.last_name,
         u.profile_photo_url as avatar_url,
@@ -55,7 +57,7 @@ export async function GET(
         cp.id as child_id,
         cp.display_name,
         cp.avatar_url,
-        cp.family_member_id
+        cp.family_member_id, fm.color, fm.emoji
       FROM child_profiles cp
       JOIN family_members fm ON cp.family_member_id = fm.id
       WHERE fm.family_id = ${familyId} AND fm.is_active = true
@@ -135,6 +137,8 @@ export async function GET(
         userId: member.user_id,
         displayName: member.display_name || `${member.first_name} ${member.last_name}`,
         avatarUrl: member.avatar_url,
+        color: member.color || null,
+        emoji: member.emoji || null,
         role: member.role,
         childProfileId: childProfile?.child_id || null,
         tasks: [...memberTasks, ...childTasks].slice(0, 5), // Limit to 5 tasks
@@ -155,6 +159,8 @@ export async function GET(
       display_name: string
       avatar_url: string
       family_member_id: string
+      color?: string
+      emoji?: string
     }) => {
       const childTasks = tasks.filter((t: { child_profile_id: string }) => t.child_profile_id === child.child_id)
       
@@ -163,6 +169,8 @@ export async function GET(
         userId: null,
         displayName: child.display_name,
         avatarUrl: child.avatar_url,
+        color: (child as { color?: string }).color || null,
+        emoji: (child as { emoji?: string }).emoji || null,
         role: 'CHILD',
         childProfileId: child.child_id,
         tasks: childTasks.slice(0, 5),
