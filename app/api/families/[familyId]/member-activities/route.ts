@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
+import { ensureMemberAppearanceColumns } from '@/lib/member-appearance'
 
 // GET - Get tasks and events for each family member
 export async function GET(
