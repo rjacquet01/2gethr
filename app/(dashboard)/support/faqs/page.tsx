@@ -17,11 +17,11 @@ const faqs = [
     questions: [
       {
         question: 'How do I create a family account?',
-        answer: 'To create a family account, sign up with your email address and follow the onboarding process. You can then invite family members by going to Settings > Family > Invite Members and sharing the generated invite code or link.'
+        answer: 'Sign up with your email address and follow the onboarding steps to create your family. Then invite family members from the Family page by sharing the invite code or join link.'
       },
       {
         question: 'How do I invite family members?',
-        answer: 'Navigate to Settings > Family > Invite Members. You can generate an invite code that family members can use to join, or send them a direct invite link via email. Each invite code expires after 7 days for security.'
+        answer: 'Open the Family page and generate an invite code. You can share the code or a join link by text, email, or any app on your phone. Each invite code expires after 7 days, and you can generate a new one at any time.'
       },
       {
         question: 'Can I be part of multiple families?',
@@ -42,11 +42,11 @@ const faqs = [
       },
       {
         question: 'Can I sync with Google Calendar or other calendars?',
-        answer: 'Calendar sync with external providers like Google Calendar and Apple Calendar is planned for a future update. Currently, you can manually add events or use our mobile app for quick entry.'
+        answer: 'Yes. Go to Settings > Calendar & Task Sync to connect Google Calendar (events and Google Tasks) or Apple Calendar. You can also import iCal (.ics) files. Connected calendars sync automatically.'
       },
       {
         question: 'How do I set up event reminders?',
-        answer: 'When creating or editing an event, you can add reminders that will notify you via push notification, email, or SMS (Premium feature) before the event starts. Default reminder times can be set in Settings > Notifications.'
+        answer: 'When creating or editing an event, choose how long before it starts you want to be reminded. Reminders arrive by push notification and email, and by text message on the Basic and Premium plans. Choose your default reminder times and turn each notification type on or off in Settings > Notifications. Custom reminder times are a Premium feature.'
       },
     ]
   },
@@ -80,7 +80,7 @@ const faqs = [
       },
       {
         question: 'How do geofences work?',
-        answer: 'Geofences are virtual boundaries around locations like home, school, or work. When a family member enters or leaves a geofenced area, designated family members receive a notification. Set up geofences in Location > Saved Places.'
+        answer: 'Geofences are virtual boundaries around saved places such as home, school, or work. When a family member arrives at or leaves a geofenced place, designated family members receive an alert. Add places and turn on geofence alerts from the Places page. Geofence alerts are a Premium feature.'
       },
     ]
   },
@@ -89,19 +89,19 @@ const faqs = [
     questions: [
       {
         question: 'What features are included in each plan?',
-        answer: 'Free: shared calendar, tasks, and basic live location with 2 saved places. Basic: more members, 15 saved places, SMS notifications, advanced reminders. Premium: geofence arrival and departure alerts, 50 saved places, phone alerts, and 1 year of history.'
+        answer: 'Free: shared family calendar and tasks, live family location with 2 saved places, up to 4 members, 30 days of history. Basic ($2.99/month): up to 6 members, 15 saved places, SMS notifications, advanced recurring events, calendar export, 90 days of history. Premium ($4.99/month): up to 12 members, 50 saved places, geofence arrival and departure alerts, phone alerts, custom reminder times, and 1 year of history. Annual billing is discounted. New members get a 14-day free Premium trial.'
       },
       {
         question: 'How do I upgrade my subscription?',
-        answer: 'Go to Settings > Subscription to view available plans and upgrade. Payment is processed securely through Stripe. You can upgrade, downgrade, or cancel at any time.'
+        answer: 'Go to Subscription to view plans and upgrade or start your free trial. Payment is processed securely through Stripe. You can change or cancel your plan at any time from Manage Billing.'
       },
       {
         question: 'Can I get a refund?',
-        answer: 'We offer a 14-day money-back guarantee for new subscriptions. If you\'re not satisfied, contact support within 14 days of your purchase for a full refund. After 14 days, subscriptions are non-refundable but you can cancel to prevent future charges.'
+        answer: 'Refunds are handled according to our Terms of Service and the policies of your payment provider. There is no money-back guarantee, but you can start with a 14-day free Premium trial (no card needed) to try the paid features, and cancel any time to prevent future charges. If you were charged in error, contact support.'
       },
       {
         question: 'How do I cancel my subscription?',
-        answer: 'Navigate to Settings > Subscription > Manage Subscription and click "Cancel Plan". Your subscription will remain active until the end of your current billing period, then revert to the free plan.'
+        answer: 'Go to Subscription and click Cancel Subscription (or Manage Billing) to open the secure Stripe billing portal. Your plan stays active until the end of the current billing period, then reverts to Free. If you are on the free trial, use Cancel Trial instead.'
       },
     ]
   },
@@ -110,15 +110,15 @@ const faqs = [
     questions: [
       {
         question: 'How do I change my password?',
-        answer: 'Go to Settings > Profile > Security and click "Change Password". You\'ll need to enter your current password and then your new password twice to confirm.'
+        answer: 'Go to Settings > Security and click Change Password. You will need to enter your current password and then your new password.'
       },
       {
         question: 'How do I enable two-factor authentication?',
-        answer: 'Two-factor authentication (2FA) can be enabled in Settings > Profile > Security. We support authenticator apps like Google Authenticator or Authy for an extra layer of security.'
+        answer: 'Go to Settings > Security. Scan the setup code with an authenticator app such as Google Authenticator or Authy, then enter the 6-digit code to turn on two-factor authentication.'
       },
       {
         question: 'How do I delete my account?',
-        answer: 'To delete your account, go to Settings > Profile > Delete Account. This action is permanent and will remove all your data. If you\'re the only admin of a family, you\'ll need to transfer ownership or delete the family first.'
+        answer: 'Go to Settings and scroll to the Danger Zone, then click Delete Account and confirm with your email. This is permanent and removes your data.'
       },
       {
         question: 'What data do you collect?',
