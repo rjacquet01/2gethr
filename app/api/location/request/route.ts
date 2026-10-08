@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription } from "@/lib/auth"
 import { z } from "zod"
+import { ensureLocationRequestsTable } from "@/lib/location-schema"
+import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
 
 const requestLocationSchema = z.object({
   memberId: z.string().min(1, "Member ID is required"),
@@ -21,6 +23,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    await ensureLocationRequestsTable()
     const body = await request.json()
     const validatedData = requestLocationSchema.parse(body)
 
@@ -138,6 +141,21 @@ export async function POST(request: NextRequest) {
       ON CONFLICT DO NOTHING
     `
 
+    // Best-effort push so a phone that is only running the background
+    // service still lights up; the service also polls for pending requests.
+    if (isFirebaseConfigured()) {
+      try {
+        await sendPushToUser(membership[0].target_user_id, {
+          title: "Location Request",
+          body: `${user.firstName || 'A family member'} has requested your current location`,
+          data: { type: "LOCATION_REQUEST" },
+          clickAction: "/location",
+        })
+      } catch (err) {
+        console.error("Location request push failed (non-fatal):", err)
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: "Location request sent successfully",
@@ -171,6 +189,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    await ensureLocationRequestsTable()
     // Get pending requests for this user that haven't expired
     const requests = await sql`
       SELECT lr.*, u.first_name, u.last_name

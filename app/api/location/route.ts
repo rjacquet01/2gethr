@@ -8,8 +8,11 @@ import { sendSMS, SMS_TEMPLATES, isTwilioConfigured } from "@/lib/services/sms"
 import { sendEmail, EMAIL_TEMPLATES, isResendConfigured } from "@/lib/services/email"
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
 import { distanceMeters, evaluateGeofence, suggestedPingIntervalSec } from "@/lib/geofence"
+import { fulfillLocationRequests } from "@/lib/location-schema"
+import { alertFamilyAdults } from "@/lib/family-alerts"
+import { ensureMemberAppearanceColumns } from "@/lib/member-appearance"
 
-const locationPingSchema = z.object({
+const pingFields = {
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   accuracy: z.number().min(0).optional().nullable(),
@@ -18,13 +21,21 @@ const locationPingSchema = z.object({
   heading: z.number().min(0).max(360).optional().nullable(),
   batteryLevel: z.number().int().min(0).max(100).optional().nullable(),
   timestamp: z.string().datetime().optional().nullable(),
+}
+
+const locationPingSchema = z.object({
+  ...pingFields,
   memberId: z.string().optional().nullable(),
   familyId: z.string().optional().nullable(),
+  // Fixes the device recorded while it was offline, oldest first. The
+  // top-level fields above are always the newest fix.
+  pings: z.array(z.object(pingFields)).max(200).optional(),
 })
 
 // Get family members' locations (for authorized users)
 export async function GET(request: NextRequest) {
   try {
+    await ensureMemberAppearanceColumns()
     const { user, error } = await getUserFromRequest(request)
 
     if (!user) {
@@ -71,7 +82,7 @@ export async function GET(request: NextRequest) {
     // Get members with their location settings and pings
     const locations = await sql`
       SELECT 
-        fm.id as member_id, fm.user_id, fm.nickname, fm.role,
+        fm.id as member_id, fm.user_id, fm.nickname, fm.role, fm.color, fm.emoji,
         COALESCE(ls.mode, 'OFF') as location_mode, 
         COALESCE(ls.share_with_family, false) as share_with_family,
         lp.latitude, lp.longitude, lp.accuracy, lp.altitude,
@@ -114,6 +125,8 @@ export async function GET(request: NextRequest) {
         userId: l.user_id,
         name: l.child_display_name || l.nickname || `${l.first_name} ${l.last_name}`,
         role: l.role,
+        color: l.color ?? null,
+        emoji: l.emoji ?? null,
         profilePhotoPath: l.profile_photo_path,
         locationMode: l.location_mode,
         location: l.latitude !== null && l.longitude !== null ? {
@@ -236,6 +249,31 @@ export async function POST(request: NextRequest) {
           ageSec: (Date.now() - new Date(prevPings[0].timestamp).getTime()) / 1000,
         }
       : null
+    const prevBattery = prevPings[0]?.battery_level != null ? Number(prevPings[0].battery_level) : null
+
+    // Fixes queued while the phone had no signal: store them (oldest first,
+    // skipping duplicates and anything absurdly old/future) so the history
+    // trail has no gaps. Only the newest fix drives geofence alerts below.
+    const nowMs = Date.now()
+    const queued = (validatedData.pings ?? [])
+      .filter((q) => {
+        const t = q.timestamp ? Date.parse(q.timestamp) : NaN
+        return Number.isFinite(t) && t > nowMs - 7 * 86400_000 && t < nowMs + 300_000
+      })
+      .sort((a, b) => Date.parse(a.timestamp as string) - Date.parse(b.timestamp as string))
+    for (const q of queued) {
+      await sql`
+        INSERT INTO location_pings (
+          id, user_id, latitude, longitude, accuracy, altitude, speed, heading, battery_level, timestamp
+        )
+        SELECT ${`ping_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`}, ${user.id},
+          ${q.latitude}, ${q.longitude}, ${q.accuracy ?? null}, ${q.altitude ?? null},
+          ${q.speed ?? null}, ${q.heading ?? null}, ${q.batteryLevel ?? null}, ${q.timestamp}
+        WHERE NOT EXISTS (
+          SELECT 1 FROM location_pings WHERE user_id = ${user.id} AND timestamp = ${q.timestamp}
+        )
+      `
+    }
 
     // Store location ping - use text-based ID to match column type
     const pingId = `ping_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
@@ -249,11 +287,11 @@ export async function POST(request: NextRequest) {
         ${user.id},
         ${validatedData.latitude},
         ${validatedData.longitude},
-        ${validatedData.accuracy || null},
-        ${validatedData.altitude || null},
-        ${validatedData.speed || null},
-        ${validatedData.heading || null},
-        ${validatedData.batteryLevel || null},
+        ${validatedData.accuracy ?? null},
+        ${validatedData.altitude ?? null},
+        ${validatedData.speed ?? null},
+        ${validatedData.heading ?? null},
+        ${validatedData.batteryLevel ?? null},
         ${validatedData.timestamp || new Date().toISOString()}
       )
     `
@@ -261,6 +299,28 @@ export async function POST(request: NextRequest) {
     // Free tier gets live location only, not history: keep just the latest ping.
     if (subscription.tier === "FREE") {
       await sql`DELETE FROM location_pings WHERE user_id = ${user.id} AND id != ${pingId}`
+    }
+
+    // A fresh fix answers any "request location now" a parent made.
+    try {
+      await fulfillLocationRequests(user.id)
+    } catch (err) {
+      console.error("fulfillLocationRequests failed (non-fatal):", err)
+    }
+
+    // Low battery heads-up for parents, once per drop below 15%.
+    const battery = validatedData.batteryLevel
+    if (battery != null && battery <= 15 && (prevBattery == null || prevBattery > 15)) {
+      try {
+        const who = (await sql`SELECT first_name FROM users WHERE id = ${user.id}`)[0]?.first_name || "A family member"
+        await alertFamilyAdults(setting.family_id, user.id, {
+          title: `${who}'s battery is low`,
+          body: `${who}'s phone is at ${battery}%. Their location may stop updating soon.`,
+          data: { userId: user.id, subType: "LOW_BATTERY", batteryLevel: battery },
+        })
+      } catch (err) {
+        console.error("Low battery alert failed (non-fatal):", err)
+      }
     }
 
     // Check geofences if enabled (Premium feature)
@@ -289,7 +349,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { pingId, suggestedIntervalSec },
+      data: { pingId, suggestedIntervalSec, queuedAccepted: queued.length },
     })
   } catch (error) {
     if (error instanceof z.ZodError) {

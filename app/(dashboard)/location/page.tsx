@@ -23,6 +23,8 @@ import { Spinner } from '@/components/ui/spinner'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SUBSCRIPTION_TIERS, centsToDisplay } from '@/lib/subscription-tiers'
 import { BackgroundLocationCard } from '@/components/background-location-card'
+import { TrackedMap } from '@/components/tracked-map'
+import { SosButton } from '@/components/sos-button'
 
 // High-accuracy GPS often times out on laptops/desktops and indoors. Try it
 // first, then fall back to a coarser (Wi-Fi/cell/IP) fix so sharing still works.
@@ -52,6 +54,8 @@ interface FamilyMemberLocation {
   userId: string
   name: string
   role: string
+  color?: string | null
+  emoji?: string | null
   profilePhotoPath: string | null
   locationMode: string
   location: {
@@ -87,6 +91,7 @@ export default function LocationPage() {
   const [subscriptionError, setSubscriptionError] = useState(false)
   const [selectedMember, setSelectedMember] = useState<FamilyMemberLocation | null>(null)
   const [showMapDialog, setShowMapDialog] = useState(false)
+  const [mapFocusId, setMapFocusId] = useState<string | null>(null)
   const [showSettingsDialog, setShowSettingsDialog] = useState(false)
   const [updatingSettings, setUpdatingSettings] = useState(false)
   const [requestingLocation, setRequestingLocation] = useState<string | null>(null)
@@ -333,6 +338,20 @@ export default function LocationPage() {
     }
     schedule()
 
+    // A parent tapped "Request location": answer within ~20s instead of
+    // waiting out the sharing interval.
+    const requestWatch = setInterval(async () => {
+      if (document.hidden) return
+      try {
+        const r = await authFetch('/api/location/request')
+        if (!r.ok) return
+        const j = await r.json()
+        if (Array.isArray(j?.data) && j.data.length > 0) poll(true)
+      } catch {
+        // ignore
+      }
+    }, 20_000)
+
     // Coming back to the app after being backgrounded: report immediately
     // instead of waiting out the interval.
     const onVisible = () => {
@@ -343,6 +362,7 @@ export default function LocationPage() {
     return () => {
       navigator.geolocation.clearWatch(watchId)
       clearTimeout(heartbeat)
+      clearInterval(requestWatch)
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [mySettings?.mode, mySettings?.updateIntervalSec, mySettings?.shareWithFamily, mySettings?.memberId, mySettings?.familyId])
@@ -635,11 +655,14 @@ export default function LocationPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">My Location Sharing</CardTitle>
-              {mySettings && (
-                <Badge variant="secondary" className={`${getModeColor(mySettings.mode)} text-white`}>
-                  {mySettings.mode === 'OFF' ? 'Off' : mySettings.mode === 'ACTIVE' ? 'Active' : 'Paused'}
-                </Badge>
-              )}
+              <div className="flex items-center gap-2">
+                <SosButton familyId={selectedFamily?.id} />
+                {mySettings && (
+                  <Badge variant="secondary" className={`${getModeColor(mySettings.mode)} text-white`}>
+                    {mySettings.mode === 'OFF' ? 'Off' : mySettings.mode === 'ACTIVE' ? 'Active' : 'Paused'}
+                  </Badge>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -785,62 +808,48 @@ export default function LocationPage() {
 
           <TabsContent value="map">
             <Card>
-              <CardContent className="p-0">
-                <div className="relative h-[400px] w-full bg-muted rounded-lg overflow-hidden">
-                  {locations.filter(l => l.location).length > 0 ? (
-                    <iframe
-                      title="Family Location Map"
-                      className="absolute inset-0 w-full h-full border-0"
-                      loading="lazy"
-                      referrerPolicy="no-referrer-when-downgrade"
-                      src={`https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''}&q=${
-                        locations.filter(l => l.location).map(l =>
-                          `${l.location!.latitude},${l.location!.longitude}`
-                        ).join('|')
-                      }&center=${
-                        locations.filter(l => l.location)[0]?.location?.latitude || 0
-                      },${
-                        locations.filter(l => l.location)[0]?.location?.longitude || 0
-                      }&zoom=14`}
+              <CardContent className="space-y-3 p-3 sm:p-4">
+                {locations.filter(l => l.location).length > 0 ? (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={mapFocusId === null ? 'default' : 'outline'}
+                        className="h-8"
+                        onClick={() => setMapFocusId(null)}
+                      >
+                        Everyone
+                      </Button>
+                      {locations.filter(l => l.location).map(m => (
+                        <Button
+                          key={m.memberId}
+                          type="button"
+                          size="sm"
+                          variant={mapFocusId === m.memberId ? 'default' : 'outline'}
+                          className="h-8"
+                          onClick={() => setMapFocusId(m.memberId)}
+                        >
+                          {m.emoji ? `${m.emoji} ` : ''}{m.name}
+                        </Button>
+                      ))}
+                    </div>
+                    <TrackedMap
+                      members={locations}
+                      familyId={selectedFamily?.id}
+                      focusMemberId={mapFocusId}
+                      allowTrail={!!mapFocusId}
                     />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full">
-                      <MapPin className="h-12 w-12 text-muted-foreground" />
-                      <p className="mt-4 text-muted-foreground">No locations to display</p>
-                      <p className="text-sm text-muted-foreground">
-                        Family members need to share their location first
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Static map fallback if no API key */}
-                  {!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && locations.filter(l => l.location).length > 0 && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted">
-                      <MapPin className="h-12 w-12 text-primary" />
-                      <p className="mt-4 font-medium">Map View</p>
-                      <p className="text-sm text-muted-foreground text-center px-4">
-                        {locations.filter(l => l.location).length} family member(s) sharing location
-                      </p>
-                      <div className="mt-4 space-y-2">
-                        {locations.filter(l => l.location).map(member => (
-                          <Button
-                            key={member.memberId}
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openInMaps(
-                              member.location!.latitude,
-                              member.location!.longitude,
-                              member.name
-                            )}
-                          >
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            Open {member.name} in Maps
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                  </>
+                ) : (
+                  <div className="flex h-[300px] flex-col items-center justify-center">
+                    <MapPin className="h-12 w-12 text-muted-foreground" />
+                    <p className="mt-4 text-muted-foreground">No locations to display</p>
+                    <p className="text-sm text-muted-foreground">
+                      Family members need to share their location first
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -876,28 +885,12 @@ export default function LocationPage() {
 
           {selectedMember?.location && (
             <div className="space-y-4">
-              <div className="relative h-[300px] w-full bg-muted rounded-lg overflow-hidden">
-                {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ? (
-                  <iframe
-                    title={`${selectedMember.name}'s location`}
-                    className="absolute inset-0 w-full h-full border-0"
-                    loading="lazy"
-                    src={`https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&q=${selectedMember.location.latitude},${selectedMember.location.longitude}&zoom=16`}
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full">
-                    <MapPin className="h-12 w-12 text-primary" />
-                    <p className="mt-4 font-medium">
-                      {selectedMember.location.latitude.toFixed(6)}, {selectedMember.location.longitude.toFixed(6)}
-                    </p>
-                    {selectedMember.location.accuracy && (
-                      <p className="text-sm text-muted-foreground">
-                        Accuracy: ±{Math.round(selectedMember.location.accuracy)} meters
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
+              <TrackedMap
+                members={locations}
+                familyId={selectedFamily?.id}
+                focusMemberId={selectedMember.memberId}
+                className="h-[300px]"
+              />
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
