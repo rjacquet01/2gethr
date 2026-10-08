@@ -44,7 +44,15 @@ export async function sendSMS({ to, body }: SMSPayload): Promise<SMSResult> {
 
   try {
     // Format phone number (ensure it starts with +)
-    const formattedTo = to.startsWith('+') ? to : `+1${to.replace(/\D/g, '')}`
+    // Normalize to E.164. Numbers are stored in several shapes ("6176789621",
+    // "16176789621", "(617) 678-9621", "+16176789621"); blindly prefixing +1
+    // turned an 11-digit "1617..." into an invalid "+1617..." with an extra 1.
+    const digits = to.replace(/\D/g, '')
+    const formattedTo = to.trim().startsWith('+')
+      ? `+${digits}`
+      : digits.length === 11 && digits.startsWith('1')
+        ? `+${digits}`
+        : `+1${digits}`
 
     const response = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
