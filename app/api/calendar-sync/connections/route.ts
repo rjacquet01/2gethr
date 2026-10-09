@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { neon } from '@neondatabase/serverless'
 import { getUserFromRequest } from '@/lib/auth'
+import { ensureSyncSchema } from '@/lib/sync-schema'
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -16,9 +17,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    await ensureSyncSchema()
+
     const connections = await sql`
       SELECT
-        id, provider, provider_account_email, external_calendar_id,
+        apple_task_calendar_url, id, provider, provider_account_email, external_calendar_id,
         sync_enabled, sync_direction, sync_tasks, sync_interval_minutes,
         task_sync_interval_minutes, last_sync_at,
         created_at, updated_at
@@ -37,6 +40,7 @@ export async function GET(request: NextRequest) {
         syncEnabled: conn.sync_enabled,
         syncDirection: conn.sync_direction,
         syncTasks: conn.sync_tasks ?? false,
+        appleTasksAvailable: !!conn.apple_task_calendar_url,
         syncIntervalMinutes: conn.sync_interval_minutes ?? 30,
         taskSyncIntervalMinutes: conn.task_sync_interval_minutes ?? 30,
         lastSyncedAt: conn.last_sync_at,

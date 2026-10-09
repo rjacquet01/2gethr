@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
+import { ensureSyncSchema } from '@/lib/sync-schema'
 
 // Lets a user get (or create) a standing subscription URL that any calendar
 // app can subscribe to (Apple Calendar, Outlook, Google Calendar's "From
@@ -17,8 +18,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: error || 'Not authenticated' }, { status: 401 })
   }
 
+  await ensureSyncSchema()
   const existing = await sql`
-    SELECT ical_token, sync_enabled FROM calendar_sync_connections
+    SELECT ical_token, sync_enabled, feed_include_tasks, feed_include_reminders FROM calendar_sync_connections
     WHERE user_id = ${user.id} AND provider = 'apple'
   `
 
@@ -31,6 +33,8 @@ export async function GET(request: NextRequest) {
     success: true,
     feedUrl: `${baseUrl}/api/calendar-sync/ical/feed/${existing[0].ical_token}`,
     enabled: existing[0].sync_enabled,
+    includeTasks: existing[0].feed_include_tasks !== false,
+    includeReminders: existing[0].feed_include_reminders !== false,
   })
 }
 
@@ -52,6 +56,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'You need to be part of a family first' }, { status: 400 })
   }
 
+  await ensureSyncSchema()
   const familyId = familyMembership[0].family_id
   const icalToken = crypto.randomBytes(24).toString('hex')
 
@@ -64,7 +69,9 @@ export async function POST(request: NextRequest) {
     await sql`
       UPDATE calendar_sync_connections
       SET ical_token = ${icalToken}, family_id = ${familyId}, sync_enabled = true,
-          sync_direction = 'export', updated_at = NOW()
+          -- Only a link-only row is export-only; never downgrade a live CalDAV connection.
+          sync_direction = CASE WHEN external_calendar_id IS NULL THEN 'export' ELSE sync_direction END,
+          updated_at = NOW()
       WHERE id = ${existing[0].id}
     `
   } else {
@@ -98,5 +105,26 @@ export async function DELETE(request: NextRequest) {
     WHERE user_id = ${user.id} AND provider = 'apple'
   `
 
+  return NextResponse.json({ success: true })
+}
+
+// PATCH - choose whether the link includes tasks and/or reminders
+export async function PATCH(request: NextRequest) {
+  const { user, error } = await getUserFromRequest(request)
+  if (!user) {
+    return NextResponse.json({ success: false, error: error || 'Not authenticated' }, { status: 401 })
+  }
+  await ensureSyncSchema()
+  const body = await request.json().catch(() => ({}))
+  const includeTasks = typeof body.includeTasks === 'boolean' ? body.includeTasks : null
+  const includeReminders = typeof body.includeReminders === 'boolean' ? body.includeReminders : null
+
+  await sql`
+    UPDATE calendar_sync_connections
+    SET feed_include_tasks = COALESCE(${includeTasks}, feed_include_tasks),
+        feed_include_reminders = COALESCE(${includeReminders}, feed_include_reminders),
+        updated_at = NOW()
+    WHERE user_id = ${user.id} AND provider = 'apple'
+  `
   return NextResponse.json({ success: true })
 }

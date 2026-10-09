@@ -12,6 +12,7 @@ export interface CalendarSyncConnection {
   syncEnabled: boolean
   syncDirection: 'import' | 'export' | 'both'
   syncTasks: boolean
+  appleTasksAvailable?: boolean
   /** Auto-sync cadence in minutes: 1, 10, 30, or 60. See components/calendar-auto-sync.tsx. */
   syncIntervalMinutes: number
   /** Task auto-sync cadence in minutes: 1, 10, 30, or 60. Independent from syncIntervalMinutes. */

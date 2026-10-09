@@ -145,6 +145,9 @@ function CalendarSyncContent() {
   const [icalLoading, setIcalLoading] = useState(true)
   const [icalGenerating, setIcalGenerating] = useState(false)
   const [icalCopied, setIcalCopied] = useState(false)
+  const [icalTasksCopied, setIcalTasksCopied] = useState(false)
+  const [icalIncludeTasks, setIcalIncludeTasks] = useState(true)
+  const [icalIncludeReminders, setIcalIncludeReminders] = useState(true)
 
   useEffect(() => {
     const loadIcalFeed = async () => {
@@ -153,6 +156,8 @@ function CalendarSyncContent() {
         const data = await res.json()
         if (data.success) {
           setIcalFeedUrl(data.feedUrl)
+          if (typeof data.includeTasks === 'boolean') setIcalIncludeTasks(data.includeTasks)
+          if (typeof data.includeReminders === 'boolean') setIcalIncludeReminders(data.includeReminders)
         }
       } catch {
         // Leave feed unset if this fails; the button below just offers to generate one
@@ -190,6 +195,37 @@ function CalendarSyncContent() {
       setIcalCopied(true)
       toast.success('Link copied')
       setTimeout(() => setIcalCopied(false), 2000)
+    } catch {
+      toast.error('Failed to copy link')
+    }
+  }
+
+  const handleFeedToggle = async (key: 'includeTasks' | 'includeReminders', value: boolean) => {
+    if (key === 'includeTasks') setIcalIncludeTasks(value)
+    else setIcalIncludeReminders(value)
+    try {
+      const res = await authFetch('/api/calendar-sync/ical/generate', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: value }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error('failed')
+      toast.success('Subscription link updated - your calendar app will pick this up on its next refresh')
+    } catch {
+      if (key === 'includeTasks') setIcalIncludeTasks(!value)
+      else setIcalIncludeReminders(!value)
+      toast.error('Could not update the subscription link')
+    }
+  }
+
+  const handleCopyTasksOnlyFeed = async () => {
+    if (!icalFeedUrl) return
+    try {
+      await navigator.clipboard.writeText(`${icalFeedUrl}?include=tasks,reminders`)
+      setIcalTasksCopied(true)
+      toast.success('Tasks & reminders link copied')
+      setTimeout(() => setIcalTasksCopied(false), 2000)
     } catch {
       toast.error('Failed to copy link')
     }
@@ -548,7 +584,7 @@ function CalendarSyncContent() {
             <div>
               <CardTitle className="text-lg">Other Calendars</CardTitle>
               <CardDescription>
-                Subscribe from Apple Calendar, Outlook, or any app that supports calendar subscription links
+                Events, tasks and reminders in Apple Calendar, Outlook, Android (Google Calendar) or any app that supports subscription links
               </CardDescription>
             </div>
           </div>
@@ -571,12 +607,38 @@ function CalendarSyncContent() {
                   {icalCopied ? 'Copied' : 'Copy link'}
                 </Button>
               </div>
-              <p className="text-sm text-muted-foreground">
-                In Apple Calendar: File → New Calendar Subscription, and paste this link.
-                In Outlook: Add calendar → Subscribe from web, and paste this link.
-                Most apps refresh a subscribed calendar every 15-60 minutes; this is a
-                one-way feed (Togethr events flow out - it doesn&apos;t import events back).
-              </p>
+              <div className="space-y-3 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Include tasks</p>
+                    <p className="text-xs text-muted-foreground">Family tasks with a due date show up as calendar items with an alert</p>
+                  </div>
+                  <Switch checked={icalIncludeTasks} onCheckedChange={(v) => handleFeedToggle('includeTasks', v)} />
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Include reminders</p>
+                    <p className="text-xs text-muted-foreground">Your personal reminders show up with an alert at the reminder time</p>
+                  </div>
+                  <Switch checked={icalIncludeReminders} onCheckedChange={(v) => handleFeedToggle('includeReminders', v)} />
+                </div>
+              </div>
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p><strong>iPhone / iPad:</strong> Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar, paste the link.</p>
+                <p><strong>Mac:</strong> Calendar → File → New Calendar Subscription.</p>
+                <p><strong>Outlook:</strong> Add calendar → Subscribe from web, paste the link.</p>
+                <p><strong>Android:</strong> open calendar.google.com on a computer → Other calendars (+) → From URL, paste the link; it then appears in the Google Calendar app on your phone.</p>
+                <p>
+                  Apps refresh subscribed calendars on their own schedule (Apple and Outlook roughly every 15-60 minutes,
+                  Google a few times a day). This is a one-way feed: events, tasks and reminders flow out of Togethr.
+                  Already using Apple login below for events? Subscribe to the tasks &amp; reminders link instead, so
+                  events aren&apos;t duplicated:
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleCopyTasksOnlyFeed}>
+                {icalTasksCopied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+                {icalTasksCopied ? 'Copied' : 'Copy tasks & reminders only link'}
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -841,10 +903,11 @@ function AppleCalendarCard() {
     }
     setConnecting(true)
     try {
-      await connectApple(appleId, appPassword)
+      const result = (await connectApple(appleId, appPassword)) as { remindersNote?: string | null }
       setAppleId('')
       setAppPassword('')
       toast.success('Apple Calendar connected')
+      if (result?.remindersNote) toast.info(result.remindersNote)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to connect Apple Calendar')
     } finally {
@@ -935,8 +998,14 @@ function AppleCalendarCard() {
             <div className="border-t pt-4 mt-4">
               <div className="flex items-center gap-2 mb-3">
                 <ListTodo className="w-5 h-5 text-muted-foreground" />
-                <p className="font-medium">Task Sync to Apple Reminders</p>
+                <p className="font-medium">Tasks &amp; reminders in Apple Reminders (two-way)</p>
               </div>
+              {appleConnection.appleTasksAvailable === false && (
+                <p className="mb-3 rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3 text-sm text-yellow-700">
+                  Apple didn&apos;t share a Reminders list with Togethr (lists upgraded in iOS 13 or later aren&apos;t available to other apps).
+                  Use the subscription link above to see tasks and reminders on your iPhone instead.
+                </p>
+              )}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <Switch
@@ -973,17 +1042,9 @@ function AppleCalendarCard() {
             {isIncomplete && (
               <div className="flex items-start justify-between gap-3 p-3 rounded-lg bg-yellow-500/10 text-yellow-700 border border-yellow-500/20 text-sm">
                 <p>
-                  This Apple connection is missing its saved password and needs to be redone -
-                  enter your Apple ID and an app-specific password below to reconnect it.
+                  Apple login isn&apos;t connected yet - enter your Apple ID and an app-specific
+                  password below. (Your subscription link above keeps working.)
                 </p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0 h-7 px-2 text-yellow-700 hover:text-yellow-800"
-                  onClick={() => appleConnection && disconnect(appleConnection.id)}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
               </div>
             )}
             <p className="text-sm text-muted-foreground">

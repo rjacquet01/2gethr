@@ -68,6 +68,21 @@ function extractTag(xml: string, tag: string): string | null {
   return match ? match[1].trim() : null
 }
 
+/**
+ * Return the <href> that sits INSIDE the named property element (e.g. the
+ * href within <current-user-principal> or <calendar-home-set>). extractTag()
+ * alone returns the FIRST href in the document, which in a PROPFIND
+ * multistatus reply is the response's own URL ("/"), not the property's
+ * value - that mix-up made discovery PROPFIND the server root instead of the
+ * user's calendar home, and iCloud answered "Failed to list calendars (400)".
+ */
+function extractPropHref(xml: string, prop: string): string | null {
+  const re = new RegExp(`<(?:[\\w-]+:)?${prop}\\b[^>]*>([\\s\\S]*?)</(?:[\\w-]+:)?${prop}>`, 'i')
+  const m = xml.match(re)
+  if (!m) return null
+  return extractTag(m[1], 'href')
+}
+
 function extractAllHrefBlocks(xml: string): string[] {
   // Split a multistatus response into one chunk per <response> element.
   const blocks: string[] = []
@@ -113,7 +128,7 @@ export async function discoverCalDav(creds: CalDavCredentials): Promise<CalDavDi
     throw new Error(`CalDAV authentication failed (${principalRes.status}). Check the Apple ID and app-specific password.`)
   }
   const principalXml = await principalRes.text()
-  const principalHref = extractTag(principalXml, 'href')
+  const principalHref = extractPropHref(principalXml, 'current-user-principal')
   if (!principalHref) {
     throw new Error('Could not discover CalDAV principal URL')
   }
@@ -130,11 +145,14 @@ export async function discoverCalDav(creds: CalDavCredentials): Promise<CalDavDi
     throw new Error(`Failed to discover calendar home (${homeRes.status})`)
   }
   const homeXml = await homeRes.text()
-  const homeHref = extractTag(homeXml, 'href')
+  const homeHref = extractPropHref(homeXml, 'calendar-home-set')
   if (!homeHref) {
     throw new Error('Could not discover calendar-home-set')
   }
   const calendarHomeSet = new URL(homeHref, server).toString()
+  // iCloud hands out an absolute per-account host (pNN-caldav.icloud.com);
+  // everything after this must be resolved against THAT host.
+  server = new URL(calendarHomeSet).origin
 
   // Step 4: enumerate collections under the home set, and classify by
   // supported-calendar-component-set (VEVENT vs VTODO).
@@ -156,22 +174,31 @@ export async function discoverCalDav(creds: CalDavCredentials): Promise<CalDavDi
 
   let eventsCalendarUrl: string | null = null
   let tasksCalendarUrl: string | null = null
+  let tasksFallbackUrl: string | null = null
 
   for (const block of blocks) {
     const href = extractTag(block, 'href')
     if (!href) continue
-    const isCollection = /resourcetype[^>]*>[\s\S]*?calendar/i.test(block)
+    // A real calendar collection has an empty <calendar/> element inside its
+    // resourcetype (not just any element whose name contains "calendar",
+    // e.g. schedule-inbox / calendarserver extensions).
+    const isCollection = /<(?:[\w-]+:)?calendar\s*\/>/i.test(block)
     if (!isCollection) continue
 
     const hasVEVENT = /comp[^>]*name="VEVENT"/i.test(block)
     const hasVTODO = /comp[^>]*name="VTODO"/i.test(block)
     const fullUrl = new URL(href, server).toString()
 
-    if (hasVTODO && !tasksCalendarUrl) {
-      tasksCalendarUrl = fullUrl
-    } else if (hasVEVENT && !eventsCalendarUrl) {
-      eventsCalendarUrl = fullUrl
+    if (hasVTODO && !hasVEVENT) {
+      if (!tasksCalendarUrl) tasksCalendarUrl = fullUrl
+    } else if (hasVEVENT) {
+      if (!eventsCalendarUrl) eventsCalendarUrl = fullUrl
+      // Older mixed-use calendars accept both; keep as a fallback task list.
+      if (hasVTODO && !tasksFallbackUrl) tasksFallbackUrl = fullUrl
     }
+  }
+  if (!tasksCalendarUrl && tasksFallbackUrl && tasksFallbackUrl !== eventsCalendarUrl) {
+    tasksCalendarUrl = tasksFallbackUrl
   }
 
   return { server, principalUrl, calendarHomeSet, eventsCalendarUrl, tasksCalendarUrl }
@@ -320,8 +347,20 @@ export function buildVTodo(opts: {
   description?: string | null
   due?: Date | null
   completed?: boolean
+  /** Fire a device alert this many minutes before DUE (0 = at due time). Omit for no alarm. */
+  alarmMinutesBefore?: number | null
 }): string {
   const now = toIcsDateTime(new Date())
+  const alarm =
+    opts.due && opts.alarmMinutesBefore != null && !opts.completed
+      ? [
+          'BEGIN:VALARM',
+          'ACTION:DISPLAY',
+          `DESCRIPTION:${icsEscape(opts.title)}`,
+          `TRIGGER:${opts.alarmMinutesBefore <= 0 ? 'PT0S' : `-PT${Math.round(opts.alarmMinutesBefore)}M`}`,
+          'END:VALARM',
+        ]
+      : []
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -334,9 +373,86 @@ export function buildVTodo(opts: {
     opts.description ? `DESCRIPTION:${icsEscape(opts.description)}` : '',
     `STATUS:${opts.completed ? 'COMPLETED' : 'NEEDS-ACTION'}`,
     opts.completed ? `COMPLETED:${now}` : '',
+    ...alarm,
     'END:VTODO',
     'END:VCALENDAR',
   ].filter(Boolean).join('\r\n')
+}
+
+function icsUnescape(text: string): string {
+  return text.replace(/\\n/gi, '\n').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\\\/g, '\\')
+}
+
+export interface ParsedVTodo {
+  uid: string
+  title: string
+  description: string | null
+  due: string | null // ISO
+  completed: boolean
+  lastModified: string | null // ISO
+  /** Created by Togethr itself (so a pull must not re-import it as a "new" item). */
+  fromTogethr: boolean
+}
+
+function tzOffsetMs(timeZone: string, atUtcMs: number): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(atUtcMs))
+  const g = (t: string) => parseInt(parts.find((p) => p.type === t)?.value || '0', 10)
+  return Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'), g('second')) - atUtcMs
+}
+
+/**
+ * DUE/LAST-MODIFIED in a VTODO is often "DUE;TZID=America/New_York:20261010T150000"
+ * (a wall-clock time in a named zone) or a floating time. Read it as that
+ * wall-clock time in the stated zone (falling back to UTC) instead of
+ * mislabelling it as UTC.
+ */
+function parseIcsDateField(ics: string, field: string): string | null {
+  const unfolded = ics.replace(/\r?\n[ \t]/g, '')
+  const m = unfolded.match(new RegExp(`^${field}((?:;[^:\\n]*)?):(.*)$`, 'im'))
+  if (!m) return null
+  const value = m[2].trim()
+  const tzid = m[1].match(/TZID=([^;:]+)/i)?.[1]
+  const mm = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/)
+  if (tzid && mm) {
+    const [, y, mo, d, h, mi, sec] = mm
+    const wall = Date.UTC(+y, +mo - 1, +d, +h, +mi, +sec)
+    try {
+      let guess = wall - tzOffsetMs(tzid.replace(/^"|"$/g, ''), wall)
+      guess = wall - tzOffsetMs(tzid.replace(/^"|"$/g, ''), guess)
+      return new Date(guess).toISOString().replace(/\.\d{3}Z$/, 'Z')
+    } catch {
+      // unknown zone name - fall through to the UTC reading
+    }
+  }
+  return parseIcsDateValue(value)
+}
+
+/** Read the fields Togethr cares about out of one raw VTODO block. */
+export function parseVTodo(rawWithAlarms: string): ParsedVTodo | null {
+  // VALARM sub-components carry their own DESCRIPTION/TRIGGER lines that must
+  // not be mistaken for the task's.
+  const raw = rawWithAlarms.replace(/BEGIN:VALARM[\s\S]*?END:VALARM/gi, '')
+  const uid = parseIcsField(raw, 'UID')
+  const summary = parseIcsField(raw, 'SUMMARY')
+  if (!uid || !summary) return null
+  const due = parseIcsDateField(raw, 'DUE')
+  const status = (parseIcsField(raw, 'STATUS') || '').toUpperCase()
+  const completedField = parseIcsField(raw, 'COMPLETED')
+  const lm = parseIcsDateField(raw, 'LAST-MODIFIED')
+  const desc = parseIcsField(raw, 'DESCRIPTION')
+  return {
+    uid,
+    title: icsUnescape(summary),
+    description: desc ? icsUnescape(desc) : null,
+    due,
+    completed: status === 'COMPLETED' || !!completedField,
+    lastModified: lm,
+    fromTogethr: /@togethr\.app$|@togethrapp\.com$/i.test(uid),
+  }
 }
 
 /** PUT (create or update) a single VEVENT/VTODO. `itemUrl` must end in `<uid>.ics`. */

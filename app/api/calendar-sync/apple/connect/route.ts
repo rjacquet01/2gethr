@@ -3,6 +3,7 @@ import { neon } from '@neondatabase/serverless'
 import { getUserFromRequest } from '@/lib/auth'
 import { encrypt } from '@/lib/encryption'
 import { verifyCalDavCredentials } from '@/lib/services/caldav'
+import { ensureSyncSchema } from '@/lib/sync-schema'
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -18,7 +19,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { appleId, appPassword } = await request.json()
+    await ensureSyncSchema()
+
+    const { appleId, appPassword: rawPassword } = await request.json()
+    // Apple shows app-specific passwords as xxxx-xxxx-xxxx-xxxx; spaces from
+    // copy/paste break Basic auth.
+    const appPassword = typeof rawPassword === 'string' ? rawPassword.replace(/\s+/g, '') : rawPassword
 
     if (!appleId || !appPassword) {
       return NextResponse.json(
@@ -77,6 +83,9 @@ export async function POST(request: NextRequest) {
       await sql`
         UPDATE calendar_sync_connections
         SET
+          -- A row that only ever held the subscription link was created
+          -- export-only; a real CalDAV connection should sync both ways.
+          sync_direction = CASE WHEN external_calendar_id IS NULL THEN 'both' ELSE sync_direction END,
           access_token_encrypted = ${encryptedPassword},
           external_calendar_id = ${discovery.eventsCalendarUrl},
           apple_caldav_server = ${discovery.server},
@@ -101,7 +110,13 @@ export async function POST(request: NextRequest) {
       `
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      remindersAvailable: !!discovery.tasksCalendarUrl,
+      remindersNote: discovery.tasksCalendarUrl
+        ? null
+        : 'Calendar connected. Apple did not share a Reminders list (lists upgraded in iOS 13+ are not available to other apps), so tasks and reminders will appear through your Togethr calendar subscription link instead.',
+    })
   } catch (error) {
     console.error('Apple connect error:', error)
     return NextResponse.json(

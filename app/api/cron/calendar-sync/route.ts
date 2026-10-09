@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { syncGoogleConnection, syncAppleConnection } from "@/lib/services/calendar-sync-core"
+import { syncAppleReminders } from "@/lib/services/apple-reminders-sync"
+import { ensureSyncSchema } from "@/lib/sync-schema"
 
 // Runs every 5 minutes (see vercel.json). For every enabled calendar-sync
 // connection whose own syncIntervalMinutes (1/10/30/60 - configurable in
@@ -30,6 +32,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
+    await ensureSyncSchema()
+
     // One row per enabled connection, joined to that user's active family
     // (same assumption the manual-sync routes make: one active family per
     // user). A connection with no active family membership is skipped.
@@ -39,6 +43,7 @@ export async function GET(request: NextRequest) {
         cc.access_token_encrypted, cc.refresh_token_encrypted, cc.token_expires_at,
         cc.external_calendar_id, cc.provider_account_email,
         cc.sync_direction, cc.sync_interval_minutes, cc.last_sync_at,
+        cc.sync_tasks, cc.apple_task_calendar_url,
         fm.family_id
       FROM calendar_sync_connections cc
       JOIN family_members fm ON fm.user_id = cc.user_id AND fm.is_active = true
@@ -62,7 +67,13 @@ export async function GET(request: NextRequest) {
         if (conn.provider === "google") {
           await syncGoogleConnection(conn, conn.family_id, conn.user_id)
         } else if (conn.provider === "apple") {
+          // A row with no external calendar is just the subscription link
+          // (nothing to sync server-side).
+          if (!conn.external_calendar_id) continue
           await syncAppleConnection(conn, conn.family_id, conn.user_id)
+          if (conn.sync_tasks && conn.apple_task_calendar_url) {
+            await syncAppleReminders(conn, conn.family_id, conn.user_id)
+          }
         } else {
           continue
         }
