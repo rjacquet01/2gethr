@@ -136,12 +136,17 @@ export async function POST(request: NextRequest) {
     `
 
     // In-app + push + text + email, each best-effort.
-    await sendApprovalRequest({
-      requestId,
-      targetUserId: membership[0].target_user_id,
-      requesterName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "A family member",
-      familyId: validatedData.familyId,
-    })
+    try {
+      await sendApprovalRequest({
+        requestId,
+        targetUserId: membership[0].target_user_id,
+        requesterName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "A family member",
+        familyId: validatedData.familyId,
+      })
+    } catch (err) {
+      // The request is saved; a failed notification channel must not fail the ping.
+      console.error("sendApprovalRequest failed (non-fatal):", err)
+    }
 
     return NextResponse.json({
       success: true,
@@ -158,7 +163,7 @@ export async function POST(request: NextRequest) {
 
     console.error("Request location error:", error)
     return NextResponse.json(
-      { success: false, error: "Failed to request location" },
+      { success: false, error: "Failed to request location", detail: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300) },
       { status: 500 }
     )
   }
