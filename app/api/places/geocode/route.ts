@@ -17,6 +17,43 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    const latParam = request.nextUrl.searchParams.get("lat")
+    const lngParam = request.nextUrl.searchParams.get("lng")
+    if (latParam && lngParam) {
+      const lat = parseFloat(latParam)
+      const lng = parseFloat(lngParam)
+      if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+        return NextResponse.json({ success: false, error: "Invalid coordinates" }, { status: 400 })
+      }
+      const key = process.env.GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+      if (key) {
+        try {
+          const g = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}`)
+          const gd = await g.json()
+          if (gd.status === "OK" && gd.results?.length > 0) {
+            return NextResponse.json({ success: true, data: { formattedAddress: gd.results[0].formatted_address, source: "google" } })
+          }
+        } catch (e) {
+          console.error("Google reverse geocode error:", e)
+        }
+      }
+      try {
+        const n = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+          { headers: { "User-Agent": "Togethr-Family-App/1.0" } }
+        )
+        if (n.ok) {
+          const nd = await n.json()
+          if (nd?.display_name) {
+            return NextResponse.json({ success: true, data: { formattedAddress: nd.display_name, source: "nominatim" } })
+          }
+        }
+      } catch (e) {
+        console.error("Nominatim reverse error:", e)
+      }
+      return NextResponse.json({ success: false, error: "No address found for that location" }, { status: 404 })
+    }
+
     const address = request.nextUrl.searchParams.get("address")?.trim()
     if (!address) {
       return NextResponse.json(

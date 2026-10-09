@@ -180,16 +180,30 @@ export default function PlacesPage() {
     }
     setIsLocating(true)
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
+        const lat = position.coords.latitude
+        const lng = position.coords.longitude
         const update = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
+          latitude: lat,
+          longitude: lng,
           locationLabel: `Using your current location (±${Math.round(position.coords.accuracy)}m accuracy)`,
         }
         if (target === 'new') setNewPlace((p) => ({ ...p, ...update }))
         else setEditPlace((p) => ({ ...p, ...update }))
-        setIsLocating(false)
         toast.success('Current location set')
+        // Fill the address box from the coordinates (only if it's empty)
+        try {
+          const res = await authFetch(`/api/places/geocode?lat=${lat}&lng=${lng}`, { credentials: 'include' })
+          const data = await res.json()
+          if (data.success && data.data?.formattedAddress) {
+            const addr: string = data.data.formattedAddress
+            if (target === 'new') setNewPlace((p) => (p.address ? p : { ...p, address: addr }))
+            else setEditPlace((p) => (p.address ? p : { ...p, address: addr }))
+          }
+        } catch {
+          // address lookup is best-effort; coordinates are already set
+        }
+        setIsLocating(false)
       },
       (err) => {
         setIsLocating(false)
