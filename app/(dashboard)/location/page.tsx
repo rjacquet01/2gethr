@@ -95,6 +95,50 @@ export default function LocationPage() {
   const [showSettingsDialog, setShowSettingsDialog] = useState(false)
   const [updatingSettings, setUpdatingSettings] = useState(false)
   const [requestingLocation, setRequestingLocation] = useState<string | null>(null)
+  // Location pings other parents sent me that I still need to approve or deny.
+  const [approvals, setApprovals] = useState<{ id: string; requesterName: string; expiresAt: string }[]>([])
+  const [answeringApproval, setAnsweringApproval] = useState<string | null>(null)
+
+  const loadApprovals = useCallback(async () => {
+    try {
+      const r = await authFetch('/api/location/request?awaiting=1')
+      if (!r.ok) return
+      const j = await r.json()
+      if (Array.isArray(j?.data)) setApprovals(j.data)
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  useEffect(() => {
+    loadApprovals()
+    const t = setInterval(() => {
+      if (!document.hidden) loadApprovals()
+    }, 15_000)
+    return () => clearInterval(t)
+  }, [loadApprovals])
+
+  const answerApproval = async (id: string, action: 'approve' | 'deny') => {
+    setAnsweringApproval(id)
+    try {
+      const res = await authFetch(`/api/location/request/${encodeURIComponent(id)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        toast.success(action === 'approve' ? 'Approved - sharing your location now' : 'Request declined')
+      } else {
+        toast.error(data.error || 'Could not answer the request')
+      }
+    } catch {
+      toast.error('Could not answer the request')
+    } finally {
+      setAnsweringApproval(null)
+      loadApprovals()
+    }
+  }
   // How often THIS viewer's screen auto-refreshes everyone's location/geofence
   // status (distinct from mySettings.updateIntervalSec, which controls how
   // often a member with ACTIVE mode PUBLISHES their own location). Previously
@@ -200,9 +244,9 @@ export default function LocationPage() {
       const data = await res.json()
 
       if (res.ok) {
-        toast.success(`Location request sent to ${memberName}`)
-        // Refresh locations after a short delay to show updated data
-        setTimeout(() => loadLocations(), 2000)
+        toast.success(data?.data?.status === 'AWAITING_APPROVAL'
+          ? `Asked ${memberName} to approve - you'll be notified when they respond`
+          : `Location request sent to ${memberName}`)
       } else {
         toast.error(data.error || 'Failed to request location')
       }
@@ -649,6 +693,26 @@ export default function LocationPage() {
             </Button>
           </div>
         </div>
+
+        {/* Pings waiting on my approval */}
+        {approvals.map((a) => (
+          <Card key={a.id} className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+            <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium">{a.requesterName} wants to see your current location</p>
+                <p className="text-sm text-muted-foreground">Your location is shared once, only if you approve.</p>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" disabled={answeringApproval === a.id} onClick={() => answerApproval(a.id, 'approve')}>
+                  Approve
+                </Button>
+                <Button size="sm" variant="outline" disabled={answeringApproval === a.id} onClick={() => answerApproval(a.id, 'deny')}>
+                  Deny
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
 
         {/* My Location Sharing Status */}
         <Card>

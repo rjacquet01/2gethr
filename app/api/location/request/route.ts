@@ -3,7 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription } from "@/lib/auth"
 import { z } from "zod"
 import { ensureLocationRequestsTable } from "@/lib/location-schema"
-import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
+import { APPROVAL_WINDOW_MINUTES, sendApprovalRequest } from "@/lib/location-approval"
 
 const requestLocationSchema = z.object({
   memberId: z.string().min(1, "Member ID is required"),
@@ -101,32 +101,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create a location request notification for the target member
-    const notifId = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-    await sql`
-      INSERT INTO notifications (id, user_id, type, title, body, data, created_at)
-      VALUES (
-        ${notifId},
-        ${membership[0].target_user_id},
-        'LOCATION_ALERT',
-        'Location Request',
-        ${`${user.firstName || 'A family member'} has requested your current location`},
-        ${JSON.stringify({ 
-          subType: 'LOCATION_REQUEST',
-          requesterId: user.id, 
-          requesterName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-          familyId: validatedData.familyId,
-          requestedAt: new Date().toISOString()
-        })}::jsonb,
-        NOW()
-      )
+    // Don't spam: one open approval request per requester/target pair.
+    const open = await sql`
+      SELECT id FROM location_requests
+      WHERE requester_user_id = ${user.id} AND target_user_id = ${membership[0].target_user_id}
+        AND status = 'AWAITING_APPROVAL' AND expires_at > NOW()
+      LIMIT 1
     `
+    if (open.length > 0) {
+      return NextResponse.json({
+        success: true,
+        message: "A request is already waiting for approval",
+        data: { requestId: open[0].id, status: "AWAITING_APPROVAL" },
+      })
+    }
 
-    // Also store as a pending location request for the device to check
+    // The target must approve before their device shares anything. Status stays
+    // AWAITING_APPROVAL (ignored by the device poll) until they approve.
     const requestId = `locreq_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
     await sql`
       INSERT INTO location_requests (
-        id, requester_user_id, target_user_id, family_id, 
+        id, requester_user_id, target_user_id, family_id,
         status, created_at, expires_at
       )
       VALUES (
@@ -134,32 +129,24 @@ export async function POST(request: NextRequest) {
         ${user.id},
         ${membership[0].target_user_id},
         ${validatedData.familyId},
-        'PENDING',
+        'AWAITING_APPROVAL',
         NOW(),
-        NOW() + INTERVAL '5 minutes'
+        NOW() + (${APPROVAL_WINDOW_MINUTES} * INTERVAL '1 minute')
       )
-      ON CONFLICT DO NOTHING
     `
 
-    // Best-effort push so a phone that is only running the background
-    // service still lights up; the service also polls for pending requests.
-    if (isFirebaseConfigured()) {
-      try {
-        await sendPushToUser(membership[0].target_user_id, {
-          title: "Location Request",
-          body: `${user.firstName || 'A family member'} has requested your current location`,
-          data: { type: "LOCATION_REQUEST" },
-          clickAction: "/location",
-        })
-      } catch (err) {
-        console.error("Location request push failed (non-fatal):", err)
-      }
-    }
+    // In-app + push + text + email, each best-effort.
+    await sendApprovalRequest({
+      requestId,
+      targetUserId: membership[0].target_user_id,
+      requesterName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "A family member",
+      familyId: validatedData.familyId,
+    })
 
     return NextResponse.json({
       success: true,
-      message: "Location request sent successfully",
-      data: { requestId }
+      message: "Approval request sent",
+      data: { requestId, status: "AWAITING_APPROVAL" }
     })
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -190,13 +177,15 @@ export async function GET(request: NextRequest) {
     }
 
     await ensureLocationRequestsTable()
-    // Get pending requests for this user that haven't expired
+    // ?awaiting=1 -> requests this user still has to approve or deny.
+    // default    -> approved requests the device should answer with a fresh fix.
+    const status = new URL(request.url).searchParams.get("awaiting") ? "AWAITING_APPROVAL" : "PENDING"
     const requests = await sql`
       SELECT lr.*, u.first_name, u.last_name
       FROM location_requests lr
       JOIN users u ON lr.requester_user_id = u.id
       WHERE lr.target_user_id = ${user.id}
-        AND lr.status = 'PENDING'
+        AND lr.status = ${status}
         AND lr.expires_at > NOW()
       ORDER BY lr.created_at DESC
       LIMIT 10
