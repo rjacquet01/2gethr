@@ -85,3 +85,32 @@ export async function alertFamilyAdults(familyId: string, aboutUserId: string, o
   }
   return delivered
 }
+
+/**
+ * A child turned their own location sharing off (in-app switch or the Android
+ * "Stop sharing" button). Tell every parent/guardian on every channel.
+ * Never throws: it must not break the child's own request.
+ */
+export async function notifyChildStoppedSharing(memberId: string, how: string) {
+  try {
+    const rows = await sql`
+      SELECT fm.family_id, fm.user_id, fm.role, COALESCE(u.first_name, fm.nickname, 'Your child') AS name
+      FROM family_members fm
+      LEFT JOIN users u ON u.id = fm.user_id
+      WHERE fm.id = ${memberId} AND fm.is_active = true
+      LIMIT 1
+    `
+    const m = rows[0]
+    if (!m || m.role !== "CHILD") return
+    await alertFamilyAdults(m.family_id, m.user_id, {
+      title: `${m.name} turned off location sharing`,
+      body: `${m.name} stopped sharing their location (${how}) at ${new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET. You can no longer see where they are.`,
+      type: "LOCATION_ALERT",
+      data: { subType: "SHARING_OFF", memberId },
+      clickAction: "/location",
+      urgent: true,
+    })
+  } catch (err) {
+    console.error("notifyChildStoppedSharing failed:", err)
+  }
+}

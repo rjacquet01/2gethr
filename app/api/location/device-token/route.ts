@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription } from "@/lib/auth"
+import { notifyChildStoppedSharing } from "@/lib/family-alerts"
+import { verifyDeviceToken } from "@/lib/device-token"
 import { issueDeviceToken, revokeDeviceTokens, getDeviceTokenStatus, revokeByToken } from "@/lib/device-token"
 
 async function resolveMember(userId: string, memberId: string | null, familyId: string | null) {
@@ -45,7 +47,9 @@ export async function DELETE(request: NextRequest) {
   // The native app's "Stop sharing" button revokes its own token.
   const deviceToken = request.headers.get("x-device-token")
   if (deviceToken) {
-    await revokeByToken(deviceToken)
+    const info = await verifyDeviceToken(deviceToken)
+    const revoked = await revokeByToken(deviceToken)
+    if (revoked && info) await notifyChildStoppedSharing(info.memberId, "stopped background sharing on their phone")
     return NextResponse.json({ success: true })
   }
   const { user } = await getUserFromRequest(request)
@@ -53,6 +57,8 @@ export async function DELETE(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const member = await resolveMember(user.id, searchParams.get("memberId"), searchParams.get("familyId"))
   if (!member) return NextResponse.json({ error: "Member not found" }, { status: 404 })
+  const had = await getDeviceTokenStatus(user.id, member.id)
   await revokeDeviceTokens(user.id, member.id)
+  if (had.active) await notifyChildStoppedSharing(member.id, "stopped background sharing")
   return NextResponse.json({ success: true })
 }

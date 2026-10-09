@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
+import { notifyChildStoppedSharing } from "@/lib/family-alerts"
 
 const updateSettingsSchema = z.object({
   memberId: z.string().min(1, "Member ID is required"),
@@ -201,8 +202,9 @@ export async function PATCH(request: NextRequest) {
 
     // Check if settings exist
     const existing = await sql`
-      SELECT id FROM location_settings WHERE family_member_id = ${validatedData.memberId}
+      SELECT id, mode, share_with_family FROM location_settings WHERE family_member_id = ${validatedData.memberId}
     `
+    const wasSharing = existing.length > 0 && existing[0].mode === "ACTIVE" && existing[0].share_with_family === true
 
     if (existing.length === 0) {
       // Create settings - generate a text-based ID to match the column type
@@ -232,6 +234,12 @@ export async function PATCH(request: NextRequest) {
           updated_at = NOW()
         WHERE family_member_id = ${validatedData.memberId}
       `
+    }
+
+    // A child switching their own sharing off: tell every parent on all channels.
+    if (isOwnSettings && targetIsChild && wasSharing) {
+      const nowOff = validatedData.mode === "OFF" || validatedData.mode === "PAUSED" || validatedData.shareWithFamily === false
+      if (nowOff) await notifyChildStoppedSharing(validatedData.memberId, validatedData.mode === "PAUSED" ? "paused" : "turned off in the app")
     }
 
     // Audit log
