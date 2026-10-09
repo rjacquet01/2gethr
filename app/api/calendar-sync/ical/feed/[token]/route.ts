@@ -77,7 +77,7 @@ function localParts(date: Date, timeZone: string) {
   }
   const get = (t: string) => parts.find((p) => p.type === t)?.value || '00'
   return {
-    ymd: `${get('year')}${get('month')}${get('day')}`,
+    ymd: `${get('year')}${get('month')}${get('day')}` as string,
     hour: parseInt(get('hour'), 10),
     minute: parseInt(get('minute'), 10),
   }
@@ -258,8 +258,14 @@ export async function GET(
 
     // The create form defaults a date-only task to 23:59:59 local time; show
     // those as all-day items rather than a late-night appointment.
+    // A due value of exactly 00:00:00 UTC is a date-only task (the date
+    // pickers on other entry paths, and imports, store midnight UTC) - show it
+    // on that calendar date instead of shifting it into the previous evening.
     const local = localParts(due, timeZone)
-    const allDay = local.hour === 23 && local.minute >= 58
+    const midnightUtc =
+      due.getUTCHours() === 0 && due.getUTCMinutes() === 0 && due.getUTCSeconds() === 0
+    const allDay = midnightUtc || (local.hour === 23 && local.minute >= 58)
+    if (midnightUtc) local.ymd = due.toISOString().slice(0, 10).replace(/-/g, '')
 
     lines.push('BEGIN:VEVENT')
     lines.push(foldLine(`UID:task-${task.id}@togethrapp.com`))
