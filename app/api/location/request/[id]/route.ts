@@ -38,7 +38,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (action === "approve") {
       const upd = await sql`
         UPDATE location_requests
-        SET status = 'PENDING', expires_at = NOW() + (${APPROVED_WINDOW_MINUTES} * INTERVAL '1 minute')
+        SET status = 'PENDING', expires_at = NOW() + make_interval(mins => ${APPROVED_WINDOW_MINUTES}::int)
         WHERE id = ${id} AND status = 'AWAITING_APPROVAL' RETURNING id
       `
       if (upd.length === 0) return NextResponse.json({ success: false, error: "Already answered", code: "NOT_PENDING" }, { status: 409 })

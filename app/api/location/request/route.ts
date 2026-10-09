@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
         ${validatedData.familyId},
         'AWAITING_APPROVAL',
         NOW(),
-        NOW() + (${APPROVAL_WINDOW_MINUTES} * INTERVAL '1 minute')
+        NOW() + make_interval(mins => ${APPROVAL_WINDOW_MINUTES}::int)
       )
     `
 
