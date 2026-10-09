@@ -7,14 +7,14 @@ import { z } from "zod"
 const createPlaceSchema = z.object({
   familyId: z.string().uuid("Invalid family ID"),
   name: z.string().min(1, "Name is required").max(100),
-  address: z.string().max(500).optional(),
+  address: z.string().max(500).optional().nullable(),
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   radius: z.number().int().min(50).max(5000).default(100), // meters
   geofenceEnabled: z.boolean().default(false),
   alertOnArrival: z.boolean().default(true),
   alertOnDeparture: z.boolean().default(true),
-  icon: z.string().max(50).optional(),
+  icon: z.string().max(50).optional().nullable(),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default("#3B82F6"),
   // Which channels a geofence arrival/departure alert for this place uses
   // (in_app, push, email, sms) - mirrors notify_channels on tasks/events/
