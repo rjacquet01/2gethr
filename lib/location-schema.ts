@@ -19,6 +19,13 @@ export function ensureLocationRequestsTable(): Promise<void> {
           expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '5 minutes')
         )
       `
+      // The original table had a CHECK limiting status; the approval flow adds
+      // AWAITING_APPROVAL / DENIED / EXPIRED, so replace it with a wider one.
+      await sql`ALTER TABLE location_requests DROP CONSTRAINT IF EXISTS location_requests_status_check`
+      await sql`
+        ALTER TABLE location_requests ADD CONSTRAINT location_requests_status_check
+        CHECK (status IN ('AWAITING_APPROVAL', 'PENDING', 'FULFILLED', 'EXPIRED', 'DENIED', 'CANCELLED'))
+      `
       await sql`CREATE INDEX IF NOT EXISTS idx_location_requests_target_user ON location_requests(target_user_id, status)`
     })().catch((err) => {
       ensured = null
