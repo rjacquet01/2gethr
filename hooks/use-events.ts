@@ -9,6 +9,7 @@ export { getAccessToken, authFetch }
 
 export interface Event {
   id: string
+  notifyChannels?: string[]
   calendarId: string
   familyId: string
   title: string

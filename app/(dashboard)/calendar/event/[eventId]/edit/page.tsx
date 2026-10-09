@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { CategoryPicker } from '@/components/category-picker'
+import { NotificationChannelsPicker, type NotificationChannelValue } from '@/components/notification-channels-picker'
 import { ColorPicker } from '@/components/customization'
 import { cleanCustomCategory } from '@/lib/categories'
 import { Label } from '@/components/ui/label'
@@ -46,6 +47,7 @@ export default function EditEventPage() {
   
   const { event, isLoading, mutate } = useEvent(eventId)
   const [isSaving, setIsSaving] = useState(false)
+  const [notifyChannels, setNotifyChannels] = useState<NotificationChannelValue[]>([])
   
   const [formData, setFormData] = useState({
     title: '',
@@ -84,6 +86,9 @@ export default function EditEventPage() {
         isRecurring: event.isRecurring || false,
         recurrenceRule: event.recurrence?.frequency?.toLowerCase() || 'weekly',
       })
+    }
+    if (event) {
+      setNotifyChannels(((event as unknown as { notifyChannels?: NotificationChannelValue[] }).notifyChannels) || [])
     }
   }, [event])
 
@@ -126,6 +131,7 @@ export default function EditEventPage() {
           visibility: formData.visibility,
           category: cleanCustomCategory(formData.category) || 'OTHER',
           color: formData.color || null,
+          notifyChannels,
         }),
       })
       
@@ -315,6 +321,14 @@ export default function EditEventPage() {
                 clearLabel="Category color"
               />
             </div>
+
+            {/* Notification Channels */}
+            <NotificationChannelsPicker
+              selected={notifyChannels}
+              onChange={setNotifyChannels}
+              label="Notify participants via"
+              helpText="Leave unchecked to use each participant's own notification settings."
+            />
 
             {/* Visibility */}
             <div className="space-y-2">

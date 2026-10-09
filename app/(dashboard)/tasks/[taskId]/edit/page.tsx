@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CategoryPicker } from '@/components/category-picker'
+import { NotificationChannelsPicker, type NotificationChannelValue } from '@/components/notification-channels-picker'
 import { cleanCustomCategory } from '@/lib/categories'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -38,6 +39,7 @@ export default function EditTaskPage({ params }: { params: Promise<{ taskId: str
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurrenceRule, setRecurrenceRule] = useState<string>('daily')
   const [submitting, setSubmitting] = useState(false)
+  const [notifyChannels, setNotifyChannels] = useState<NotificationChannelValue[]>([])
 
   // Populate form when task loads
   useEffect(() => {
@@ -51,6 +53,7 @@ export default function EditTaskPage({ params }: { params: Promise<{ taskId: str
       setRequiresApproval(task.requires_approval || false)
       setIsRecurring(task.is_recurring || false)
       setRecurrenceRule(task.recurrence_rule || 'daily')
+      setNotifyChannels(((task as unknown as { notify_channels?: NotificationChannelValue[] | null }).notify_channels) || [])
       
       if (task.due_date) {
         const dueDateTime = parseISO(task.due_date)
@@ -93,6 +96,7 @@ export default function EditTaskPage({ params }: { params: Promise<{ taskId: str
         requiresApproval,
         isRecurring,
         recurrenceRule: isRecurring ? recurrenceRule : null,
+        notifyChannels,
       })
 
       toast.success('Task updated successfully')
@@ -269,6 +273,14 @@ export default function EditTaskPage({ params }: { params: Promise<{ taskId: str
                 />
               </div>
             </div>
+
+            {/* Notification Channels */}
+            <NotificationChannelsPicker
+              selected={notifyChannels}
+              onChange={setNotifyChannels}
+              label="Notify assignee via"
+              helpText="Leave unchecked to use the assignee's own notification settings."
+            />
 
             {/* Requires Approval */}
             <div className="flex items-center justify-between p-4 rounded-lg border">

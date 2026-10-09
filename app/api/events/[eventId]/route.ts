@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ensureEventCategoryColumn } from "@/lib/event-category-column"
+import { ensureTaskEventNotifyChannelsColumns } from "@/lib/notify-channels-schema"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
@@ -16,6 +17,7 @@ const updateEventSchema = z.object({
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional().nullable(),
   category: z.string().max(40).optional().nullable(),
   reminderMinutes: z.array(z.number().int().min(0)).optional(),
+  notifyChannels: z.array(z.enum(["in_app", "push", "email", "sms"])).optional(),
   status: z.enum(["APPROVED", "CANCELLED"]).optional(),
 })
 
@@ -26,6 +28,7 @@ export async function GET(
 ) {
   try {
     await ensureEventCategoryColumn()
+    await ensureTaskEventNotifyChannelsColumns()
     const { eventId } = await params
     const { user, error } = await getUserFromRequest(request)
 
@@ -114,6 +117,7 @@ export async function GET(
         customColor: event.color || null,
         category: event.category || 'OTHER',
         reminderMinutes: event.reminder_minutes,
+        notifyChannels: event.notify_channels || [],
         isRecurring: event.is_recurring,
         recurrenceId: event.recurrence_rule_id, // alias for frontend compatibility
         createdById: event.created_by_id,
@@ -171,6 +175,7 @@ export async function PATCH(
 ) {
   try {
     await ensureEventCategoryColumn()
+    await ensureTaskEventNotifyChannelsColumns()
     const { eventId } = await params
     const { user, error } = await getUserFromRequest(request)
 
@@ -226,6 +231,7 @@ export async function PATCH(
         color = CASE WHEN ${validatedData.color !== undefined} THEN ${validatedData.color} ELSE color END,
         category = CASE WHEN ${validatedData.category !== undefined} THEN ${validatedData.category ? validatedData.category.replace(/\s+/g, ' ').trim().slice(0, 30) || null : null} ELSE category END,
         reminder_minutes = COALESCE(${validatedData.reminderMinutes}, reminder_minutes),
+        notify_channels = CASE WHEN ${validatedData.notifyChannels !== undefined} THEN ${validatedData.notifyChannels && validatedData.notifyChannels.length > 0 ? validatedData.notifyChannels : null}::text[] ELSE notify_channels END,
         status = COALESCE(${validatedData.status}, status),
         updated_at = NOW()
       WHERE id = ${eventId}

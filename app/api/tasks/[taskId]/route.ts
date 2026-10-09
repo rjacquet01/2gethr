@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { notifyTaskCompleted, createNotification } from '@/lib/notifications'
+import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
 
 // Helper to sync task status updates across all related tables
 async function syncTaskStatusUpdate(
@@ -441,7 +442,11 @@ export async function PATCH(
     }
     
     // General update (action = 'update' or any field updates)
-    if (action === 'update' || updates.title || updates.description || updates.dueDate || updates.priority || updates.category || updates.assignedToUserId !== undefined || updates.assignedToChildId !== undefined || updates.requiresApproval !== undefined || updates.isRecurring !== undefined) {
+    if (action === 'update' || updates.title || updates.description || updates.dueDate || updates.priority || updates.category || updates.assignedToUserId !== undefined || updates.assignedToChildId !== undefined || updates.requiresApproval !== undefined || updates.isRecurring !== undefined || updates.notifyChannels !== undefined) {
+      await ensureTaskEventNotifyChannelsColumns()
+      const cleanChannels: string[] | null = Array.isArray(updates.notifyChannels)
+        ? (updates.notifyChannels as unknown[]).filter((c): c is string => typeof c === 'string' && ['in_app', 'push', 'email', 'sms'].includes(c))
+        : null
       const changes: Record<string, unknown> = {}
       
       if (updates.title) {
@@ -481,6 +486,7 @@ export async function PATCH(
           is_recurring = ${updates.isRecurring !== undefined ? updates.isRecurring : task.is_recurring},
           recurrence_rule = ${updates.recurrenceRule !== undefined ? updates.recurrenceRule : task.recurrence_rule},
           reminder_enabled = ${updates.reminderEnabled !== undefined ? updates.reminderEnabled : task.reminder_enabled},
+          notify_channels = CASE WHEN ${Array.isArray(updates.notifyChannels)} THEN ${cleanChannels && cleanChannels.length > 0 ? cleanChannels : null}::text[] ELSE notify_channels END,
           updated_at = NOW()
         WHERE id = ${taskId}
       `
