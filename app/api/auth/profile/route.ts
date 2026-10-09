@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { isValidTimeZone } from "@/lib/recurrence"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, hashPassword, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
@@ -13,7 +14,7 @@ const updateProfileSchema = z.object({
   firstName: z.string().max(100).optional(),
   lastName: z.string().max(100).optional(),
   phone: z.string().max(20).optional().nullable(),
-  timezone: z.string().optional(),
+  timezone: z.string().refine((tz) => isValidTimeZone(tz), { message: "Invalid timezone" }).optional(),
   dateOfBirth: z.string().optional().nullable(),
 })
 

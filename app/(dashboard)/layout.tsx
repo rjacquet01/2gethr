@@ -19,6 +19,7 @@ import {
 import { Spinner } from '@/components/ui/spinner'
 import { FavoritesDropdown } from '@/components/favorites-dropdown'
 import { CalendarAutoSync } from '@/components/calendar-auto-sync'
+import { TimezoneSync } from '@/components/timezone-sync'
 import { Logo, LogoIcon } from '@/components/logo'
 import { FamilySwitcher } from '@/components/family-switcher'
 import { 
@@ -103,6 +104,7 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen bg-background">
       <CalendarAutoSync />
+      <TimezoneSync />
       {/* Desktop Sidebar */}
       <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 border-r border-sidebar-border bg-sidebar lg:block">
         <div className="flex h-full flex-col">

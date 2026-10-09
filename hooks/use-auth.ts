@@ -71,6 +71,15 @@ export interface AuthState {
 // 401, it exchanges the stored refresh token for a new access token via
 // /api/auth/refresh, stores it, and retries the original request once
 // before giving up and clearing tokens (which signs the person out).
+/** The device's IANA timezone (e.g. America/New_York), or 'UTC' if it can't be read. */
+export function detectBrowserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch {
+    return 'UTC'
+  }
+}
+
 export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const token = getAccessToken()
   const headers = new Headers(options.headers)
@@ -260,7 +269,9 @@ export function useAuth(): AuthState & {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(registerData),
+        // Send the device's real timezone - without it every account was created
+        // as UTC, which broke quiet hours and when tasks/reminders land on calendars.
+        body: JSON.stringify({ ...registerData, timezone: detectBrowserTimeZone() }),
       })
       
       const data = await res.json()
