@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { verifyDeviceToken } from "@/lib/device-token"
 import { getUserFromRequest, getUserWithFamily } from "@/lib/auth"
-import { alertFamilyAdults } from "@/lib/family-alerts"
+import { dispatchSos, ensureSosSchema } from "@/lib/sos"
 import { z } from "zod"
+
+export const maxDuration = 30
 
 const schema = z.object({
   familyId: z.string().min(1).optional(),
@@ -43,26 +45,49 @@ export async function POST(request: NextRequest) {
     `
     if (member.length === 0) return NextResponse.json({ success: false, error: "Not a member of this family" }, { status: 403 })
 
-    let lat = body.latitude, lng = body.longitude
+    let lat: number | null = body.latitude ?? null
+    let lng: number | null = body.longitude ?? null
+    let locationNote = "live GPS"
+    let source = "device"
     if (lat == null || lng == null) {
+      lat = null
+      lng = null
       const last = await sql`
-        SELECT latitude, longitude FROM location_pings WHERE user_id = ${userId} ORDER BY timestamp DESC LIMIT 1
+        SELECT latitude, longitude, timestamp FROM location_pings WHERE user_id = ${userId} ORDER BY timestamp DESC LIMIT 1
       `
       if (last[0]) {
         lat = Number(last[0].latitude)
         lng = Number(last[0].longitude)
+        const mins = Math.max(0, Math.round((Date.now() - new Date(last[0].timestamp).getTime()) / 60000))
+        locationNote = mins < 2 ? "just now" : mins < 120 ? `last known, ${mins} min ago` : `last known, ${Math.round(mins / 60)} h ago`
+        source = "last_ping"
+      } else {
+        source = "none"
       }
     }
     const who = (await sql`SELECT first_name FROM users WHERE id = ${userId}`)[0]?.first_name || "A family member"
-    const where = lat != null && lng != null ? ` Location: https://maps.google.com/?q=${lat},${lng}` : " (no recent location available)"
-    const delivered = await alertFamilyAdults(familyId, userId, {
-      title: `SOS from ${who}`,
-      body: `${who} pressed SOS${body.message ? `: "${body.message}"` : ""}.${where}`,
-      type: "LOCATION_ALERT",
-      data: { subType: "SOS", userId, latitude: lat ?? null, longitude: lng ?? null },
-      urgent: true,
+
+    await ensureSosSchema()
+    const eventId = `sos_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+    await sql`
+      INSERT INTO sos_events (id, user_id, family_id, latitude, longitude, location_source, message)
+      VALUES (${eventId}, ${userId}, ${familyId}, ${lat}, ${lng}, ${source}, ${body.message ?? null})
+    `
+    const results = await dispatchSos({
+      eventId, familyId, senderId: userId, senderName: who,
+      latitude: lat, longitude: lng, locationNote, message: body.message,
     })
-    return NextResponse.json({ success: true, data: { notified: delivered } })
+    const reached = results.filter((r) => r.sms === "sent" || r.push === "sent" || r.email === "sent").length
+    return NextResponse.json({
+      success: true,
+      data: {
+        notified: results.length,
+        reached,
+        hasLocation: lat != null && lng != null,
+        locationNote,
+        recipients: results,
+      },
+    })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ success: false, error: error.errors[0].message }, { status: 400 })
