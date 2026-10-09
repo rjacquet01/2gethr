@@ -19,9 +19,19 @@ export function SosButton({ familyId }: { familyId?: string }) {
     try {
       // Use a fresh fix when the browser can give one quickly; the server
       // falls back to the last stored location otherwise.
+      // getCurrentPosition's own timeout does not start until the user answers
+      // a pending permission prompt, so it can hang forever. Race it against a
+      // hard timer: the alert must go out within ~4s no matter what, and the
+      // server falls back to the last known location.
       const pos = await new Promise<GeolocationPosition | null>((resolve) => {
-        if (!navigator.geolocation) return resolve(null)
-        navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), { enableHighAccuracy: true, timeout: 4000, maximumAge: 30000 })
+        const hard = setTimeout(() => resolve(null), 4000)
+        const done = (p: GeolocationPosition | null) => { clearTimeout(hard); resolve(p) }
+        if (!navigator.geolocation) return done(null)
+        try {
+          navigator.geolocation.getCurrentPosition(done, () => done(null), { enableHighAccuracy: true, timeout: 3500, maximumAge: 60000 })
+        } catch {
+          done(null)
+        }
       })
       const payload = JSON.stringify({
         familyId,
