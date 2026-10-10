@@ -15,6 +15,8 @@ import { cleanCustomCategory } from '@/lib/categories'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
+import { useFamily } from '@/hooks/use-family'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import {
@@ -48,6 +50,9 @@ export default function EditEventPage() {
   const { event, isLoading, mutate } = useEvent(eventId)
   const [isSaving, setIsSaving] = useState(false)
   const [notifyChannels, setNotifyChannels] = useState<NotificationChannelValue[]>([])
+  const [participantUserIds, setParticipantUserIds] = useState<string[]>([])
+  const eventFamilyId = (event as unknown as { calendar?: { familyId?: string } } | undefined)?.calendar?.familyId
+  const { family } = useFamily(eventFamilyId)
   
   const [formData, setFormData] = useState({
     title: '',
@@ -89,6 +94,8 @@ export default function EditEventPage() {
     }
     if (event) {
       setNotifyChannels(((event as unknown as { notifyChannels?: NotificationChannelValue[] }).notifyChannels) || [])
+      const existing = (event as unknown as { participants?: Array<{ userId?: string | null }> }).participants || []
+      setParticipantUserIds(existing.map((p) => p.userId).filter((id): id is string => !!id))
     }
   }, [event])
 
@@ -132,6 +139,7 @@ export default function EditEventPage() {
           category: cleanCustomCategory(formData.category) || 'OTHER',
           color: formData.color || null,
           notifyChannels,
+          participantUserIds,
         }),
       })
       
@@ -346,6 +354,37 @@ export default function EditEventPage() {
                   <SelectItem value="SELECTED_MEMBERS">Selected Members</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Participants */}
+            <div className="space-y-2">
+              <Label>Participants</Label>
+              <p className="text-xs text-muted-foreground">Choose the family members invited to this event.</p>
+              {!family ? (
+                <p className="text-sm text-muted-foreground">Loading family members...</p>
+              ) : (
+                <div className="space-y-2 rounded-lg border border-border p-3">
+                  {(family.members || []).filter((m) => m.isActive !== false && m.userId).map((m) => (
+                    <div key={m.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`participant-${m.id}`}
+                        checked={participantUserIds.includes(m.userId)}
+                        onCheckedChange={(checked) =>
+                          setParticipantUserIds((prev) =>
+                            checked ? Array.from(new Set([...prev, m.userId])) : prev.filter((id) => id !== m.userId)
+                          )
+                        }
+                      />
+                      <label htmlFor={`participant-${m.id}`} className="text-sm cursor-pointer">
+                        {m.displayName} <span className="text-xs text-muted-foreground capitalize">({m.role.toLowerCase()})</span>
+                      </label>
+                    </div>
+                  ))}
+                  {(family.members || []).length === 0 && (
+                    <p className="text-sm text-muted-foreground">No eligible members found.</p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Actions */}

@@ -20,6 +20,8 @@ const updateEventSchema = z.object({
   reminderMinutes: z.array(z.number().int().min(0)).optional(),
   notifyChannels: z.array(z.enum(["in_app", "push", "email", "sms"])).optional(),
   status: z.enum(["APPROVED", "CANCELLED"]).optional(),
+  // Full replacement list of invited family members (user ids).
+  participantUserIds: z.array(z.string()).optional(),
 })
 
 // Get single event
@@ -247,6 +249,26 @@ export async function PATCH(
         updated_at = NOW()
       WHERE id = ${eventId}
     `
+
+    // Replace the invited members (only real, active members of this family).
+    if (validatedData.participantUserIds) {
+      const cal = await sql`SELECT family_id FROM calendars WHERE id = ${event.calendar_id}`
+      const valid = cal.length === 0 ? [] : await sql`
+        SELECT DISTINCT user_id FROM family_members
+        WHERE family_id = ${cal[0].family_id} AND is_active = true
+        AND user_id = ANY(${validatedData.participantUserIds}::text[])
+      `
+      const keep = valid.map((m) => m.user_id as string)
+      await sql`DELETE FROM event_participants WHERE event_id = ${eventId} AND NOT (user_id = ANY(${keep}::text[]))`
+      if (keep.length > 0) {
+        await sql`
+          INSERT INTO event_participants (id, event_id, user_id, status, created_at, updated_at)
+          SELECT gen_random_uuid(), ${eventId}, pid, 'INVITED', NOW(), NOW()
+          FROM unnest(${keep}::text[]) AS pid
+          WHERE NOT EXISTS (SELECT 1 FROM event_participants ep WHERE ep.event_id = ${eventId} AND ep.user_id = pid)
+        `
+      }
+    }
 
     // Audit log
     await logAuditEvent(user.id, "UPDATE", "event", eventId, {
