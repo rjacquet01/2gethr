@@ -24,6 +24,7 @@ interface DashboardStats {
     escalated: number; urgent: number; newToday: number
   }
   riskFlags: { open: number; investigating: number; critical: number }
+  closedAccounts: { total: number; last7d: number; last30d: number; avgTenureDays: number; withinFirstWeek: number }
   recentActivity: Array<{
     action: string
     targetType: string
@@ -280,6 +281,28 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Closed accounts */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Closed Accounts</CardTitle>
+          <CardDescription>Users who deleted their account</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div><div className="text-2xl font-bold">{stats.closedAccounts?.total ?? 0}</div><p className="text-xs text-muted-foreground">Total closed</p></div>
+            <div><div className="text-2xl font-bold">{stats.closedAccounts?.last7d ?? 0}</div><p className="text-xs text-muted-foreground">Last 7 days</p></div>
+            <div><div className="text-2xl font-bold">{stats.closedAccounts?.last30d ?? 0}</div><p className="text-xs text-muted-foreground">Last 30 days</p></div>
+            <div><div className="text-2xl font-bold">{stats.closedAccounts?.avgTenureDays ?? 0}d</div><p className="text-xs text-muted-foreground">Avg. account age</p></div>
+            <div><div className="text-2xl font-bold">{stats.closedAccounts?.withinFirstWeek ?? 0}</div><p className="text-xs text-muted-foreground">Closed in first week</p></div>
+          </div>
+          {stats.users.total + (stats.closedAccounts?.total ?? 0) > 0 && (
+            <p className="text-xs text-muted-foreground mt-3">
+              Churn rate: {(((stats.closedAccounts?.total ?? 0) / ((stats.users.total + (stats.closedAccounts?.total ?? 0)) || 1)) * 100).toFixed(1)}% of all signups
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Recent Activity */}
       <Card>

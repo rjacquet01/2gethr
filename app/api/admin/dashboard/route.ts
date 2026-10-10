@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days') as new_this_week,
         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days') as new_this_month
       FROM users
+      WHERE email NOT LIKE 'deleted-%@deleted.togethrapp.com'
     `
     
     // Family stats
@@ -73,6 +74,18 @@ export async function GET(request: NextRequest) {
       FROM risk_flags
     `
     
+    // Closed accounts (self-service deletion anonymises the email)
+    const closedStats = await sql`
+      SELECT
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE updated_at > NOW() - INTERVAL '7 days') as last_7d,
+        COUNT(*) FILTER (WHERE updated_at > NOW() - INTERVAL '30 days') as last_30d,
+        COALESCE(ROUND(AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 86400)), 0) as avg_tenure_days,
+        COUNT(*) FILTER (WHERE updated_at - created_at < INTERVAL '7 days') as within_first_week
+      FROM users
+      WHERE email LIKE 'deleted-%@deleted.togethrapp.com'
+    `
+
     // Recent activity (last 10 admin actions)
     const recentActivity = await sql`
       SELECT 
@@ -122,6 +135,13 @@ export async function GET(request: NextRequest) {
         open: parseInt(riskStats[0].open),
         investigating: parseInt(riskStats[0].investigating),
         critical: parseInt(riskStats[0].critical),
+      },
+      closedAccounts: {
+        total: parseInt(closedStats[0].total),
+        last7d: parseInt(closedStats[0].last_7d),
+        last30d: parseInt(closedStats[0].last_30d),
+        avgTenureDays: parseInt(closedStats[0].avg_tenure_days),
+        withinFirstWeek: parseInt(closedStats[0].within_first_week),
       },
       recentActivity: recentActivity.map(a => ({
         action: a.action,

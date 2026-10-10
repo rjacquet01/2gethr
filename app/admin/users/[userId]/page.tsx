@@ -202,33 +202,33 @@ export default function AdminUserDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="min-w-0">
                 <p className="text-sm text-muted-foreground">Email</p>
-                <p className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                  {user.email}
+                <p className="flex items-start gap-2 min-w-0">
+                  <Mail className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
+                  <span className="break-all min-w-0">{user.email}</span>
                 </p>
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm text-muted-foreground">Phone</p>
-                <p className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                  {user.phone || 'Not set'}
+                <p className="flex items-start gap-2 min-w-0">
+                  <Phone className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
+                  <span className="break-words min-w-0">{user.phone || 'Not set'}</span>
                 </p>
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm text-muted-foreground">Created</p>
-                <p className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  {new Date(user.createdAt).toLocaleDateString()}
+                <p className="flex items-start gap-2 min-w-0">
+                  <Calendar className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
+                  <span className="min-w-0">{new Date(user.createdAt).toLocaleDateString()}</span>
                 </p>
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm text-muted-foreground">Last Login</p>
-                <p className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : 'Never'}
+                <p className="flex items-start gap-2 min-w-0">
+                  <Clock className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
+                  <span className="break-words min-w-0">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : 'Never'}</span>
                 </p>
               </div>
             </div>
