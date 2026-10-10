@@ -41,7 +41,7 @@ export async function PATCH(
     await sql`
       UPDATE risk_flags
       SET
-        status = 'resolved',
+        status = 'RESOLVED',
         reviewed_at = NOW(),
         reviewed_by_admin_id = ${admin.id}::uuid,
         resolution_notes = ${resolution.trim()},
