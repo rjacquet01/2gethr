@@ -8,6 +8,7 @@ import {
   logAuditEvent,
 } from "@/lib/auth"
 import { z } from "zod"
+import { recordFailedLogin } from "@/lib/login-attempts"
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -26,7 +27,10 @@ export async function POST(request: NextRequest) {
       WHERE email = ${email.toLowerCase()}
     `
 
+    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || null
+
     if (users.length === 0) {
+      await recordFailedLogin(email, null, clientIp)
       return NextResponse.json(
         { success: false, error: "Invalid email or password" },
         { status: 401 }
@@ -46,6 +50,7 @@ export async function POST(request: NextRequest) {
     // Verify password
     const isValidPassword = await verifyPassword(password, user.password_hash)
     if (!isValidPassword) {
+      await recordFailedLogin(email, user.id, clientIp)
       return NextResponse.json(
         { success: false, error: "Invalid email or password" },
         { status: 401 }
