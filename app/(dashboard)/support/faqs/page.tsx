@@ -89,7 +89,7 @@ const faqs = [
     questions: [
       {
         question: 'What features are included in each plan?',
-        answer: 'Free: shared family calendar and tasks, live family location with 2 saved places, up to 4 members, 30 days of history. Basic ($2.99/month): up to 6 members, 15 saved places, SMS notifications, advanced recurring events, calendar export, 90 days of history. Premium ($4.99/month): up to 12 members, 50 saved places, geofence arrival and departure alerts, phone alerts, custom reminder times, and 1 year of history. Annual billing is discounted. New members get a 14-day free Premium trial.'
+        answer: 'Free: shared family calendar and tasks, live family location with 2 saved places, up to 4 members, 30 days of history. Basic ($2.99/month): up to 6 members, 15 saved places, SMS notifications, advanced recurring events, calendar export, 90 days of history. Premium ($4.99/month): up to 12 members, 50 saved places, geofence arrival and departure alerts, custom reminder times, and 1 year of history. Annual billing is discounted. New members get a 14-day free Premium trial.'
       },
       {
         question: 'How do I upgrade my subscription?',

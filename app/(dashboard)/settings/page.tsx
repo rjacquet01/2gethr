@@ -570,11 +570,6 @@ export default function SettingsPage() {
                   : 'Add your phone number to receive SMS notifications. Upgrade to Basic or Premium to enable SMS alerts.'
                 }
               </p>
-              {hasPhoneAlerts && (
-                <p className="text-xs text-primary">
-                  Premium feature: Phone call alerts are enabled for critical notifications.
-                </p>
-              )}
             </div>
             <div className="flex justify-end">
               <Button onClick={handleSaveProfile} disabled={savingProfile}>
@@ -648,38 +643,6 @@ export default function SettingsPage() {
                   id="sms-notifications"
                   checked={settings.smsNotifications}
                   onCheckedChange={() => handleToggle('smsNotifications')}
-                  disabled={!profile.phone}
-                />
-              )}
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="phone-alerts">Phone Call Alerts</Label>
-                  {!hasPhoneAlerts && (
-                    <Badge variant="outline" className="text-xs">Premium</Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {hasPhoneAlerts 
-                    ? 'Receive urgent alerts via phone call' 
-                    : 'Upgrade to Premium to enable phone call alerts'
-                  }
-                </p>
-                {!profile.phone && hasPhoneAlerts && (
-                  <p className="text-xs text-amber-600">Add a phone number in Profile to receive calls</p>
-                )}
-              </div>
-              {!hasPhoneAlerts ? (
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/subscription">Upgrade</Link>
-                </Button>
-              ) : (
-                <Switch
-                  id="phone-alerts"
-                  checked={settings.phoneAlerts}
-                  onCheckedChange={() => handleToggle('phoneAlerts')}
                   disabled={!profile.phone}
                 />
               )}

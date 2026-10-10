@@ -239,7 +239,6 @@ export default function SubscriptionPage() {
                 { key: 'locationSharing' as const, label: 'Real-time location sharing' },
                 { key: 'geofencing' as const, label: 'Geofence alerts' },
                 { key: 'smsNotifications' as const, label: 'SMS notifications' },
-                { key: 'phoneAlerts' as const, label: 'Phone call alerts' },
                 { key: 'customReminderTimes' as const, label: 'Custom reminder times' },
                 { key: 'advancedRecurrence' as const, label: 'Advanced/complex recurring events' },
                 { key: 'exportCalendar' as const, label: 'Calendar export' },

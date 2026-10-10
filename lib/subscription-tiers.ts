@@ -144,7 +144,6 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       "Live family location (50 saved places)",
       "Geofence arrival & departure alerts",
       "1 year history",
-      "Phone alert notifications",
       "Custom reminder times",
       "Family activity reports",
       "24/7 priority support",
