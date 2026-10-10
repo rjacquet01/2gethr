@@ -305,3 +305,49 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch risk flags' }, { status: 500 })
   }
 }
+
+// Manually raise a risk flag against a user and/or family (e.g. from an abuse
+// report). Automated detections come from /api/cron/risk-scan.
+const FLAG_TYPES = [
+  'PAYMENT_MISMATCH', 'ABUSIVE_SIGNUP_PATTERN', 'LOCATION_ANOMALY', 'SPAM_ACTIVITY',
+  'CHARGEBACK_RISK', 'SUSPICIOUS_LOGIN', 'MULTIPLE_ACCOUNTS', 'TOS_VIOLATION',
+  'ABUSE_REPORT', 'PRIVACY_CONCERN',
+]
+const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
+
+export async function POST(request: NextRequest) {
+  try {
+    const authHeader = request.headers.get('authorization')
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+    const admin = token ? await getAdminFromToken(token) : null
+    if (!admin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (!hasPermission(admin, 'trust.update')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const { userId, familyId, flagType, severity = 'MEDIUM', description } = body
+    if (!userId && !familyId) {
+      return NextResponse.json({ error: 'userId or familyId required' }, { status: 400 })
+    }
+    if (!FLAG_TYPES.includes(flagType)) {
+      return NextResponse.json({ error: 'Invalid flagType' }, { status: 400 })
+    }
+    if (!SEVERITIES.includes(severity)) {
+      return NextResponse.json({ error: 'Invalid severity' }, { status: 400 })
+    }
+
+    const rows = await sql`
+      INSERT INTO risk_flags (user_id, family_id, flag_type, severity, status, description, evidence)
+      VALUES (${userId || null}, ${familyId || null}, ${flagType}, ${severity}, 'OPEN',
+              ${description || null}, ${JSON.stringify({ createdByAdmin: admin.id, manual: true })}::jsonb)
+      RETURNING id
+    `
+    return NextResponse.json({ success: true, id: rows[0].id })
+  } catch (error) {
+    console.error('Create risk flag error:', error)
+    return NextResponse.json({ error: 'Failed to create risk flag' }, { status: 500 })
+  }
+}
