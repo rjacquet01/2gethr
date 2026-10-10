@@ -116,8 +116,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionTier, SubscriptionPlan> = {
       "Geofence alerts",
       "1 year history",
       "Custom reminder times",
-      "Family activity reports",
-      "24/7 priority support",
+      "Priority support",
     ],
   },
 }

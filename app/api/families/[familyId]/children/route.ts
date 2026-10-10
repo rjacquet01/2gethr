@@ -152,6 +152,27 @@ export async function POST(
       )
     }
 
+    // A brand-new child account also takes a seat, so it counts against the
+    // plan's family-member cap (Free 4, Basic 6, Premium 12). Assigning an
+    // existing member as a child does not add a seat.
+    if (!validatedData.existingMemberId) {
+      const maxMembers = subscription.features.maxFamilyMembers
+      const memberCount = await sql`
+        SELECT COUNT(*) as count FROM family_members
+        WHERE family_id = ${familyId} AND is_active = true
+      `
+      if (maxMembers !== -1 && Number(memberCount[0].count) >= maxMembers) {
+        const tierName = subscription.tier === 'FREE' ? 'Free' : subscription.tier === 'PREMIUM' ? 'Basic' : 'Premium'
+        return NextResponse.json(
+          {
+            success: false,
+            error: `${tierName} plan allows up to ${maxMembers} family members. Upgrade to add more.`
+          },
+          { status: 400 }
+        )
+      }
+    }
+
     let userId: string | null = null
     let memberId: string
 

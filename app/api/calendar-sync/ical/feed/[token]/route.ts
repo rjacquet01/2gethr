@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { ensureSyncSchema } from '@/lib/sync-schema'
+import { checkFamilySubscription } from '@/lib/auth'
+import { getTierDefinition } from '@/lib/subscription-tiers'
 
 // Public, unauthenticated ICS feed. Security comes from the `token` being an
 // unguessable random value (calendar_sync_connections.ical_token) rather than
@@ -122,6 +124,13 @@ export async function GET(
 
   const familyId = connections[0].family_id
   const feedUserId = connections[0].user_id
+
+  // Calendar export is a Basic/Premium feature: a family that dropped back to
+  // Free stops serving the feed.
+  const feedSub = await checkFamilySubscription(familyId)
+  if (!getTierDefinition(feedSub.tier).features.exportCalendar) {
+    return new NextResponse('Calendar export requires a Basic or Premium plan', { status: 403 })
+  }
 
   const url = new URL(request.url)
   const includeParam = url.searchParams.get('include')

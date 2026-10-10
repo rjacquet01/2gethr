@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { getUserFromRequest } from '@/lib/auth'
+import { getUserFromRequest, checkFamilySubscription } from '@/lib/auth'
+import { getTierDefinition } from '@/lib/subscription-tiers'
 import { nanoid } from 'nanoid'
 import { notifyAdmin, EMAIL_TEMPLATES } from '@/lib/services/email'
 
@@ -67,6 +68,15 @@ export async function POST(request: NextRequest) {
       PRIORITY_ALIASES[requestedPriority] ??
       (ALLOWED_PRIORITIES.includes(requestedPriority) ? requestedPriority : 'NORMAL')
 
+    // Priority support: Basic and Premium families get their tickets bumped to HIGH.
+    let finalPriority = normalizedPriority
+    if (familyId && (finalPriority === 'NORMAL' || finalPriority === 'LOW')) {
+      try {
+        const sub = await checkFamilySubscription(String(familyId))
+        if (getTierDefinition(sub.tier).features.prioritySupport) finalPriority = 'HIGH'
+      } catch {}
+    }
+
     // Generate ticket number
     const ticketNumber = `TKT-${Date.now().toString(36).toUpperCase()}-${nanoid(4).toUpperCase()}`
 
@@ -77,7 +87,7 @@ export async function POST(request: NextRequest) {
       ) VALUES (
         gen_random_uuid(), ${ticketNumber}, ${user.id}, ${familyId || null}, 
         ${subject}, ${description}, ${category.toUpperCase()},
-        ${normalizedPriority}, 'OPEN', NOW(), NOW()
+        ${finalPriority}, 'OPEN', NOW(), NOW()
       )
       RETURNING *
     `

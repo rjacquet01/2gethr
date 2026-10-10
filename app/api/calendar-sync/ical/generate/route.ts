@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { sql } from '@/lib/db'
-import { getUserFromRequest } from '@/lib/auth'
+import { getUserFromRequest, checkFamilySubscription } from '@/lib/auth'
+import { getTierDefinition } from '@/lib/subscription-tiers'
 import { ensureSyncSchema } from '@/lib/sync-schema'
 
 // Lets a user get (or create) a standing subscription URL that any calendar
@@ -58,6 +59,15 @@ export async function POST(request: NextRequest) {
 
   await ensureSyncSchema()
   const familyId = familyMembership[0].family_id
+
+  // Calendar export is a Basic/Premium feature.
+  const sub = await checkFamilySubscription(familyId)
+  if (!getTierDefinition(sub.tier).features.exportCalendar) {
+    return NextResponse.json(
+      { success: false, error: 'Calendar export is available on Basic and Premium plans. Upgrade to get your calendar link.' },
+      { status: 403 }
+    )
+  }
   const icalToken = crypto.randomBytes(24).toString('hex')
 
   const existing = await sql`

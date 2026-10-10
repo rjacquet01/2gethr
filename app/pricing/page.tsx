@@ -194,7 +194,7 @@ export default function PricingPage() {
             <div>
               <h3 className="font-semibold mb-2">How do I contact support?</h3>
               <p className="text-muted-foreground">
-                You can reach our support team at <a href="mailto:admin@mytogethr.com" className="text-primary hover:underline">admin@mytogethr.com</a>. Premium members get 24/7 priority support.
+                You can reach our support team at <a href="mailto:admin@mytogethr.com" className="text-primary hover:underline">admin@mytogethr.com</a>. Basic and Premium members get priority support.
               </p>
             </div>
           </div>
