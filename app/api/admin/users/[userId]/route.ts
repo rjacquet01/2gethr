@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromToken, hasPermission, logAdminAction } from '@/lib/admin-auth'
-import { hashPassword } from '@/lib/auth'
+import { hashPassword, revokeAllUserTokens } from '@/lib/auth'
+import { closeUserAccount } from '@/lib/account-closure'
 import { sql } from '@/lib/db'
 import crypto from 'crypto'
 
@@ -136,6 +137,9 @@ export async function PATCH(
         WHERE id = ${userId}
       `
 
+      // Kick the user out immediately - is_active only blocks future logins.
+      try { await revokeAllUserTokens(userId) } catch (e) { console.error('revoke tokens failed', e) }
+
       await logAdminAction(admin.id, 'SUSPEND_USER', 'user', userId, { reason }, ipAddress, userAgent)
 
       return NextResponse.json({ success: true, message: 'User suspended' })
@@ -146,6 +150,14 @@ export async function PATCH(
         return NextResponse.json({ error: 'No suspend permission' }, { status: 403 })
       }
 
+      const target = await sql`SELECT email FROM users WHERE id = ${userId}`
+      if (target.length === 0) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      }
+      if (String(target[0].email).startsWith('deleted-')) {
+        return NextResponse.json({ error: 'Closed accounts cannot be unsuspended' }, { status: 400 })
+      }
+
       await sql`
         UPDATE users SET is_active = true, updated_at = NOW()
         WHERE id = ${userId}
@@ -154,6 +166,23 @@ export async function PATCH(
       await logAdminAction(admin.id, 'UNSUSPEND_USER', 'user', userId, { reason }, ipAddress, userAgent)
 
       return NextResponse.json({ success: true, message: 'User unsuspended' })
+    }
+
+    if (action === 'close') {
+      if (!hasPermission(admin, 'users.suspend')) {
+        return NextResponse.json({ error: 'No permission to close accounts' }, { status: 403 })
+      }
+      const target = await sql`SELECT id, email FROM users WHERE id = ${userId}`
+      if (target.length === 0) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      }
+      if (String(target[0].email).startsWith('deleted-')) {
+        return NextResponse.json({ error: 'Account is already closed' }, { status: 400 })
+      }
+      // Audit first: the closure anonymises the email.
+      await logAdminAction(admin.id, 'CLOSE_USER', 'user', userId, { reason, email: target[0].email }, ipAddress, userAgent)
+      await closeUserAccount({ id: target[0].id, email: target[0].email })
+      return NextResponse.json({ success: true, message: 'Account closed' })
     }
 
     if (action === 'reset_password') {

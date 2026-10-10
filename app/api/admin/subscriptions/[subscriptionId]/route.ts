@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromToken, hasPermission, logAdminAction } from '@/lib/admin-auth'
 import { sql } from '@/lib/db'
+import { stripe, getPriceId } from '@/lib/stripe'
+
+// History is an audit nicety: a failure to write it must never fail the change.
+async function safeHistory(run: () => Promise<unknown>) {
+  try { await run() } catch (e) { console.error('subscription history insert failed', e) }
+}
 
 // Update subscription (change tier, grant trial, etc.)
 export async function PATCH(
@@ -39,6 +45,33 @@ export async function PATCH(
         return NextResponse.json({ error: 'Invalid tier' }, { status: 400 })
       }
       
+      // Keep Stripe in step with the admin change, otherwise the next
+      // customer.subscription.updated webhook would silently revert it.
+      if (subscription.stripe_subscription_id) {
+        try {
+          if (tier === 'FREE') {
+            await stripe.subscriptions.cancel(subscription.stripe_subscription_id)
+          } else {
+            const stripeSub = await stripe.subscriptions.retrieve(subscription.stripe_subscription_id)
+            const item = stripeSub.items.data[0]
+            const cycle = item?.price.recurring?.interval === 'year' ? 'annual' : 'monthly'
+            const priceId = getPriceId(tier, cycle)
+            if (item && priceId && item.price.id !== priceId) {
+              await stripe.subscriptions.update(subscription.stripe_subscription_id, {
+                items: [{ id: item.id, price: priceId }],
+                proration_behavior: 'create_prorations',
+              })
+            }
+          }
+        } catch (e) {
+          console.error('Stripe sync for admin tier change failed:', e)
+          return NextResponse.json(
+            { error: 'Stripe update failed: ' + (e instanceof Error ? e.message : 'unknown') + '. Tier not changed.' },
+            { status: 502 }
+          )
+        }
+      }
+
       await sql`
         UPDATE subscriptions
         SET tier = ${tier}, updated_at = NOW()
@@ -46,26 +79,26 @@ export async function PATCH(
       `
       
       // Record history
-      await sql`
+      await safeHistory(() => sql`
         INSERT INTO subscription_status_history (
-          subscription_id, old_status, new_status, source, admin_user_id, ticket_id, notes
+          id, subscription_id, old_status, new_status, source, admin_user_id, ticket_id, notes
         ) VALUES (
-          ${subscriptionId},
+          gen_random_uuid(), ${subscriptionId},
           ${subscription.tier},
           ${tier},
           'ADMIN_MANUAL',
-          ${admin.id},
-          ${ticketId || null},
+          ${admin.id}::uuid,
+          ${ticketId || null}::uuid,
           ${reason || null}
         )
-      `
+      `)
       
-      await logAdminAction(admin.id, 'CHANGE_SUBSCRIPTION_TIER', 'subscription', subscriptionId, {
+      await safeHistory(() => logAdminAction(admin.id, 'CHANGE_SUBSCRIPTION_TIER', 'subscription', subscriptionId, {
         oldTier: subscription.tier,
         newTier: tier,
         reason,
         ticketId,
-      }, ipAddress, userAgent, ticketId)
+      }, ipAddress, userAgent, ticketId))
       
       return NextResponse.json({ success: true, message: `Tier changed to ${tier}` })
     }
@@ -83,26 +116,26 @@ export async function PATCH(
         WHERE id = ${subscriptionId}
       `
       
-      await sql`
+      await safeHistory(() => sql`
         INSERT INTO subscription_status_history (
-          subscription_id, old_status, new_status, source, admin_user_id, ticket_id, notes
+          id, subscription_id, old_status, new_status, source, admin_user_id, ticket_id, notes
         ) VALUES (
-          ${subscriptionId},
+          gen_random_uuid(), ${subscriptionId},
           ${subscription.status},
           'TRIALING',
           'ADMIN_MANUAL',
-          ${admin.id},
-          ${ticketId || null},
+          ${admin.id}::uuid,
+          ${ticketId || null}::uuid,
           ${reason || `Granted ${days}-day trial`}
         )
-      `
+      `)
       
-      await logAdminAction(admin.id, 'GRANT_TRIAL', 'subscription', subscriptionId, {
+      await safeHistory(() => logAdminAction(admin.id, 'GRANT_TRIAL', 'subscription', subscriptionId, {
         trialDays: days,
         trialEnd: trialEnd.toISOString(),
         reason,
         ticketId,
-      }, ipAddress, userAgent, ticketId)
+      }, ipAddress, userAgent, ticketId))
       
       return NextResponse.json({ success: true, message: `${days}-day trial granted` })
     }
@@ -116,24 +149,24 @@ export async function PATCH(
         WHERE id = ${subscriptionId}
       `
       
-      await sql`
+      await safeHistory(() => sql`
         INSERT INTO subscription_status_history (
-          subscription_id, old_status, new_status, source, admin_user_id, ticket_id, notes
+          id, subscription_id, old_status, new_status, source, admin_user_id, ticket_id, notes
         ) VALUES (
-          ${subscriptionId},
+          gen_random_uuid(), ${subscriptionId},
           ${subscription.status},
           'CANCELLED',
           'ADMIN_MANUAL',
-          ${admin.id},
-          ${ticketId || null},
+          ${admin.id}::uuid,
+          ${ticketId || null}::uuid,
           ${reason || null}
         )
-      `
+      `)
       
-      await logAdminAction(admin.id, 'CANCEL_SUBSCRIPTION', 'subscription', subscriptionId, {
+      await safeHistory(() => logAdminAction(admin.id, 'CANCEL_SUBSCRIPTION', 'subscription', subscriptionId, {
         reason,
         ticketId,
-      }, ipAddress, userAgent, ticketId)
+      }, ipAddress, userAgent, ticketId))
       
       return NextResponse.json({ success: true, message: 'Subscription cancelled' })
     }
@@ -147,24 +180,24 @@ export async function PATCH(
         WHERE id = ${subscriptionId}
       `
       
-      await sql`
+      await safeHistory(() => sql`
         INSERT INTO subscription_status_history (
-          subscription_id, old_status, new_status, source, admin_user_id, ticket_id, notes
+          id, subscription_id, old_status, new_status, source, admin_user_id, ticket_id, notes
         ) VALUES (
-          ${subscriptionId},
+          gen_random_uuid(), ${subscriptionId},
           ${subscription.status},
           'ACTIVE',
           'ADMIN_MANUAL',
-          ${admin.id},
-          ${ticketId || null},
+          ${admin.id}::uuid,
+          ${ticketId || null}::uuid,
           ${reason || null}
         )
-      `
+      `)
       
-      await logAdminAction(admin.id, 'REACTIVATE_SUBSCRIPTION', 'subscription', subscriptionId, {
+      await safeHistory(() => logAdminAction(admin.id, 'REACTIVATE_SUBSCRIPTION', 'subscription', subscriptionId, {
         reason,
         ticketId,
-      }, ipAddress, userAgent, ticketId)
+      }, ipAddress, userAgent, ticketId))
       
       return NextResponse.json({ success: true, message: 'Subscription reactivated' })
     }
@@ -172,6 +205,6 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   } catch (error) {
     console.error('Admin update subscription error:', error)
-    return NextResponse.json({ error: 'Failed to update subscription' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to update subscription: ' + (error instanceof Error ? error.message : 'unknown') }, { status: 500 })
   }
 }

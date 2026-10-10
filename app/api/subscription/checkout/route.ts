@@ -111,6 +111,35 @@ export async function POST(request: NextRequest) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000"
 
+    // Already paying through Stripe? Switch the existing subscription's
+    // price (prorated) instead of opening a second Checkout - a second
+    // checkout would create a duplicate subscription and double-bill. The
+    // customer.subscription.updated webhook then syncs the new tier.
+    const currentStripeSubId: string | null = subscription[0].stripe_subscription_id
+    if (currentStripeSubId && subscription[0].status !== "CANCELLED") {
+      try {
+        const current = await stripe.subscriptions.retrieve(currentStripeSubId)
+        if (current.status !== "canceled") {
+          const item = current.items.data[0]
+          if (item && item.price.id !== priceId) {
+            await stripe.subscriptions.update(currentStripeSubId, {
+              items: [{ id: item.id, price: priceId }],
+              proration_behavior: "create_prorations",
+              cancel_at_period_end: false,
+              metadata: { familyId, requestedTier: tier.toUpperCase(), billingCycle },
+            })
+          }
+          return NextResponse.json({
+            success: true,
+            updated: true,
+            url: `${appUrl}/subscription/confirmation?updated=1`,
+          })
+        }
+      } catch (err) {
+        console.error("Existing subscription update failed, falling back to checkout:", err)
+      }
+    }
+
     // A random 8-letter suffix for the integration_identifier tag, per
     // Stripe's Checkout Session tracking recommendation.
     const randomSuffix = Math.random().toString(36).replace(/[^a-z]/g, "").padEnd(8, "x").slice(0, 8)

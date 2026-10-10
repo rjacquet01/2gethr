@@ -63,7 +63,7 @@ export default function AdminUserDetailPage() {
   const [loading, setLoading] = useState(true)
   
   const [actionDialog, setActionDialog] = useState<{
-    type: 'suspend' | 'unsuspend' | 'reset_password' | 'verify_email' | null
+    type: 'suspend' | 'unsuspend' | 'close' | 'reset_password' | 'verify_email' | null
     reason: string
   }>({ type: null, reason: '' })
   const [actionLoading, setActionLoading] = useState(false)
@@ -265,7 +265,20 @@ export default function AdminUserDetailPage() {
               </Button>
             )}
             
-            {user.isActive ? (
+            {!user.email.startsWith('deleted-') && (
+              <Button
+                variant="outline"
+                className="w-full justify-start text-destructive hover:text-destructive"
+                onClick={() => setActionDialog({ type: 'close', reason: '' })}
+              >
+                <UserX className="h-4 w-4 mr-2" />
+                Close Account (permanent)
+              </Button>
+            )}
+
+            {user.email.startsWith('deleted-') ? (
+              <p className="text-sm text-muted-foreground">This account is closed.</p>
+            ) : user.isActive ? (
               <Button 
                 variant="outline" 
                 className="w-full justify-start text-destructive hover:text-destructive"
@@ -363,11 +376,13 @@ export default function AdminUserDetailPage() {
             <DialogTitle>
               {actionDialog.type === 'suspend' && 'Suspend User'}
               {actionDialog.type === 'unsuspend' && 'Unsuspend User'}
+              {actionDialog.type === 'close' && 'Close Account'}
               {actionDialog.type === 'reset_password' && 'Reset Password'}
               {actionDialog.type === 'verify_email' && 'Verify Email'}
             </DialogTitle>
             <DialogDescription>
               {actionDialog.type === 'suspend' && 'This will prevent the user from accessing their account.'}
+              {actionDialog.type === 'close' && 'PERMANENT: scrubs personal data, cancels billing and removes the user from all families. Use for Terms of Service violations. Cannot be undone.'}
               {actionDialog.type === 'unsuspend' && 'This will restore the user\'s access to their account.'}
               {actionDialog.type === 'reset_password' && 'This will generate a temporary password for the user.'}
               {actionDialog.type === 'verify_email' && 'This will mark the user\'s email as verified.'}
@@ -389,7 +404,7 @@ export default function AdminUserDetailPage() {
             <Button 
               onClick={handleAction}
               disabled={actionLoading}
-              variant={actionDialog.type === 'suspend' ? 'destructive' : 'default'}
+              variant={actionDialog.type === 'suspend' || actionDialog.type === 'close' ? 'destructive' : 'default'}
             >
               {actionLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Confirm
