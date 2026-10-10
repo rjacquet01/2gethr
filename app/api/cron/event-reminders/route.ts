@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
     const now = new Date()
     const events = await sql`
-      SELECT e.id, e.title, e.start_time, e.reminder_minutes, e.location, c.family_id
+      SELECT e.id, e.title, e.start_time, e.reminder_minutes, e.location, e.visibility, e.created_by_id, e.notify_channels, c.family_id
       FROM events e
       JOIN calendars c ON e.calendar_id = c.id
       WHERE e.status = 'APPROVED'
@@ -43,15 +43,28 @@ export async function GET(request: NextRequest) {
       // only the most imminent due offset matters if several are already due (e.g. event just created)
       const offset = Math.min(...dueOffsets)
 
-      const participants = await sql`
-        SELECT DISTINCT u.id, u.email, u.phone, u.timezone
-        FROM users u JOIN family_members fm ON u.id = fm.user_id
-        WHERE fm.family_id = ${event.family_id} AND fm.is_active = true
-        UNION
-        SELECT DISTINCT u.id, u.email, u.phone, u.timezone
-        FROM users u JOIN event_participants ep ON u.id = ep.user_id
-        WHERE ep.event_id = ${event.id} AND ep.status != 'DECLINED'
-      `
+      // FAMILY events remind everyone in the family; PRIVATE / SELECTED_MEMBERS
+      // events only remind the creator and the chosen participants.
+      const participants = event.visibility === "FAMILY" || !event.visibility
+        ? await sql`
+            SELECT DISTINCT u.id, u.email, u.phone, u.timezone
+            FROM users u JOIN family_members fm ON u.id = fm.user_id
+            WHERE fm.family_id = ${event.family_id} AND fm.is_active = true
+            UNION
+            SELECT DISTINCT u.id, u.email, u.phone, u.timezone
+            FROM users u JOIN event_participants ep ON u.id = ep.user_id
+            WHERE ep.event_id = ${event.id} AND ep.status != 'DECLINED'
+          `
+        : await sql`
+            SELECT DISTINCT u.id, u.email, u.phone, u.timezone
+            FROM users u
+            WHERE u.id = ${event.created_by_id}
+            UNION
+            SELECT DISTINCT u.id, u.email, u.phone, u.timezone
+            FROM users u JOIN event_participants ep ON u.id = ep.user_id
+            WHERE ep.event_id = ${event.id} AND ep.status != 'DECLINED'
+          `
+      const channels: string[] = event.notify_channels || ["in_app", "push", "email", "sms"]
 
       const minsLeft = Math.max(0, Math.round((start - now.getTime()) / 60_000))
       const timeText = minsLeft <= 1 ? "now" : minsLeft < 60 ? `in ${minsLeft} minutes` : `in ${Math.floor(minsLeft / 60)} hour${Math.floor(minsLeft / 60) > 1 ? "s" : ""}`
@@ -88,21 +101,21 @@ export async function GET(request: NextRequest) {
         `
         sent++
 
-        if (us.push_enabled) {
+        if (channels.includes("push") && us.push_enabled) {
           try {
             await sendPushToUser(p.id, { title: "Upcoming: " + event.title, body, data: { type: "EVENT_REMINDER", eventId: event.id }, clickAction: `/calendar/event/${event.id}` })
           } catch (e) {
             console.error("[EventReminder] push failed (non-fatal):", e)
           }
         }
-        if (us.email_enabled && p.email && isResendConfigured()) {
+        if (channels.includes("email") && us.email_enabled && p.email && isResendConfigured()) {
           try {
             await sendEmail({ to: p.email, subject: `Reminder: ${event.title}`, html: `<p>${body}.</p>`, text: `${body}.` })
           } catch (e) {
             console.error("[EventReminder] email failed (non-fatal):", e)
           }
         }
-        if (us.sms_enabled && hasSms && p.phone && isTwilioConfigured()) {
+        if (channels.includes("sms") && us.sms_enabled && hasSms && p.phone && isTwilioConfigured()) {
           try {
             await sendSMS({ to: p.phone, body: `Togethr Reminder: "${event.title}" starts ${timeText}${event.location ? ` at ${event.location}` : ""}.` })
           } catch (e) {
