@@ -97,7 +97,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionTier, SubscriptionPlan> = {
     priceYearly: 2499, // $24.99
     features: [
       "Up to 5 children",
-      "Advanced reminder settings",
+      "Custom reminder times",
       "Complex recurring events",
       "90 days history",
       "SMS notifications",
