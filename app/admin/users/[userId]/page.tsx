@@ -68,6 +68,38 @@ export default function AdminUserDetailPage() {
   }>({ type: null, reason: '' })
   const [actionLoading, setActionLoading] = useState(false)
   const [tempPassword, setTempPassword] = useState<string | null>(null)
+  const [flagOpen, setFlagOpen] = useState(false)
+  const [flagType, setFlagType] = useState('TOS_VIOLATION')
+  const [flagSeverity, setFlagSeverity] = useState('MEDIUM')
+  const [flagDescription, setFlagDescription] = useState('')
+  const [flagSaving, setFlagSaving] = useState(false)
+
+  async function submitFlag() {
+    setFlagSaving(true)
+    try {
+      const token = getAdminAccessToken()
+      const res = await fetch('/api/admin/risk-flags', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ userId, flagType, severity: flagSeverity, description: flagDescription }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to add flag')
+        return
+      }
+      toast.success('Risk flag added')
+      setFlagOpen(false)
+      setFlagDescription('')
+    } catch {
+      toast.error('Failed to add flag')
+    } finally {
+      setFlagSaving(false)
+    }
+  }
   
   useEffect(() => {
     loadUser()
@@ -265,6 +297,15 @@ export default function AdminUserDetailPage() {
               </Button>
             )}
             
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => setFlagOpen(true)}
+            >
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              Add Risk Flag
+            </Button>
+
             {!user.email.startsWith('deleted-') && (
               <Button
                 variant="outline"
@@ -413,6 +454,58 @@ export default function AdminUserDetailPage() {
         </DialogContent>
       </Dialog>
       
+      {/* Add Risk Flag Dialog */}
+      <Dialog open={flagOpen} onOpenChange={setFlagOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Risk Flag</DialogTitle>
+            <DialogDescription>Flag this user for review in the Risk Flags queue.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <label className="text-sm font-medium">Type</label>
+              <select
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={flagType}
+                onChange={(e) => setFlagType(e.target.value)}
+              >
+                {['TOS_VIOLATION','ABUSE_REPORT','SPAM_ACTIVITY','SUSPICIOUS_LOGIN','MULTIPLE_ACCOUNTS','ABUSIVE_SIGNUP_PATTERN','LOCATION_ANOMALY','PAYMENT_MISMATCH','CHARGEBACK_RISK','PRIVACY_CONCERN'].map((t) => (
+                  <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Severity</label>
+              <select
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={flagSeverity}
+                onChange={(e) => setFlagSeverity(e.target.value)}
+              >
+                {['LOW','MEDIUM','HIGH','CRITICAL'].map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Description</label>
+              <Textarea
+                className="mt-1"
+                value={flagDescription}
+                onChange={(e) => setFlagDescription(e.target.value)}
+                placeholder="What happened?"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFlagOpen(false)}>Cancel</Button>
+            <Button onClick={submitFlag} disabled={flagSaving}>
+              {flagSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Add Flag
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Temp Password Dialog */}
       <Dialog open={!!tempPassword} onOpenChange={() => { setTempPassword(null); setActionDialog({ type: null, reason: '' }); loadUser(); }}>
         <DialogContent>
