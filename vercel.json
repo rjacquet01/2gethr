@@ -5,6 +5,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/event-reminders",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/process-reminders",
       "schedule": "* * * * *"
     },

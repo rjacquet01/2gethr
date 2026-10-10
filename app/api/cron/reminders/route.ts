@@ -66,7 +66,8 @@ export async function GET(request: NextRequest) {
         c.family_id
       FROM events e
       JOIN calendars c ON e.calendar_id = c.id
-      WHERE e.start_time > NOW()
+      WHERE FALSE -- event reminders now run every minute in /api/cron/event-reminders
+        AND e.start_time > NOW()
         AND e.start_time <= NOW() + INTERVAL '60 minutes'
         AND e.status = 'APPROVED'
         AND e.reminder_minutes IS NOT NULL
