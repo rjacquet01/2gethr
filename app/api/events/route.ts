@@ -601,7 +601,7 @@ export async function POST(request: NextRequest) {
     if (participantUserIds.length > 0) {
       await sql`
         INSERT INTO event_participants (id, event_id, user_id, status, created_at, updated_at)
-        SELECT gen_random_uuid(), ${eventId}, pid, 'PENDING', NOW(), NOW()
+        SELECT gen_random_uuid(), ${eventId}, pid, 'INVITED', NOW(), NOW()
         FROM unnest(${participantUserIds}::text[]) AS pid
       `
     }
@@ -645,7 +645,7 @@ export async function POST(request: NextRequest) {
 
       await sql`
         INSERT INTO event_participants (id, event_id, user_id, status, created_at, updated_at)
-        SELECT gen_random_uuid(), ne.id, ep.user_id, 'PENDING', NOW(), NOW()
+        SELECT gen_random_uuid(), ne.id, ep.user_id, 'INVITED', NOW(), NOW()
         FROM events ne
         JOIN event_participants ep ON ep.event_id = ${eventId}
         WHERE ne.recurrence_rule_id = ${recurrenceRuleId} AND ne.id <> ${eventId}
@@ -654,7 +654,7 @@ export async function POST(request: NextRequest) {
       if (status === "PENDING") {
         await sql`
           INSERT INTO event_requests (id, event_id, requestor_id, status, requested_at)
-          SELECT gen_random_uuid(), ne.id, ${user.id}::uuid, 'PENDING', NOW()
+          SELECT gen_random_uuid(), ne.id, ${user.id}, 'PENDING', NOW()
           FROM events ne
           WHERE ne.recurrence_rule_id = ${recurrenceRuleId} AND ne.id <> ${eventId}
         `
