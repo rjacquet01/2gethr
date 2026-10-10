@@ -93,8 +93,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionTier, SubscriptionPlan> = {
     tier: SubscriptionTier.PREMIUM,
     name: "Basic",
     description: "Enhanced family features",
-    priceMonthly: 399, // $3.99
-    priceYearly: 3990, // $39.90 (save ~17%)
+    priceMonthly: 299, // $2.99
+    priceYearly: 2499, // $24.99
     features: [
       "Up to 5 children",
       "Advanced reminder settings",
@@ -108,8 +108,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionTier, SubscriptionPlan> = {
     tier: SubscriptionTier.PREMIUM_PLUS,
     name: "Premium",
     description: "Full family safety suite",
-    priceMonthly: 799, // $7.99
-    priceYearly: 7990, // $79.90 (save ~17%)
+    priceMonthly: 499, // $4.99
+    priceYearly: 3999, // $39.99
     features: [
       "Unlimited children",
       "Real-time location sharing",
