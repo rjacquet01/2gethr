@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useSubscription } from '@/hooks/use-subscription'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -131,6 +132,19 @@ function NewEventForm() {
   // Get selected family details with members
   const { family } = useFamily(formData.familyId || undefined)
 
+  // Plan gates (Free: standard reminder only, simple repeats only). Permissive
+  // until the plan has loaded; the server enforces regardless.
+  const { access: tierAccess, isLoading: tierLoading } = useSubscription(formData.familyId || null)
+  const planKnown = !!formData.familyId && !tierLoading
+  const canCustomReminders = !planKnown || !!tierAccess.featureFlags.customReminderTimes
+  const canAdvancedRecurrence = !planKnown || !!tierAccess.featureFlags.advancedRecurrence
+  useEffect(() => {
+    if (!canCustomReminders) setSelectedReminders(prev => (prev.every(v => v === 15) ? prev : [15]))
+    if (!canAdvancedRecurrence) {
+      setRecurrenceRule(prev => (prev === 'biweekly' || prev === 'custom' ? 'weekly' : prev))
+    }
+  }, [canCustomReminders, canAdvancedRecurrence, selectedReminders, recurrenceRule])
+
   // Fetch saved places for location dropdown
   interface SavedPlace {
     id: string
@@ -219,7 +233,7 @@ function NewEventForm() {
 
     switch (recurrenceRule) {
       case 'daily': frequency = 'DAILY'; break
-      case 'weekly': frequency = 'WEEKLY'; daysOfWeek = recurrenceDays.length > 0 ? recurrenceDays : undefined; break
+      case 'weekly': frequency = 'WEEKLY'; daysOfWeek = canAdvancedRecurrence && recurrenceDays.length > 0 ? recurrenceDays : undefined; break
       case 'biweekly': frequency = 'WEEKLY'; interval = 2; daysOfWeek = recurrenceDays.length > 0 ? recurrenceDays : undefined; break
       case 'weekdays': frequency = 'WEEKLY'; daysOfWeek = [1, 2, 3, 4, 5]; break
       case 'custom': frequency = 'WEEKLY'; daysOfWeek = recurrenceDays; break
@@ -623,15 +637,15 @@ function NewEventForm() {
                     <SelectContent>
                       <SelectItem value="daily">Daily</SelectItem>
                       <SelectItem value="weekly">Weekly</SelectItem>
-                      <SelectItem value="biweekly">Every 2 Weeks</SelectItem>
+                      <SelectItem value="biweekly" disabled={!canAdvancedRecurrence}>Every 2 Weeks{canAdvancedRecurrence ? '' : ' (Basic)'}</SelectItem>
                       <SelectItem value="monthly">Monthly</SelectItem>
                       <SelectItem value="yearly">Yearly</SelectItem>
                       <SelectItem value="weekdays">Weekdays (Mon-Fri)</SelectItem>
-                      <SelectItem value="custom">Custom days of the week</SelectItem>
+                      <SelectItem value="custom" disabled={!canAdvancedRecurrence}>Custom days of the week{canAdvancedRecurrence ? '' : ' (Basic)'}</SelectItem>
                     </SelectContent>
                   </Select>
 
-                  {(recurrenceRule === 'weekly' || recurrenceRule === 'biweekly' || recurrenceRule === 'custom') && (
+                  {canAdvancedRecurrence && (recurrenceRule === 'weekly' || recurrenceRule === 'biweekly' || recurrenceRule === 'custom') && (
                     <div className="space-y-2 pt-2">
                       <Label>
                         {recurrenceRule === 'custom' ? 'Repeat on' : 'Repeat on (optional - defaults to the start day)'}
@@ -710,6 +724,7 @@ function NewEventForm() {
                     <Checkbox
                       id={`reminder-${opt.value}`}
                       checked={selectedReminders.includes(opt.value)}
+                      disabled={!canCustomReminders && opt.value !== 15}
                       onCheckedChange={(checked) => {
                         remindersTouched.current = true
                         if (checked) {
@@ -723,7 +738,7 @@ function NewEventForm() {
                       htmlFor={`reminder-${opt.value}`}
                       className="text-sm cursor-pointer"
                     >
-                      {opt.label}
+                      {opt.label}{!canCustomReminders && opt.value !== 15 ? ' (Basic)' : ''}
                     </label>
                   </div>
                 ))}

@@ -5,6 +5,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { notifyFamilyAboutEvent, type NotificationChannel } from "@/lib/notifications" // Event notifications
 import { z } from "zod"
+import { planGateError } from "@/lib/tier-gates"
 import { generateOccurrences, isValidTimeZone, recurrenceFromPreset, type RecurrenceInput } from "@/lib/recurrence"
 
 const createEventSchema = z.object({
@@ -486,6 +487,15 @@ export async function POST(request: NextRequest) {
       : validatedData.isRecurring && validatedData.recurrenceRule
         ? recurrenceFromPreset(validatedData.recurrenceRule)
         : null
+
+    // Plan gates: advanced repeats and custom reminder times are Basic/Premium.
+    const gateError = await planGateError(calendar.family_id, {
+      recurrence: recurrenceInput,
+      reminderMinutes: validatedData.reminderMinutes,
+    })
+    if (gateError) {
+      return NextResponse.json({ success: false, error: gateError }, { status: 403 })
+    }
 
     const eventTimeZone = isValidTimeZone(validatedData.timeZone)
       ? validatedData.timeZone

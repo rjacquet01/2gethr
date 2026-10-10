@@ -37,7 +37,7 @@ export default function SettingsPage() {
   const router = useRouter()
   const { families } = useFamilies()
   const primaryFamily = families[0] || null
-  const { access } = useSubscription(primaryFamily?.id || null)
+  const { access, isLoading: tierLoading } = useSubscription(primaryFamily?.id || null)
   const { theme, setTheme, resolvedTheme } = useTheme()
   const pushNotifications = usePushNotifications()
   const [mounted, setMounted] = useState(false)
@@ -698,10 +698,10 @@ export default function SettingsPage() {
                       id={`default-reminder-${opt.value}`}
                       checked={defaultReminders.includes(opt.value)}
                       onCheckedChange={(checked) => handleToggleDefaultReminder(opt.value, checked === true)}
-                      disabled={settingsLoading}
+                      disabled={settingsLoading || (!tierLoading && !access?.featureFlags.customReminderTimes && opt.value !== 15)}
                     />
                     <label htmlFor={`default-reminder-${opt.value}`} className="text-sm cursor-pointer">
-                      {opt.label}
+                      {opt.label}{!tierLoading && !access?.featureFlags.customReminderTimes && opt.value !== 15 ? ' (Basic)' : ''}
                     </label>
                   </div>
                 ))}

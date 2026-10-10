@@ -4,6 +4,7 @@ import { ensureTaskEventNotifyChannelsColumns } from "@/lib/notify-channels-sche
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
+import { planGateError } from "@/lib/tier-gates"
 
 const updateEventSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -216,6 +217,16 @@ export async function PATCH(
 
     const body = await request.json()
     const validatedData = updateEventSchema.parse(body)
+
+    if (validatedData.reminderMinutes) {
+      const cal = await sql`SELECT family_id FROM calendars WHERE id = ${event.calendar_id}`
+      if (cal.length > 0) {
+        const gateError = await planGateError(cal[0].family_id, { reminderMinutes: validatedData.reminderMinutes })
+        if (gateError) {
+          return NextResponse.json({ success: false, error: gateError }, { status: 403 })
+        }
+      }
+    }
 
     // Update event
     await sql`
