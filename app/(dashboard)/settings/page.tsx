@@ -340,10 +340,10 @@ export default function SettingsPage() {
     }
   }
 
-  const handleExportData = async () => {
+  const handleExportData = async (format: 'xlsx' | 'json' = 'xlsx') => {
     setExporting(true)
     try {
-      const res = await authFetch('/api/user/export')
+      const res = await authFetch(`/api/user/export?format=${format}`)
       
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
@@ -355,7 +355,7 @@ export default function SettingsPage() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `account-export-${new Date().toISOString().split('T')[0]}.xlsx`
+      a.download = `account-export-${new Date().toISOString().split('T')[0]}.${format}`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -866,12 +866,20 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <Label>Export Data</Label>
-                <p className="text-sm text-muted-foreground">Download all your account data as Excel spreadsheet</p>
+                <p className="text-sm text-muted-foreground">
+                  Download everything Togethr stores about you: profile, families, location history, events, tasks,
+                  reminders, notifications, SOS alerts, billing and account activity. Choose Excel to read it, or JSON for a complete machine-readable copy.
+                </p>
               </div>
-              <Button variant="outline" onClick={handleExportData} disabled={exporting}>
-                {exporting ? <Spinner className="w-4 h-4 mr-2" /> : <Download className="w-4 h-4 mr-2" />}
-                Export
-              </Button>
+              <div className="flex shrink-0 gap-2">
+                <Button variant="outline" onClick={() => handleExportData('xlsx')} disabled={exporting}>
+                  {exporting ? <Spinner className="w-4 h-4 mr-2" /> : <Download className="w-4 h-4 mr-2" />}
+                  Excel
+                </Button>
+                <Button variant="outline" onClick={() => handleExportData('json')} disabled={exporting}>
+                  JSON
+                </Button>
+              </div>
             </div>
             <Separator />
             <div className="flex items-center justify-between">

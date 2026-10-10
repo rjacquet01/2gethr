@@ -1,208 +1,177 @@
-// Export data API - New path to bypass server cache
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { neon } from '@neondatabase/serverless'
-import { verifyAccessToken } from '@/lib/auth'
 import * as XLSX from 'xlsx'
+import { sql } from '@/lib/db'
+import { getUserFromRequest, logAuditEvent } from '@/lib/auth'
+import { collectUserExport, type ExportRow, type UserExport } from '@/lib/data-export'
 
-const sql = neon(process.env.DATABASE_URL!)
+// Account data export. GET /api/user/export?format=xlsx (default) | json
+//
+// - xlsx: one sheet per section plus a "README" sheet, for people.
+// - json: everything in one machine-readable file (data portability).
+// The response is streamed so large exports are not held to the 4.5 MB
+// serverless response limit, and one export per user is allowed every
+// 2 minutes so the endpoint cannot be used to hammer the database.
+export const maxDuration = 60
+export const dynamic = 'force-dynamic'
+
+const MIN_INTERVAL_SECONDS = 120
+const XLSX_MAX_ROWS = 1_000_000
+const XLSX_MAX_CELL = 32_000
+
+function cell(v: unknown): string | number | boolean | null {
+  if (v === null || v === undefined) return null
+  if (v instanceof Date) return v.toISOString()
+  if (typeof v === 'number' || typeof v === 'boolean') return v
+  if (typeof v === 'string') return v.length > XLSX_MAX_CELL ? v.slice(0, XLSX_MAX_CELL) + '…' : v
+  const j = JSON.stringify(v)
+  return j.length > XLSX_MAX_CELL ? j.slice(0, XLSX_MAX_CELL) + '…' : j
+}
+
+function sheetName(name: string, used: Set<string>): string {
+  let base = name.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Sheet'
+  let n = base
+  let i = 2
+  while (used.has(n.toLowerCase())) n = base.slice(0, 28) + ' ' + i++
+  used.add(n.toLowerCase())
+  return n
+}
+
+function buildXlsx(data: UserExport): Buffer {
+  const wb = XLSX.utils.book_new()
+  const used = new Set<string>()
+
+  const readme: (string | number)[][] = [
+    ['Togethr data export'],
+    ['Generated', data.manifest.generatedAt],
+    [],
+    ['Sheet', 'Rows', 'Description'],
+  ]
+  for (const s of data.sections) {
+    readme.push([s.name, s.rows.length, s.description + (s.truncated ? ' (limited to the most recent rows)' : '')])
+  }
+  readme.push([], ['Not included'])
+  for (const x of data.manifest.excluded) readme.push([x])
+  if (data.manifest.notes.length) {
+    readme.push([], ['Notes'])
+    for (const n of data.manifest.notes) readme.push([n])
+  }
+  if (data.manifest.errors.length) {
+    readme.push([], ['Sections that could not be read'])
+    for (const e of data.manifest.errors) readme.push([e.section, e.message])
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(readme), sheetName('README', used))
+
+  for (const s of data.sections) {
+    const rows = s.rows.slice(0, XLSX_MAX_ROWS)
+    const out: ExportRow[] =
+      rows.length > 0
+        ? rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, cell(v)])))
+        : [{ Info: 'No data' }]
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), sheetName(s.name, used))
+  }
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+}
+
+function streamJson(data: UserExport): ReadableStream<Uint8Array> {
+  const enc = new TextEncoder()
+  const parts: (() => string)[] = [() => `{"manifest":${JSON.stringify(data.manifest)},"data":{`]
+  data.sections.forEach((s, i) => {
+    parts.push(() => `${i ? ',' : ''}${JSON.stringify(s.name)}:[`)
+    // Write rows in slices so no single chunk is huge.
+    const SLICE = 500
+    for (let o = 0; o < s.rows.length; o += SLICE) {
+      parts.push(() => {
+        const chunk = s.rows.slice(o, o + SLICE).map((r) => JSON.stringify(r)).join(',')
+        return (o ? ',' : '') + chunk
+      })
+    }
+    parts.push(() => ']')
+  })
+  parts.push(() => '}}')
+  let idx = 0
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (idx >= parts.length) return controller.close()
+      controller.enqueue(enc.encode(parts[idx++]()))
+    },
+  })
+}
+
+function streamBuffer(buf: Buffer): ReadableStream<Uint8Array> {
+  const CHUNK = 256 * 1024
+  let o = 0
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (o >= buf.length) return controller.close()
+      controller.enqueue(new Uint8Array(buf.subarray(o, o + CHUNK)))
+      o += CHUNK
+    },
+  })
+}
 
 export async function GET(request: Request) {
   try {
-    const authHeader = request.headers.get('Authorization')
-    let accessToken: string | undefined
-    
-    if (authHeader?.startsWith('Bearer ')) {
-      accessToken = authHeader.substring(7)
+    const { user, error } = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
     }
-    
-    if (!accessToken) {
-      const cookieStore = await cookies()
-      accessToken = cookieStore.get('access_token')?.value
+
+    const url = new URL(request.url)
+    const format = (url.searchParams.get('format') || 'xlsx').toLowerCase()
+    if (format !== 'xlsx' && format !== 'json') {
+      return NextResponse.json({ error: 'format must be xlsx or json' }, { status: 400 })
     }
-    
-    if (!accessToken) {
-      return NextResponse.json({ error: 'No authentication token' }, { status: 401 })
+
+    // Light rate limit using the audit log.
+    try {
+      const recent = await sql`
+        SELECT 1 FROM audit_logs
+        WHERE user_id = ${user.id} AND action = 'EXPORT' AND entity_type = 'user_data'
+          AND created_at > NOW() - (${MIN_INTERVAL_SECONDS} * INTERVAL '1 second')
+        LIMIT 1
+      `
+      if (recent.length > 0) {
+        return NextResponse.json(
+          { error: 'You just exported your data. Please wait a couple of minutes and try again.' },
+          { status: 429, headers: { 'Retry-After': String(MIN_INTERVAL_SECONDS) } }
+        )
+      }
+    } catch (e) {
+      console.error('Export rate-limit check failed (continuing):', e)
     }
-    
-    const payload = await verifyAccessToken(accessToken)
-    if (!payload || !payload.userId) {
-      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 })
+
+    const data = await collectUserExport(user.id, format)
+
+    // Record the export (best effort - never block the user's own data).
+    try {
+      await logAuditEvent(user.id, 'EXPORT', 'user_data', user.id, {
+        metadata: { format, sections: data.manifest.sections.length, errors: data.manifest.errors.length },
+        ipAddress: request.headers.get('x-forwarded-for') || undefined,
+        userAgent: request.headers.get('user-agent') || undefined,
+      })
+    } catch (e) {
+      console.error('Export audit log failed (continuing):', e)
     }
-    
-    const userId = payload.userId
 
-    // Get family IDs without role filter
-    const userFamilies = await sql`SELECT family_id FROM family_members WHERE user_id = ${userId}`
-    const familyIds = userFamilies.map(f => f.family_id)
-
-    // Sequential queries to avoid issues
-    const userData = await sql`
-      SELECT id, email, first_name, last_name, phone, timezone, date_of_birth, created_at, last_login_at 
-      FROM users WHERE id = ${userId}
-    `
-
-    const familyMembers = familyIds.length > 0 ? await sql`
-      SELECT u.first_name, u.last_name, u.email, u.phone, fm.role, fm.is_active, fm.joined_at, fm.nickname, f.name as family_name
-      FROM family_members fm
-      JOIN families f ON fm.family_id = f.id
-      JOIN users u ON fm.user_id = u.id
-      WHERE fm.family_id = ANY(${familyIds})
-      ORDER BY f.name, fm.joined_at
-    ` : []
-
-    const locationPings = await sql`
-      SELECT latitude, longitude, accuracy, altitude, speed, heading, battery_level, timestamp 
-      FROM location_pings WHERE user_id = ${userId} ORDER BY timestamp DESC LIMIT 1000
-    `
-
-    const tasks = await sql`
-      SELECT t.id, t.title, t.description, t.status, t.priority, t.category, t.due_date, t.due_time, 
-        t.points_value, t.reward_description, t.is_recurring, t.recurrence_rule, t.completed_at, t.created_at, t.updated_at,
-        creator.first_name || ' ' || creator.last_name as created_by,
-        assignee.first_name || ' ' || assignee.last_name as assigned_to,
-        approver.first_name || ' ' || approver.last_name as approved_by
-      FROM tasks t
-      LEFT JOIN users creator ON t.created_by_id = creator.id
-      LEFT JOIN users assignee ON t.assigned_to_id = assignee.id
-      LEFT JOIN users approver ON t.approved_by_id = approver.id
-      WHERE t.created_by_id = ${userId} ORDER BY t.created_at DESC LIMIT 500
-    `
-
-    const assignedTasks = await sql`
-      SELECT t.id, t.title, t.description, t.status, t.priority, t.category, t.due_date, t.due_time,
-        t.points_value, t.reward_description, t.is_recurring, t.completed_at, t.created_at,
-        creator.first_name || ' ' || creator.last_name as assigned_by,
-        approver.first_name || ' ' || approver.last_name as approved_by
-      FROM tasks t
-      LEFT JOIN users creator ON t.created_by_id = creator.id
-      LEFT JOIN users approver ON t.approved_by_id = approver.id
-      WHERE t.assigned_to_id = ${userId} ORDER BY t.created_at DESC LIMIT 500
-    `
-
-    const events = await sql`
-      SELECT e.id, e.title, e.description, e.location, e.start_time, e.end_time, e.is_all_day, e.status, 
-        e.visibility, e.color, e.is_recurring, e.created_at, e.updated_at,
-        c.name as calendar_name, sp.name as place_name, sp.address as place_address
-      FROM events e
-      JOIN calendars c ON e.calendar_id = c.id
-      LEFT JOIN saved_places sp ON e.saved_place_id = sp.id
-      WHERE e.created_by_id = ${userId} ORDER BY e.start_time DESC LIMIT 500
-    `
-
-    const paymentHistory = familyIds.length > 0 ? await sql`
-      SELECT pt.id, pt.amount, pt.currency, pt.status, pt.description, pt.stripe_payment_id, pt.created_at,
-        s.tier as subscription_tier, s.status as subscription_status
-      FROM payment_transactions pt
-      LEFT JOIN subscriptions s ON pt.subscription_id = s.id
-      WHERE s.family_id = ANY(${familyIds}) ORDER BY pt.created_at DESC LIMIT 200
-    ` : []
-
-    const auditLogs = await sql`
-      SELECT action, entity_type, entity_id, ip_address, user_agent, created_at, metadata
-      FROM audit_logs WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT 500
-    `
-
-    const workbook = XLSX.utils.book_new()
-
-    // Profile
-    const profileData = userData[0] ? [{
-      'First Name': userData[0].first_name || '',
-      'Last Name': userData[0].last_name || '',
-      'Email': userData[0].email || '',
-      'Phone': userData[0].phone || '',
-      'Timezone': userData[0].timezone || '',
-      'Date of Birth': userData[0].date_of_birth ? new Date(userData[0].date_of_birth as string).toLocaleDateString() : '',
-      'Account Created': userData[0].created_at ? new Date(userData[0].created_at as string).toLocaleString() : '',
-      'Last Login': userData[0].last_login_at ? new Date(userData[0].last_login_at as string).toLocaleString() : '',
-    }] : [{ 'Info': 'No profile data' }]
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(profileData), 'Profile')
-
-    // Family Members
-    const familyData = familyMembers.length > 0 ? familyMembers.map((fm: Record<string, unknown>) => ({
-      'Family': fm.family_name || '', 'First Name': fm.first_name || '', 'Last Name': fm.last_name || '',
-      'Nickname': fm.nickname || '', 'Email': fm.email || '', 'Phone': fm.phone || '',
-      'Role': fm.role || '', 'Active': fm.is_active ? 'Yes' : 'No',
-      'Joined Date': fm.joined_at ? new Date(fm.joined_at as string).toLocaleDateString() : '',
-    })) : [{ 'Info': 'No family members' }]
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(familyData), 'Family Members')
-
-    // Location
-    const locationData = locationPings.length > 0 ? locationPings.map((l: Record<string, unknown>) => ({
-      'Latitude': l.latitude || '', 'Longitude': l.longitude || '', 'Accuracy (m)': l.accuracy || '',
-      'Altitude': l.altitude || '', 'Speed': l.speed || '', 'Heading': l.heading || '',
-      'Battery Level': l.battery_level ? `${l.battery_level}%` : '',
-      'Timestamp': l.timestamp ? new Date(l.timestamp as string).toLocaleString() : '',
-    })) : [{ 'Info': 'No location data' }]
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(locationData), 'Location Data')
-
-    // Tasks Created
-    const tasksData = tasks.length > 0 ? tasks.map((t: Record<string, unknown>) => ({
-      'ID': t.id || '', 'Title': t.title || '', 'Description': t.description || '',
-      'Status': t.status || '', 'Priority': t.priority || '', 'Category': t.category || '',
-      'Due Date': t.due_date ? new Date(t.due_date as string).toLocaleDateString() : '',
-      'Due Time': t.due_time || '', 'Points': t.points_value || 0, 'Reward': t.reward_description || '',
-      'Recurring': t.is_recurring ? 'Yes' : 'No', 'Recurrence Rule': t.recurrence_rule || '',
-      'Assigned To': t.assigned_to || '', 'Approved By': t.approved_by || '',
-      'Completed At': t.completed_at ? new Date(t.completed_at as string).toLocaleString() : '',
-      'Created At': t.created_at ? new Date(t.created_at as string).toLocaleString() : '',
-    })) : [{ 'Info': 'No tasks created' }]
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(tasksData), 'Tasks Created')
-
-    // Assigned Tasks
-    const assignedTasksData = assignedTasks.length > 0 ? assignedTasks.map((t: Record<string, unknown>) => ({
-      'ID': t.id || '', 'Title': t.title || '', 'Description': t.description || '',
-      'Status': t.status || '', 'Priority': t.priority || '', 'Category': t.category || '',
-      'Due Date': t.due_date ? new Date(t.due_date as string).toLocaleDateString() : '',
-      'Due Time': t.due_time || '', 'Points': t.points_value || 0, 'Reward': t.reward_description || '',
-      'Recurring': t.is_recurring ? 'Yes' : 'No', 'Assigned By': t.assigned_by || '', 'Approved By': t.approved_by || '',
-      'Completed At': t.completed_at ? new Date(t.completed_at as string).toLocaleString() : '',
-      'Created At': t.created_at ? new Date(t.created_at as string).toLocaleString() : '',
-    })) : [{ 'Info': 'No tasks assigned' }]
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(assignedTasksData), 'Assigned Tasks')
-
-    // Events
-    const eventsData = events.length > 0 ? events.map((e: Record<string, unknown>) => ({
-      'ID': e.id || '', 'Title': e.title || '', 'Description': e.description || '',
-      'Calendar': e.calendar_name || '', 'Location': e.location || '',
-      'Place Name': e.place_name || '', 'Place Address': e.place_address || '',
-      'Start Time': e.start_time ? new Date(e.start_time as string).toLocaleString() : '',
-      'End Time': e.end_time ? new Date(e.end_time as string).toLocaleString() : '',
-      'All Day': e.is_all_day ? 'Yes' : 'No', 'Status': e.status || '', 'Visibility': e.visibility || '',
-      'Color': e.color || '', 'Recurring': e.is_recurring ? 'Yes' : 'No',
-      'Created At': e.created_at ? new Date(e.created_at as string).toLocaleString() : '',
-    })) : [{ 'Info': 'No events' }]
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(eventsData), 'Events')
-
-    // Payment History
-    const paymentData = paymentHistory.length > 0 ? paymentHistory.map((p: Record<string, unknown>) => ({
-      'Transaction ID': p.id || '', 'Amount': p.amount ? `$${((p.amount as number) / 100).toFixed(2)}` : '',
-      'Currency': p.currency || 'USD', 'Status': p.status || '', 'Description': p.description || '',
-      'Subscription Tier': p.subscription_tier || '', 'Subscription Status': p.subscription_status || '',
-      'Stripe Payment ID': p.stripe_payment_id || '',
-      'Date': p.created_at ? new Date(p.created_at as string).toLocaleString() : '',
-    })) : [{ 'Info': 'No payment history' }]
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(paymentData), 'Payment History')
-
-    // Account Activity
-    const activityData = auditLogs.length > 0 ? auditLogs.map((a: Record<string, unknown>) => ({
-      'Action': a.action || '', 'Entity Type': a.entity_type || '', 'Entity ID': a.entity_id || '',
-      'IP Address': a.ip_address || '', 'User Agent': a.user_agent || '',
-      'Metadata': a.metadata ? JSON.stringify(a.metadata) : '',
-      'Timestamp': a.created_at ? new Date(a.created_at as string).toLocaleString() : '',
-    })) : [{ 'Info': 'No account activity' }]
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(activityData), 'Account Activity')
-
-    const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
-
-    return new NextResponse(excelBuffer, {
+    const stamp = new Date().toISOString().split('T')[0]
+    if (format === 'json') {
+      return new Response(streamJson(data), {
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Disposition': `attachment; filename="togethr-export-${stamp}.json"`,
+          'Cache-Control': 'no-store',
+        },
+      })
+    }
+    return new Response(streamBuffer(buildXlsx(data)), {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="togethr-export-${new Date().toISOString().split('T')[0]}.xlsx"`,
+        'Content-Disposition': `attachment; filename="togethr-export-${stamp}.xlsx"`,
+        'Cache-Control': 'no-store',
       },
     })
   } catch (error) {
     console.error('Export error:', error)
-    return NextResponse.json({ error: 'Failed to export', details: error instanceof Error ? error.message : 'Unknown' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to export your data. Please try again.' }, { status: 500 })
   }
 }
