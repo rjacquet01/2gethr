@@ -29,7 +29,7 @@ export default function PrivacyPage() {
         <h1 className="text-3xl font-bold mb-8">Privacy Policy</h1>
         
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: March 2026</p>
+          <p className="text-muted-foreground">Last updated: October 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Introduction</h2>
@@ -85,6 +85,16 @@ export default function PrivacyPage() {
               <li>Retained according to your subscription plan limits</li>
               <li>Deleted when you disable location sharing or delete your account</li>
             </ul>
+            <h3 className="text-lg font-medium">Background location (Android)</h3>
+            <p>
+              If you turn on background sharing in the Togethr Android app, we collect your device's
+              precise location even when the app is closed or not in use. We use it only to show your
+              live location to your family members and to send arrival and departure alerts for places
+              your family has saved. A notification is shown while background sharing is on. You can
+              turn it off at any time from the app, from that notification, or by changing the
+              Location permission in your device settings. We do not sell location data or use it for
+              advertising.
+            </p>
           </section>
 
           <section className="space-y-4">
@@ -102,8 +112,9 @@ export default function PrivacyPage() {
             <p>
               Togethr allows parents to create profiles for their children. We collect minimal 
               information about children and do not knowingly collect personal information from 
-              children under 13 without parental consent. Parents can manage and delete their 
-              children's data at any time.
+              children under 13 without parental consent. A child's location is shared only with the 
+              parents and family members in their family group, and only when location sharing is turned on for that child. 
+              Parents can manage and delete their children's data at any time.
             </p>
           </section>
 
