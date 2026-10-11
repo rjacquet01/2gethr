@@ -98,6 +98,26 @@ export async function GET(request: NextRequest) {
     }
 
     const subscription = subscriptions[0]
+
+    // An expired trial is Free, matching checkFamilySubscription in lib/auth.ts,
+    // even if the row still says TRIALING.
+    const trialExpired =
+      subscription.status === "TRIALING" &&
+      !!subscription.trial_ends_at &&
+      new Date(subscription.trial_ends_at).getTime() < Date.now()
+    if (trialExpired) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          tier: "FREE",
+          status: "ACTIVE",
+          tierInfo: SUBSCRIPTION_TIERS.FREE,
+          familyId,
+          isOwner: subscription.owner_id === user.id,
+        },
+      })
+    }
+
     const tierInfo = SUBSCRIPTION_TIERS[subscription.tier as keyof typeof SUBSCRIPTION_TIERS] || SUBSCRIPTION_TIERS.FREE
 
     return NextResponse.json({
