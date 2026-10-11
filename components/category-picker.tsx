@@ -53,7 +53,7 @@ export function CategoryPicker({ value, onChange, options, placeholder = 'Select
       >
         <SelectTrigger>
           <SelectValue placeholder={placeholder}>
-            {showInput ? (value ? formatCategory(value) : 'Custom...') : undefined}
+            {showInput ? (value ? formatCategory(value) : 'Custom...') : (options.find((o) => o.value === selectValue)?.label ?? placeholder)}
           </SelectValue>
         </SelectTrigger>
         <SelectContent>
