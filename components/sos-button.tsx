@@ -83,7 +83,7 @@ export function SosButton({ familyId }: { familyId?: string }) {
               {!result && 'Every parent and guardian in your family will immediately get a push, text and email with your current location.'}
               {result?.failed && result.message}
               {result && !result.failed && result.data?.notified === 0 && 'There is no one else in your family to notify yet.'}
-              {result && !result.failed && result.data?.notified > 0 && result.data?.reached === 0 && 'We could not confirm delivery to anyone. Call them or emergency services directly.'}
+              {result && !result.failed && result.data?.notified > 0 && result.data?.reached === 0 && (result.data?.emailOnly > 0 ? 'Only an email was delivered. No one in your family has a phone number or the app signed in to receive a text or push alert. Call them or emergency services directly.' : 'We could not confirm delivery to anyone. Call them or emergency services directly.')}
             </DialogDescription>
           </DialogHeader>
           {result && !result.failed && result.data?.recipients?.length > 0 && (
@@ -94,6 +94,7 @@ export function SosButton({ familyId }: { familyId?: string }) {
                   <span className="text-muted-foreground">
                     {[r.sms === 'sent' && 'text', r.push === 'sent' && 'push', r.email === 'sent' && 'email'].filter(Boolean).join(', ') ||
                       (r.smsReason ? `not reached (${r.smsReason})` : 'not reached')}
+                    {r.sms !== 'sent' && r.push !== 'sent' && r.email === 'sent' && ' (email only, no phone or app)'}
                   </span>
                 </li>
               ))}

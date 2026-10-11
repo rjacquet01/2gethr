@@ -77,12 +77,15 @@ export async function POST(request: NextRequest) {
       eventId, familyId, senderId: userId, senderName: who,
       latitude: lat, longitude: lng, locationNote, message: body.message,
     })
-    const reached = results.filter((r) => r.sms === "sent" || r.push === "sent" || r.email === "sent").length
+    // "reached" counts only urgent channels (text/push); email alone is easy to miss
+    const reached = results.filter((r) => r.sms === "sent" || r.push === "sent").length
+    const emailOnly = results.filter((r) => r.sms !== "sent" && r.push !== "sent" && r.email === "sent").length
     return NextResponse.json({
       success: true,
       data: {
         notified: results.length,
         reached,
+        emailOnly,
         hasLocation: lat != null && lng != null,
         locationNote,
         recipients: results,
