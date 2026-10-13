@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useFamilies } from '@/hooks/use-family'
 import { useSubscription } from '@/hooks/use-subscription'
 import { authFetch } from '@/hooks/use-auth'
@@ -49,6 +49,35 @@ import useSWR from 'swr'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { ColorPicker, IconPicker, getPlaceIcon } from '@/components/customization'
+
+// Address line for a place card. Uses the saved address; if there isn't one it
+// looks it up from the coordinates, and falls back to the coordinates.
+function PlaceAddress({ place }: { place: SavedPlace }) {
+  const [resolved, setResolved] = useState<string | null>(null)
+  useEffect(() => {
+    if (place.address) return
+    let cancelled = false
+    authFetch(`/api/places/geocode?lat=${place.latitude}&lng=${place.longitude}`, { credentials: 'include' })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled && d?.success && d.data?.formattedAddress) setResolved(d.data.formattedAddress)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [place.address, place.latitude, place.longitude])
+  const text =
+    place.address ||
+    resolved ||
+    `${Number(place.latitude).toFixed(5)}, ${Number(place.longitude).toFixed(5)}`
+  return (
+    <p className="text-xs text-muted-foreground flex items-start gap-1 mt-0.5 break-words">
+      <MapPin className="w-3 h-3 mt-0.5 shrink-0" />
+      <span>{text}</span>
+    </p>
+  )
+}
 
 interface SavedPlace {
   id: string
@@ -849,11 +878,7 @@ export default function PlacesPage() {
                       </div>
                       <div>
                         <CardTitle className="text-base">{place.name}</CardTitle>
-                        {place.address && (
-                          <CardDescription className="text-xs line-clamp-1">
-                            {place.address}
-                          </CardDescription>
-                        )}
+                        <PlaceAddress place={place} />
                       </div>
                     </div>
                     <div className="flex gap-1">
