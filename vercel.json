@@ -29,6 +29,10 @@
       "schedule": "0 13 * * 1"
     },
     {
+      "path": "/api/cron/task-on-hold",
+      "schedule": "0 14 * * *"
+    },
+    {
       "path": "/api/cron/archive",
       "schedule": "0 9 * * *"
     },
