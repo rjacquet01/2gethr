@@ -429,7 +429,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user can create events
-    if (!calendar.can_create_events && calendar.role !== "PARENT") {
+    // Kids may always invite others (adults then approve, kids accept); a kid
+    // without the create-events permission can't add solo events without approval.
+    const childCanPropose = calendar.role === "CHILD" && participantUserIds_hasOthers
+    if (!calendar.can_create_events && calendar.role !== "PARENT" && !childCanPropose) {
       return NextResponse.json(
         { success: false, error: "You don't have permission to create events" },
         { status: 403 }

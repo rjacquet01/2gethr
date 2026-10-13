@@ -400,6 +400,7 @@ export async function checkAndNotifyOverdueTasks(): Promise<{ notified: number }
     FROM tasks t
     LEFT JOIN child_profiles cp ON t.child_profile_id = cp.id
     WHERE t.status IN ('pending', 'in_progress', 'PENDING', 'IN_PROGRESS')
+      AND (t.assignment_status IS NULL OR t.assignment_status = 'ACCEPTED')
       AND t.due_date < NOW()
       AND t.due_date > NOW() - INTERVAL '24 hours'
       AND NOT EXISTS (
@@ -543,6 +544,7 @@ export async function checkAndNotifyUpcomingDueDates(): Promise<{
     FROM tasks t
     LEFT JOIN child_profiles cp ON t.child_profile_id = cp.id
     WHERE t.status IN ('pending', 'in_progress', 'on_hold', 'PENDING', 'IN_PROGRESS', 'ON_HOLD')
+      AND (t.assignment_status IS NULL OR t.assignment_status = 'ACCEPTED')
       AND t.due_date >= NOW()
       AND t.due_date <= NOW() + INTERVAL '48 hours'
       AND NOT EXISTS (

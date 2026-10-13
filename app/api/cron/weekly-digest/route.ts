@@ -144,6 +144,7 @@ export async function GET(request: NextRequest) {
             COALESCE(COUNT(*) FILTER (WHERE status = 'OVERDUE' OR (status = 'PENDING' AND due_date < NOW())), 0)::int as overdue
           FROM tasks
           WHERE family_id = ${user.family_id}
+          AND (assignment_status IS NULL OR assignment_status = 'ACCEPTED')
           AND created_at >= NOW() - INTERVAL '7 days'
         `
 
