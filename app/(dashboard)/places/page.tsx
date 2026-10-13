@@ -381,8 +381,31 @@ export default function PlacesPage() {
       return
     }
 
-    if (newPlace.latitude === null || newPlace.longitude === null) {
-      toast.error('Set this place\'s location first — search the address or use your current location')
+    // If an address was typed but never looked up, look it up now instead of
+    // making the person find and press the search button first.
+    let lat = newPlace.latitude
+    let lng = newPlace.longitude
+    let addr = newPlace.address
+    if ((lat === null || lng === null) && newPlace.address.trim()) {
+      setIsAdding(true)
+      try {
+        const geoRes = await authFetch(`/api/places/geocode?address=${encodeURIComponent(newPlace.address)}`, {
+          credentials: 'include',
+        })
+        const geo = await geoRes.json()
+        if (geo.success && geo.data) {
+          lat = geo.data.latitude
+          lng = geo.data.longitude
+          addr = geo.data.formattedAddress || addr
+        }
+      } catch {
+        // handled below
+      }
+      setIsAdding(false)
+    }
+
+    if (lat === null || lng === null) {
+      toast.error("We couldn't find that address. Enter a full address (street, city, state) or use your current location.")
       return
     }
 
@@ -395,9 +418,9 @@ export default function PlacesPage() {
         body: JSON.stringify({
           familyId: primaryFamily.id,
           name: newPlace.name,
-          address: newPlace.address || null,
-          latitude: newPlace.latitude,
-          longitude: newPlace.longitude,
+          address: addr || null,
+          latitude: lat,
+          longitude: lng,
           radius: newPlace.radius,
           geofenceEnabled: newPlace.geofenceEnabled,
           alertOnArrival: newPlace.alertOnArrival,
@@ -646,7 +669,7 @@ export default function PlacesPage() {
                 )}
                 {!newPlace.locationLabel && (
                   <p className="text-xs text-muted-foreground">
-                    A geofence needs a real location — search the address above or use your current location.
+                    Type the address (we'll look it up when you save) or use your current location.
                   </p>
                 )}
               </div>
@@ -774,7 +797,7 @@ export default function PlacesPage() {
               <Button variant="outline" onClick={() => setAddPlaceOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleAddPlace} disabled={isAdding || newPlace.latitude === null}>
+              <Button onClick={handleAddPlace} disabled={isAdding}>
                 {isAdding ? <Spinner className="w-4 h-4 mr-2" /> : null}
                 Save Place
               </Button>
