@@ -290,6 +290,9 @@ export default function FamilyPage() {
     setIsAddingChild(false)
   }
 
+  // Only Parent/Guardian get a role badge; kids and other members are not labeled
+  const roleLabel = (role: string) => role === 'PARENT' ? 'Parent' : role === 'GUARDIAN' ? 'Guardian' : 'Member'
+
   const getRoleIcon = (role: string) => {
     switch (role) {
       case 'PARENT': return Crown
@@ -489,10 +492,10 @@ export default function FamilyPage() {
                           {member.displayName}
                         </p>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant={getRoleBadgeVariant(member.role) as 'default' | 'secondary' | 'outline'} className="text-xs">
+                          {member.role !== 'CHILD' && (<Badge variant={getRoleBadgeVariant(member.role) as 'default' | 'secondary' | 'outline'} className="text-xs">
                             <RoleIcon className="w-3 h-3 mr-1" />
-                            {member.role}
-                          </Badge>
+                            {roleLabel(member.role)}
+                          </Badge>)}
                           <span className="text-xs text-muted-foreground">
                             {member.taskCount} tasks, {member.eventCount} events
                           </span>
@@ -691,10 +694,10 @@ export default function FamilyPage() {
                       <p className="font-medium text-foreground truncate">
                         {member.displayName}
                       </p>
-                      <Badge variant={getRoleBadgeVariant(member.role) as 'default' | 'secondary' | 'outline'} className="mt-1">
+                      {member.role !== 'CHILD' && (<Badge variant={getRoleBadgeVariant(member.role) as 'default' | 'secondary' | 'outline'} className="mt-1">
                         <RoleIcon className="w-3 h-3 mr-1" />
-                        {member.role}
-                      </Badge>
+                        {roleLabel(member.role)}
+                      </Badge>)}
                     </div>
                     {family.ownerId === member.userId && (
                       <Badge variant="outline" className="text-xs">Owner</Badge>
