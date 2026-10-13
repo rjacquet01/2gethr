@@ -81,6 +81,11 @@ export async function GET(request: NextRequest) {
         color: p.color,
         notifyChannels: p.notify_channels,
         photoPath: p.photo_path ?? null,
+        createdById: p.created_by_id ?? null,
+        // Parents/guardians manage every place; other members manage the ones they added
+        canManage:
+          ["PARENT", "GUARDIAN", "ADMIN"].includes(membership[0].role) ||
+          (p.created_by_id != null && String(p.created_by_id) === String(user.id)),
         createdAt: p.created_at,
       })),
     })
@@ -115,12 +120,14 @@ export async function POST(request: NextRequest) {
       WHERE family_id = ${validatedData.familyId} AND user_id = ${user.id} AND is_active = true
     `
 
-    if (membership.length === 0 || !["PARENT", "GUARDIAN", "ADMIN"].includes(membership[0].role)) {
+    if (membership.length === 0) {
       return NextResponse.json(
-        { success: false, error: "Only parents or guardians can create saved places" },
+        { success: false, error: "Not a member of this family" },
         { status: 403 }
       )
     }
+
+    const isManager = ["PARENT", "GUARDIAN", "ADMIN"].includes(membership[0].role)
 
     // Check subscription limits
     const subscription = await checkFamilySubscription(validatedData.familyId)
@@ -136,6 +143,11 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       )
+    }
+
+    if (!isManager) {
+      validatedData.geofenceEnabled = false
+      validatedData.notifyChannels = undefined
     }
 
     // Check if geofencing is allowed
@@ -155,7 +167,7 @@ export async function POST(request: NextRequest) {
       INSERT INTO saved_places (
         id, family_id, name, address, latitude, longitude, radius,
         geofence_enabled, alert_on_arrival, alert_on_departure,
-        icon, color, notify_channels, created_at, updated_at
+        icon, color, notify_channels, created_by_id, created_at, updated_at
       )
       VALUES (
         ${placeId},
@@ -171,6 +183,7 @@ export async function POST(request: NextRequest) {
         ${validatedData.icon || null},
         ${validatedData.color},
         ${normalizedNotifyChannels},
+        ${user.id},
         NOW(), NOW()
       )
     `

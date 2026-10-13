@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ensurePlaceNotifyChannelsColumn } from "@/lib/place-schema"
 import { sql } from "@/lib/db"
-import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
+import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { del } from "@vercel/blob"
 
@@ -113,15 +113,36 @@ export async function PATCH(
       )
     }
 
-    if (!["PARENT", "GUARDIAN", "ADMIN"].includes(places[0].role)) {
+    const isManager = ["PARENT", "GUARDIAN", "ADMIN"].includes(places[0].role)
+    const isCreator = places[0].created_by_id != null && String(places[0].created_by_id) === String(user.id)
+    if (!isManager && !isCreator) {
       return NextResponse.json(
-        { success: false, error: "Only parents or guardians can update saved places" },
+        { success: false, error: "You can only edit places you added" },
         { status: 403 }
       )
     }
 
     const body = await request.json()
     const validatedData = updatePlaceSchema.parse(body)
+
+    // Geofence alerts watch every family member, so only parents/guardians change them
+    if (!isManager) {
+      delete validatedData.geofenceEnabled
+      delete validatedData.alertOnArrival
+      delete validatedData.alertOnDeparture
+      delete validatedData.notifyChannels
+    }
+
+    // Geofencing follows the plan tier (it was only checked when a place was created)
+    if (validatedData.geofenceEnabled) {
+      const sub = await checkFamilySubscription(places[0].family_id)
+      if (!sub.features.geofencing) {
+        return NextResponse.json(
+          { success: false, error: "Geofencing requires a Premium subscription" },
+          { status: 403 }
+        )
+      }
+    }
 
     // Build update query dynamically
     const updates: string[] = []
@@ -250,7 +271,7 @@ export async function DELETE(
     await ensurePlaceNotifyChannelsColumn()
     // Check if place exists and user has permission
     const places = await sql`
-      SELECT sp.name, sp.family_id, sp.photo_url, fm.role
+      SELECT sp.name, sp.family_id, sp.photo_url, sp.created_by_id, fm.role
       FROM saved_places sp
       JOIN family_members fm ON sp.family_id = fm.family_id
       WHERE sp.id = ${placeId} AND fm.user_id = ${user.id} AND fm.is_active = true
@@ -263,9 +284,12 @@ export async function DELETE(
       )
     }
 
-    if (!["PARENT", "GUARDIAN", "ADMIN"].includes(places[0].role)) {
+    if (
+      !["PARENT", "GUARDIAN", "ADMIN"].includes(places[0].role) &&
+      !(places[0].created_by_id != null && String(places[0].created_by_id) === String(user.id))
+    ) {
       return NextResponse.json(
-        { success: false, error: "Only parents or guardians can delete saved places" },
+        { success: false, error: "You can only delete places you added" },
         { status: 403 }
       )
     }

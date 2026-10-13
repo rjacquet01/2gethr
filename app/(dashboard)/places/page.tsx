@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useFamilies } from '@/hooks/use-family'
 import { useSubscription } from '@/hooks/use-subscription'
-import { authFetch } from '@/hooks/use-auth'
+import { authFetch, useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -211,6 +211,7 @@ interface SavedPlace {
   icon: string | null
   color: string
   photoPath?: string | null
+  canManage?: boolean
   notifyChannels: NotifyChannel[] | null
   createdAt: string
 }
@@ -242,6 +243,11 @@ const fetcher = async (url: string) => {
 export default function PlacesPage() {
   const { families, isLoading: familiesLoading } = useFamilies()
   const primaryFamily = families[0]
+  const { user } = useAuth()
+  // Geofence alerts watch every family member, so only parents/guardians set them up
+  const canManageGeofence = !!primaryFamily?.members?.some(
+    (m) => m.userId === user?.id && (m.role === 'PARENT' || m.role === 'GUARDIAN')
+  )
   const { access, isLoading: subscriptionLoading } = useSubscription(primaryFamily?.id || null)
   
   const { data: places, isLoading: placesLoading, mutate } = useSWR<SavedPlace[]>(
@@ -664,7 +670,7 @@ export default function PlacesPage() {
                   onChange={(color) => setNewPlace({ ...newPlace, color })}
                 />
               </div>
-              {access.hasPremium && (
+              {access.hasPremium && canManageGeofence && (
                 <>
                   <div className="flex items-center justify-between">
                     <div>
@@ -752,7 +758,7 @@ export default function PlacesPage() {
                   )}
                 </>
               )}
-              {!access.hasPremium && (
+              {!access.hasPremium && canManageGeofence && (
                 <div className="p-3 rounded-lg bg-muted">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Crown className="w-4 h-4 text-amber-500" />
@@ -861,7 +867,7 @@ export default function PlacesPage() {
                   onChange={(color) => setEditPlace({ ...editPlace, color })}
                 />
               </div>
-              {access.hasPremium && (
+              {access.hasPremium && canManageGeofence && (
                 <>
                   <div className="flex items-center justify-between">
                     <div>
@@ -949,7 +955,7 @@ export default function PlacesPage() {
                   )}
                 </>
               )}
-              {!access.hasPremium && (
+              {!access.hasPremium && canManageGeofence && (
                 <div className="p-3 rounded-lg bg-muted">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Crown className="w-4 h-4 text-amber-500" />
@@ -1064,6 +1070,7 @@ export default function PlacesPage() {
                         size="icon" 
                         className="h-8 w-8"
                         onClick={() => openEditDialog(place)}
+                        style={place.canManage === false ? { display: 'none' } : undefined}
                       >
                         <Edit className="w-4 h-4" />
                       </Button>
@@ -1072,6 +1079,7 @@ export default function PlacesPage() {
                         size="icon"
                         className="h-8 w-8 text-destructive hover:text-destructive"
                         onClick={() => handleDeletePlace(place.id)}
+                        style={place.canManage === false ? { display: 'none' } : undefined}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>

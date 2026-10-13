@@ -16,7 +16,7 @@ async function loadEditablePlace(request: NextRequest, placeId: string) {
     return { response: NextResponse.json({ success: false, error: error || "Not authenticated" }, { status: 401 }) }
   }
   const rows = await sql`
-    SELECT sp.id, sp.family_id, sp.photo_path, sp.photo_url, fm.role
+    SELECT sp.id, sp.family_id, sp.photo_path, sp.photo_url, sp.created_by_id, fm.role
     FROM saved_places sp
     JOIN family_members fm ON sp.family_id = fm.family_id
     WHERE sp.id = ${placeId} AND fm.user_id = ${user.id} AND fm.is_active = true
@@ -24,10 +24,11 @@ async function loadEditablePlace(request: NextRequest, placeId: string) {
   if (rows.length === 0) {
     return { response: NextResponse.json({ success: false, error: "Place not found" }, { status: 404 }) }
   }
-  if (!["PARENT", "GUARDIAN", "ADMIN"].includes(rows[0].role)) {
+  const isCreator = rows[0].created_by_id != null && String(rows[0].created_by_id) === String(user.id)
+  if (!["PARENT", "GUARDIAN", "ADMIN"].includes(rows[0].role) && !isCreator) {
     return {
       response: NextResponse.json(
-        { success: false, error: "Only parents or guardians can change place photos" },
+        { success: false, error: "You can only change photos on places you added" },
         { status: 403 }
       ),
     }

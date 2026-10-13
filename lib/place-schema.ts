@@ -12,6 +12,7 @@ export function ensurePlaceNotifyChannelsColumn(): Promise<void> {
       await sql`ALTER TABLE saved_places ADD COLUMN IF NOT EXISTS notify_channels TEXT[]`
       await sql`ALTER TABLE saved_places ADD COLUMN IF NOT EXISTS photo_path TEXT`
       await sql`ALTER TABLE saved_places ADD COLUMN IF NOT EXISTS photo_url TEXT`
+      await sql`ALTER TABLE saved_places ADD COLUMN IF NOT EXISTS created_by_id TEXT`
     })().catch((err) => {
       ensured = null
       throw err
