@@ -38,7 +38,8 @@ export async function GET(request: NextRequest) {
         UPDATE tasks
         SET status = 'ARCHIVED', updated_at = NOW()
         WHERE family_id = ${family.id}
-        AND status IN ('COMPLETED', 'CANCELLED')
+        AND status IN ('COMPLETED', 'CANCELLED', 'APPROVED')
+        AND updated_at < NOW() - INTERVAL '5 days'
         RETURNING id, created_by_id
       `
 
@@ -49,6 +50,15 @@ export async function GET(request: NextRequest) {
         `
       }
       tasksArchived += archivedTasks.length
+
+      // Done/dismissed reminders also age out after 5 days.
+      await sql`
+        UPDATE reminders
+        SET status = 'ARCHIVED', updated_at = NOW()
+        WHERE family_id = ${family.id}
+        AND status IN ('COMPLETED', 'DISMISSED')
+        AND updated_at < NOW() - INTERVAL '5 days'
+      `
 
       const archivedEvents = await sql`
         UPDATE events e

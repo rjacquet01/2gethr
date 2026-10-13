@@ -271,7 +271,7 @@ export async function GET(request: NextRequest) {
         UPDATE tasks
         SET status = 'ARCHIVED', updated_at = NOW()
         WHERE status IN ('COMPLETED', 'CANCELLED')
-        AND updated_at < NOW() - INTERVAL '7 days'
+        AND updated_at < NOW() - INTERVAL '5 days'
         RETURNING id, created_by_id
       `
 

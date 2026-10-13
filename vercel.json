@@ -25,6 +25,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/task-weekly-reminders",
+      "schedule": "0 13 * * 1"
+    },
+    {
       "path": "/api/cron/archive",
       "schedule": "0 9 * * *"
     },
