@@ -49,6 +49,16 @@ export default function SubscriptionPage() {
   const [selectedTierIndex, setSelectedTierIndex] = useState<number | null>(null)
 
   const primaryFamily = families?.[0]
+  // Only the account holder (families.owner_id) can change the plan; invited
+  // family members get an explanation instead of a failed request.
+  const isOwner = !!primaryFamily && !!user && primaryFamily.ownerId === user.id
+  const ownerName = (primaryFamily?.members as unknown as Array<{ userId?: string | null; displayName?: string | null }> | undefined)
+    ?.find((m) => m.userId === primaryFamily?.ownerId)?.displayName || null
+  const ownerOnly = (): boolean => {
+    if (isOwner) return false
+    toast.info(`Only the account holder${ownerName ? ` (${ownerName})` : ''} can change this family's plan. Since you were invited to this family, please ask them to upgrade or downgrade.`)
+    return true
+  }
   const { subscription, access, isLoading: subLoading, startTrial, cancelTrial } = useSubscription(primaryFamily?.id || null)
   const tiers = useSubscriptionTiers()
 
@@ -74,6 +84,7 @@ export default function SubscriptionPage() {
   const formatTierName = (tier: string) => getTierDefinition(tier).name
 
   const handleStartTrial = async (tier: 'PREMIUM' | 'PREMIUM_PLUS') => {
+    if (ownerOnly()) return
     setIsStartingTrial(true)
     const result = await startTrial(tier)
     setIsStartingTrial(false)
@@ -86,6 +97,7 @@ export default function SubscriptionPage() {
   }
 
   const handleCancelTrial = async () => {
+    if (ownerOnly()) return
     setIsCancelingTrial(true)
     const result = await cancelTrial()
     setIsCancelingTrial(false)
@@ -97,6 +109,7 @@ export default function SubscriptionPage() {
   }
 
   const handleManageBilling = async () => {
+    if (ownerOnly()) return
     if (!primaryFamily?.id) return
     setIsCanceling(true)
     try {
@@ -151,6 +164,15 @@ export default function SubscriptionPage() {
           Manage your Togethr subscription and unlock premium features
         </p>
       </div>
+
+      {!isOwner && (
+        <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+          <CardContent className="pt-6 text-sm">
+            <span className="font-medium">Plan changes are managed by the account holder.</span>{' '}
+            Because you were invited to this family, you cannot upgrade, downgrade or cancel the subscription{ownerName ? <> - please ask {ownerName}</> : ''}.
+          </CardContent>
+        </Card>
+      )}
 
       {/* Current Plan Card */}
       <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
@@ -356,6 +378,7 @@ export default function SubscriptionPage() {
 
           const handleCardClick = () => {
             if (isCurrentTier || tier.name === 'Free') return
+            if (ownerOnly()) return
             setSelectedTierIndex(index)
             // Navigate to upgrade page with selected tier
             router.push(`/subscription/upgrade?tier=${tierKey}&billing=${selectedBilling}`)
@@ -445,7 +468,7 @@ export default function SubscriptionPage() {
                       variant={isPremium ? "default" : "outline"}
                       onClick={(e) => {
                         e.stopPropagation()
-                        router.push(`/subscription/upgrade?tier=${tierKey}&billing=${selectedBilling}`)
+                        if (!ownerOnly()) router.push(`/subscription/upgrade?tier=${tierKey}&billing=${selectedBilling}`)
                       }}
                     >
                       <CreditCard className="h-4 w-4 mr-2" />

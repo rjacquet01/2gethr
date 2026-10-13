@@ -96,6 +96,24 @@ function UpgradeForm() {
     )
   }
 
+  if (!authLoading && !familiesLoading && primaryFamily && user && primaryFamily.ownerId !== user.id) {
+    return (
+      <div className="container max-w-xl py-12">
+        <Card>
+          <CardHeader>
+            <CardTitle>Only the account holder can change the plan</CardTitle>
+            <CardDescription>
+              Since you were invited to this family, you cannot upgrade or downgrade its subscription. Please ask the account holder to make the change.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <Button asChild variant="outline"><Link href="/subscription"><ArrowLeft className="h-4 w-4 mr-2" />Back to Subscription</Link></Button>
+          </CardFooter>
+        </Card>
+      </div>
+    )
+  }
+
   // Safety check - if tier is somehow undefined, show loading state
   if (!tier) {
     return (
