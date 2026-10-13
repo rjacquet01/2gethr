@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
-import type { NotificationChannel } from '@/lib/notifications'
+import { createNotification, type NotificationChannel } from '@/lib/notifications'
 import { getHistoryDays } from '@/lib/history-limit'
 import { ensureReminderChildColumn } from '@/lib/reminder-schema'
 
@@ -218,6 +218,34 @@ export async function POST(request: NextRequest) {
       )
       RETURNING *
     `
+
+    // Tell the person a reminder was set FOR them right away (the cron only
+    // delivers it at remind_at), on the channels the creator picked.
+    if (ownerId !== user.id) {
+      try {
+        const tzRow = await sql`SELECT timezone FROM users WHERE id = ${ownerId}`
+        const tz = tzRow[0]?.timezone || 'America/New_York'
+        let when: string
+        try {
+          when = remindAtDate.toLocaleString('en-US', { timeZone: tz, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+        } catch {
+          when = remindAtDate.toISOString()
+        }
+        const byName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'A family member'
+        await createNotification({
+          userId: ownerId,
+          type: 'REMINDER',
+          title: 'New reminder for you',
+          body: `${byName} set a reminder for you: "${title}" (${when})`,
+          data: { reminderId: reminder[0].id, familyId: resolvedFamilyId, kind: 'reminder_assigned' },
+          sendEmail: true,
+          sendSms: true,
+          channels: normalizedNotifyChannels || undefined,
+        })
+      } catch (notifyErr) {
+        console.error('Reminder-assigned notification failed (non-fatal):', notifyErr)
+      }
+    }
 
     return NextResponse.json({ data: reminder[0] }, { status: 201 })
   } catch (error) {
