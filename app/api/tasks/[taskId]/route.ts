@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { notifyTaskCompleted, createNotification } from '@/lib/notifications'
+import { ensureAssignmentColumns, isAdultRole } from '@/lib/assignment'
 import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
 
 // Helper to sync task status updates across all related tables
@@ -203,6 +204,60 @@ export async function PATCH(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
     
+    // Assignment approval / acceptance
+    if (action === 'accept_assignment' || action === 'decline_assignment') {
+      await ensureAssignmentColumns()
+      const st = task.assignment_status as string | null
+      if (st !== 'PENDING_APPROVAL' && st !== 'PENDING_ACCEPTANCE') {
+        return NextResponse.json({ error: 'This task is not waiting on a response' }, { status: 400 })
+      }
+      let assigneeUserId: string | null = task.assigned_to_id || null
+      if (!assigneeUserId && task.child_profile_id) {
+        const cp = await sql`
+          SELECT fm.user_id FROM child_profiles cp JOIN family_members fm ON cp.family_member_id = fm.id
+          WHERE cp.id = ${task.child_profile_id}
+        `
+        assigneeUserId = cp[0]?.user_id || null
+      }
+      const allowed = st === 'PENDING_APPROVAL'
+        ? isAdultRole(membership[0].role)
+        : assigneeUserId === user.id
+      if (!allowed) {
+        return NextResponse.json({ error: st === 'PENDING_APPROVAL' ? 'Only a parent or guardian can approve this' : 'Only the assignee can accept this' }, { status: 403 })
+      }
+      const accepted = action === 'accept_assignment'
+      if (accepted) {
+        await sql`UPDATE tasks SET assignment_status = 'ACCEPTED', updated_at = NOW() WHERE id = ${taskId}`
+      } else {
+        await sql`UPDATE tasks SET assignment_status = 'DECLINED', status = 'CANCELLED', updated_at = NOW() WHERE id = ${taskId}`
+      }
+      try {
+        await sql`
+          INSERT INTO task_history (task_id, user_id, action, new_value)
+          VALUES (${taskId}, ${user.id}, ${accepted ? 'APPROVED' : 'REJECTED'}, ${JSON.stringify({ assignment: accepted ? 'accepted' : 'declined' })}::jsonb)
+        `
+      } catch (e) { console.error('assignment history failed (non-fatal)', e) }
+      const who = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Someone'
+      if (task.created_by_id && task.created_by_id !== user.id) {
+        await createNotification({
+          userId: task.created_by_id, type: 'APPROVAL_RESPONSE',
+          title: accepted ? 'Task accepted' : 'Task declined',
+          body: `${who} ${accepted ? 'accepted' : 'declined'} your task: "${task.title}"`,
+          data: { taskId, familyId: task.family_id }, sendEmail: true, channels: task.notify_channels || undefined,
+        })
+      }
+      // A parent approved a kid's request for someone else: tell the assignee.
+      if (accepted && assigneeUserId && assigneeUserId !== user.id && assigneeUserId !== task.created_by_id) {
+        await createNotification({
+          userId: assigneeUserId, type: 'TASK_ASSIGNED',
+          title: 'New Task Assigned',
+          body: `${who} approved a task for you: "${task.title}"`,
+          data: { taskId, familyId: task.family_id }, sendEmail: true, channels: task.notify_channels || undefined,
+        })
+      }
+      return NextResponse.json({ success: true, assignmentStatus: accepted ? 'ACCEPTED' : 'DECLINED' })
+    }
+
     // Handle specific actions
     if (action === 'complete') {
       // Mark task as completed

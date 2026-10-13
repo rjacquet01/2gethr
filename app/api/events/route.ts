@@ -1,3 +1,4 @@
+import { notifyEventAssignment, isAdultRole } from '@/lib/assignment'
 import { NextRequest, NextResponse } from "next/server"
 import { ensureEventCategoryColumn } from "@/lib/event-category-column"
 import { ensureTaskEventNotifyChannelsColumns } from "@/lib/notify-channels-schema"
@@ -540,7 +541,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine initial status
-    const status = calendar.requires_event_approval ? "PENDING" : "APPROVED"
+    // A child inviting a parent/guardian needs that parent's approval.
+    let needsParentApproval = false
+    if (calendar.role === "CHILD" && participantUserIds.length > 0) {
+      const adults = await sql`
+        SELECT 1 FROM family_members
+        WHERE family_id = ${calendar.family_id} AND is_active = true
+        AND role IN ('PARENT', 'GUARDIAN')
+        AND user_id = ANY(${participantUserIds}::text[]) AND user_id <> ${user.id}
+      `
+      needsParentApproval = adults.length > 0
+    }
+    const status = (calendar.requires_event_approval || needsParentApproval) ? "PENDING" : "APPROVED"
 
     // Create recurrence rule if recurring
     let recurrenceRuleId = null
@@ -672,7 +684,20 @@ export async function POST(request: NextRequest) {
 
     // Notify family members about the new event
     const creatorName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'A family member'
-    await notifyFamilyAboutEvent(
+    if (status === "PENDING" || calendar.role === "CHILD") {
+      await notifyEventAssignment({
+        familyId: calendar.family_id,
+        eventId,
+        title: validatedData.title,
+        creatorUserId: user.id,
+        creatorName,
+        status,
+        participantUserIds,
+        channels: validatedData.notifyChannels && validatedData.notifyChannels.length > 0
+          ? (validatedData.notifyChannels as NotificationChannel[])
+          : undefined,
+      })
+    } else await notifyFamilyAboutEvent(
       calendar.family_id,
       validatedData.title,
       eventId,

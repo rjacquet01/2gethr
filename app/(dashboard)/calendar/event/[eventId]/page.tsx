@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useEvent } from '@/hooks/use-events'
+import { useAuth, authFetch } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -52,6 +53,22 @@ export default function EventDetailPage() {
   
   const { event, isLoading, deleteEvent } = useEvent(eventId)
   const [isDeleting, setIsDeleting] = useState(false)
+  const { user: currentUser } = useAuth()
+  const [responding, setResponding] = useState(false)
+
+  const respond = async (url: string, body: Record<string, string>, okMsg: string) => {
+    setResponding(true)
+    try {
+      const res = await authFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Request failed')
+      toast.success(okMsg)
+      window.location.reload()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Request failed')
+      setResponding(false)
+    }
+  }
   
   const handleDelete = async (deleteRecurrence: boolean = false) => {
     setIsDeleting(true)
@@ -165,6 +182,41 @@ export default function EventDetailPage() {
           </AlertDialog>
         </div>
       </div>
+
+      {(() => {
+        const role = currentUser?.primaryFamilyRole
+        const isAdult = role === 'PARENT' || role === 'GUARDIAN'
+        const me = (event.participants as unknown as Array<{ userId?: string | null; status?: string; responseStatus?: string }> | undefined)
+          ?.find((p) => p.userId && p.userId === currentUser?.id)
+        const myStatus = me?.status || me?.responseStatus
+        if (event.status === 'PENDING' && isAdult) {
+          return (
+            <Card className="border-orange-300 bg-orange-50 dark:bg-orange-950/20">
+              <CardContent className="pt-6 space-y-3">
+                <p className="text-sm font-medium text-orange-700 dark:text-orange-300">This event is waiting for your approval.</p>
+                <div className="flex gap-3">
+                  <Button disabled={responding} className="bg-green-600 hover:bg-green-700" onClick={() => respond(`/api/events/${eventId}/approve`, { action: 'APPROVE' }, 'Event approved')}>Approve</Button>
+                  <Button disabled={responding} variant="outline" onClick={() => respond(`/api/events/${eventId}/approve`, { action: 'REJECT' }, 'Event declined')}>Decline</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        }
+        if (event.status !== 'PENDING' && me && myStatus === 'INVITED' && !isAdult) {
+          return (
+            <Card className="border-blue-300 bg-blue-50 dark:bg-blue-950/20">
+              <CardContent className="pt-6 space-y-3">
+                <p className="text-sm font-medium">You've been invited to this event.</p>
+                <div className="flex gap-3">
+                  <Button disabled={responding} className="bg-green-600 hover:bg-green-700" onClick={() => respond(`/api/events/${eventId}/respond`, { action: 'ACCEPT' }, 'Accepted')}>Accept</Button>
+                  <Button disabled={responding} variant="outline" onClick={() => respond(`/api/events/${eventId}/respond`, { action: 'DECLINE' }, 'Declined')}>Decline</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        }
+        return null
+      })()}
 
       {/* Event Details */}
       <Card>

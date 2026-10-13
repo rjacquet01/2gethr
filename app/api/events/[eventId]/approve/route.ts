@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
+import { createNotification } from "@/lib/notifications"
 
 const approvalSchema = z.object({
   action: z.enum(["APPROVE", "REJECT"]),
@@ -42,9 +43,9 @@ export async function POST(
 
     const event = events[0]
 
-    if (event.role !== "PARENT") {
+    if (event.role !== "PARENT" && event.role !== "GUARDIAN") {
       return NextResponse.json(
-        { success: false, error: "Only parents can approve or reject events" },
+        { success: false, error: "Only parents and guardians can approve or reject events" },
         { status: 403 }
       )
     }
@@ -78,24 +79,34 @@ export async function POST(
       WHERE event_id = ${eventId} AND status = 'PENDING'
     `
 
-    // Create notification for the event creator
-    await sql`
-      INSERT INTO notifications (
-        id, user_id, type, title, body, data, created_at
-      )
-      VALUES (
-        ${crypto.randomUUID()},
-        ${event.created_by_id},
-        'EVENT_APPROVAL',
-        ${action === "APPROVE" ? "Event Approved" : "Event Rejected"},
-        ${action === "APPROVE" 
-          ? `Your event "${event.title}" has been approved.` 
-          : `Your event "${event.title}" was not approved.${responseNotes ? ` Reason: ${responseNotes}` : ""}`
-        },
-        ${JSON.stringify({ eventId, action })},
-        NOW()
-      )
-    `
+    // Tell the creator (in-app + push + their chosen channels). The old
+    // direct INSERT used type 'EVENT_APPROVAL', which is not in the
+    // notification_type enum.
+    await createNotification({
+      userId: event.created_by_id,
+      type: action === "APPROVE" ? "EVENT_APPROVED" : "EVENT_REJECTED",
+      title: action === "APPROVE" ? "Event Approved" : "Event Rejected",
+      body: action === "APPROVE"
+        ? `Your event "${event.title}" has been approved.`
+        : `Your event "${event.title}" was not approved.${responseNotes ? ` Reason: ${responseNotes}` : ""}`,
+      data: { eventId, action, familyId: event.family_id },
+      sendEmail: true,
+    })
+    if (action === "APPROVE") {
+      const invitees = await sql`
+        SELECT user_id FROM event_participants
+        WHERE event_id = ${eventId} AND user_id <> ${event.created_by_id} AND user_id <> ${user.id}
+      `
+      for (const inv of invitees) {
+        await createNotification({
+          userId: inv.user_id,
+          type: "EVENT_INVITATION",
+          title: "Event invitation",
+          body: `You're invited to "${event.title}".`,
+          data: { eventId, familyId: event.family_id },
+        })
+      }
+    }
 
     // Audit log
     await logAuditEvent(user.id, "UPDATE", "event_approval", eventId, {

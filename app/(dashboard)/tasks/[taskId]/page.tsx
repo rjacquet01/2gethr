@@ -67,6 +67,19 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
     }
   }
 
+  const respondAssignment = async (accept: boolean) => {
+    setProcessing(true)
+    try {
+      await updateTask(taskId, accept ? 'accept_assignment' : 'decline_assignment')
+      mutate()
+      toast.success(accept ? 'Task accepted' : 'Task declined')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to respond')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   const handleStatusChange = (newStatus: string) => {
     const actionMap: Record<string, string> = {
       pending: 'pending',
@@ -196,8 +209,40 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
       ? `${task.assignee_first_name} ${task.assignee_last_name || ''}`.trim()
       : 'Unassigned'
 
+  const assignmentStatus = (task as unknown as { assignment_status?: string | null }).assignment_status || null
+  const myRole = currentUser?.primaryFamilyRole
+  const iAmAdult = myRole === 'PARENT' || myRole === 'GUARDIAN'
+  const iAmAssignee = !!currentUser && task.assigned_to_id === currentUser.id
+  const canRespond =
+    (assignmentStatus === 'PENDING_APPROVAL' && iAmAdult && task.created_by_id !== currentUser?.id) ||
+    (assignmentStatus === 'PENDING_ACCEPTANCE' && iAmAssignee)
+
   return (
     <div className="max-w-3xl mx-auto pb-20 lg:pb-0 space-y-6">
+      {(assignmentStatus === 'PENDING_APPROVAL' || assignmentStatus === 'PENDING_ACCEPTANCE') && (
+        <Card className="border-orange-300 bg-orange-50 dark:bg-orange-950/20">
+          <CardContent className="pt-6 space-y-3">
+            <p className="text-sm font-medium text-orange-700 dark:text-orange-300">
+              {assignmentStatus === 'PENDING_APPROVAL'
+                ? 'Waiting for a parent or guardian to approve this task.'
+                : 'Waiting for the assignee to accept this task.'}
+            </p>
+            {canRespond && (
+              <div className="flex gap-3">
+                <Button onClick={() => respondAssignment(true)} disabled={processing} className="bg-green-600 hover:bg-green-700">
+                  <Check className="w-4 h-4 mr-2" />{assignmentStatus === 'PENDING_APPROVAL' ? 'Approve' : 'Accept'}
+                </Button>
+                <Button onClick={() => respondAssignment(false)} disabled={processing} variant="outline">
+                  <X className="w-4 h-4 mr-2" />Decline
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+      {assignmentStatus === 'DECLINED' && (
+        <Card className="border-red-300"><CardContent className="pt-6 text-sm text-red-600">This task request was declined.</CardContent></Card>
+      )}
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>

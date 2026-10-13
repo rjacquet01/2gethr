@@ -1,3 +1,5 @@
+import { createNotification } from '@/lib/notifications'
+import { ensureAssignmentColumns, isAdultRole, getParentUserIds } from '@/lib/assignment'
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
@@ -173,6 +175,37 @@ export async function POST(request: NextRequest) {
     }
     
     await ensureTaskEventNotifyChannelsColumns()
+    await ensureAssignmentColumns()
+
+    const creatorRole = membership[0].role as string
+    const assignerName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Someone'
+
+    // Who is really being assigned? A child profile may have a login.
+    let targetUserId: string | null = assignedToUserId || null
+    let targetRole: string | null = null
+    let targetName: string | null = null
+    if (assignedToChildId) {
+      const cp = await sql`
+        SELECT fm.user_id, fm.role, cp.display_name
+        FROM child_profiles cp JOIN family_members fm ON cp.family_member_id = fm.id
+        WHERE cp.id = ${assignedToChildId}
+      `
+      if (cp[0]) { targetUserId = targetUserId || cp[0].user_id; targetRole = cp[0].role; targetName = cp[0].display_name }
+    }
+    if (targetUserId && !targetRole) {
+      const r = await sql`
+        SELECT role FROM family_members
+        WHERE family_id = ${familyId} AND user_id = ${targetUserId} AND is_active = true LIMIT 1
+      `
+      targetRole = r[0]?.role || null
+    }
+
+    // Kid-created assignments: to a parent => a parent must approve;
+    // to another kid => that kid must accept. Parents/self need neither.
+    let assignmentStatus: string | null = null
+    if (creatorRole === 'CHILD' && (assignedToUserId || assignedToChildId) && targetUserId !== user.id) {
+      assignmentStatus = (!targetUserId || isAdultRole(targetRole)) ? 'PENDING_APPROVAL' : 'PENDING_ACCEPTANCE'
+    }
 
     // Create the task
     const task = await sql`
@@ -180,46 +213,62 @@ export async function POST(request: NextRequest) {
         family_id, title, description, created_by_id,
         assigned_to_id, child_profile_id, due_date,
         priority, category, status, is_recurring, recurrence_rule,
-        notify_channels
+        notify_channels, assignment_status
       ) VALUES (
         ${familyId}, ${title}, ${description || null}, ${user.id},
         ${assignedToUserId || null}, ${assignedToChildId || null},
         ${dueDate || null},
         ${priority.toUpperCase()}, ${category || 'CHORE'}, 'PENDING',
         ${isRecurring}, ${isRecurring ? recurrenceRule : null},
-        ${normalizedNotifyChannels}
+        ${normalizedNotifyChannels}, ${assignmentStatus}
       )
       RETURNING *
     `
-    
+
     // Log task creation in history
     await sql`
       INSERT INTO task_history (task_id, user_id, action, new_value)
-      VALUES (${task[0].id}, ${user.id}, 'CREATED', ${JSON.stringify({ title, assignedToUserId, assignedToChildId })}::jsonb)
+      VALUES (${task[0].id}, ${user.id}, 'CREATED', ${JSON.stringify({ title, assignedToUserId, assignedToChildId, assignmentStatus })}::jsonb)
     `
-    
-    // Create notification for assigned user
-    if (assignedToUserId && assignedToUserId !== user.id) {
-      const assignerName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Someone'
-      await notifyTaskAssigned(assignedToUserId, title, task[0].id, familyId, assignerName, normalizedNotifyChannels || undefined)
-    }
 
-    // Also notify parents if task is assigned to a child
-    if (assignedToChildId) {
-      const parents = await sql`
-        SELECT fm.user_id
-        FROM family_members fm
-        WHERE fm.family_id = ${familyId}
-          AND fm.is_active = true
-          AND fm.role IN ('PARENT', 'GUARDIAN')
-          AND fm.user_id != ${user.id}
-      `
-      const assignerName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Someone'
-      for (const parent of parents) {
-        await notifyTaskAssigned(parent.user_id, title, task[0].id, familyId, assignerName, normalizedNotifyChannels || undefined)
+    const ch = normalizedNotifyChannels || undefined
+    if (assignmentStatus === 'PENDING_APPROVAL') {
+      // Every parent/guardian can approve or decline.
+      const who = targetName ? ` for ${targetName}` : ''
+      for (const pid of await getParentUserIds(familyId, user.id)) {
+        await createNotification({
+          userId: pid, type: 'APPROVAL_REQUEST',
+          title: 'Task needs your approval',
+          body: `${assignerName} wants to assign a task${who}: "${title}". Open it to approve or decline.`,
+          data: { taskId: task[0].id, familyId }, sendEmail: true, sendSms: true, channels: ch,
+        })
+      }
+    } else if (assignmentStatus === 'PENDING_ACCEPTANCE' && targetUserId) {
+      await createNotification({
+        userId: targetUserId, type: 'APPROVAL_REQUEST',
+        title: 'Task request',
+        body: `${assignerName} wants to assign you a task: "${title}". Accept or decline.`,
+        data: { taskId: task[0].id, familyId }, sendEmail: true, sendSms: true, channels: ch,
+      })
+    } else {
+      // Normal assignment: tell the assignee (including a child profile that has a login).
+      if (targetUserId && targetUserId !== user.id) {
+        await notifyTaskAssigned(targetUserId, title, task[0].id, familyId, assignerName, ch)
+      }
+      // Parents get an FYI when a child is assigned something.
+      if (assignedToChildId) {
+        for (const pid of await getParentUserIds(familyId, user.id)) {
+          if (pid === targetUserId) continue
+          await createNotification({
+            userId: pid, type: 'TASK_ASSIGNED',
+            title: 'Task assigned to ' + (targetName || 'a child'),
+            body: `${assignerName} assigned ${targetName || 'a child'} a task: "${title}"`,
+            data: { taskId: task[0].id, familyId }, channels: ch,
+          })
+        }
       }
     }
-    
+
     return NextResponse.json({ data: task[0] }, { status: 201 })
   } catch (error) {
     console.error('Tasks POST error:', error)
