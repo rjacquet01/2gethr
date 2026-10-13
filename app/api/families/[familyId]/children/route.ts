@@ -1,3 +1,4 @@
+import { assignDefaultAppearance } from "@/lib/member-appearance"
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, hashPassword, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
@@ -228,6 +229,8 @@ export async function POST(
         )
       `
 
+      await assignDefaultAppearance(memberId)
+
       // Create location settings if they don't exist
       const existingLocationSettings = await sql`
         SELECT id FROM location_settings WHERE family_member_id = ${memberId}
@@ -324,6 +327,8 @@ export async function POST(
         NOW(), NOW()
       )
     `
+
+    await assignDefaultAppearance(memberId)
 
     // Create location settings
     await sql`

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
+import { ensureMemberAppearanceColumns } from '@/lib/member-appearance'
 
 // GET - Get child profile with tasks and events
 export async function GET(
@@ -15,6 +16,7 @@ export async function GET(
     }
 
     const { childId } = await params
+    await ensureMemberAppearanceColumns()
 
     // Get child profile with family info
     const childResult = await sql`
@@ -26,6 +28,9 @@ export async function GET(
         cp.school,
         cp.age,
         cp.emergency_notes,
+        fm.id as family_member_id,
+        fm.color,
+        fm.emoji,
         f.id as family_id,
         f.name as family_name
       FROM child_profiles cp
@@ -98,6 +103,9 @@ export async function GET(
           school: child.school,
           age: child.age,
           emergencyNotes: child.emergency_notes,
+          familyMemberId: child.family_member_id,
+          color: child.color || null,
+          emoji: child.emoji || null,
           familyId: child.family_id,
           familyName: child.family_name,
         },

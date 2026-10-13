@@ -63,6 +63,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    if (pathname.startsWith("member-photos/")) {
+      const photoFamilyId = pathname.split("/")[1] || ""
+      if (!/^[0-9a-fA-F-]{36}$/.test(photoFamilyId)) {
+        return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
+      }
+      const { sql } = await import("@/lib/db")
+      const member = await sql`
+        SELECT 1 FROM family_members
+        WHERE family_id = ${photoFamilyId} AND user_id = ${user.id} AND is_active = true
+      `
+      if (member.length === 0) {
+        return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
+      }
+    }
+
     const result = await get(pathname, {
       access: "private",
       ifNoneMatch: request.headers.get("if-none-match") ?? undefined,

@@ -6,7 +6,7 @@ import useSWR from 'swr'
 import { authFetch } from '@/hooks/use-auth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { MemberAvatar, AppearanceButton } from '@/components/member-avatar'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Empty } from '@/components/ui/empty'
@@ -34,6 +34,9 @@ interface ChildProfile {
   birthDate: string | null
   familyId: string
   familyName: string
+  familyMemberId?: string | null
+  color?: string | null
+  emoji?: string | null
 }
 
 interface Task {
@@ -156,14 +159,14 @@ export default function ChildProfilePage({
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <Avatar className="w-14 h-14">
-          <AvatarImage src={profile.avatarUrl ? `/api/files?pathname=${encodeURIComponent(profile.avatarUrl)}` : undefined} />
-          <AvatarFallback className="bg-primary/10 text-primary text-xl">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+        <MemberAvatar name={profile.displayName} avatarUrl={profile.avatarUrl} color={profile.color} emoji={profile.emoji} className="w-16 h-16 text-2xl" />
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-foreground">{profile.displayName}</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-1">
+            {profile.displayName}
+            {profile.familyMemberId && (
+              <AppearanceButton familyId={profile.familyId} memberId={profile.familyMemberId} name={profile.displayName} avatarUrl={profile.avatarUrl} color={profile.color} emoji={profile.emoji} />
+            )}
+          </h1>
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="secondary" className="bg-primary/10 text-primary">
               <Baby className="w-3 h-3 mr-1" />

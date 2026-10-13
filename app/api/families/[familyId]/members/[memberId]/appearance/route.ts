@@ -36,7 +36,7 @@ export async function PATCH(
     if (target.length === 0) {
       return NextResponse.json({ success: false, error: "Member not found" }, { status: 404 })
     }
-    if (target[0].user_id !== user.id && me[0].role !== "PARENT") {
+    if (target[0].user_id !== user.id && me[0].role !== "PARENT" && me[0].role !== "GUARDIAN") {
       return NextResponse.json({ success: false, error: "Only parents can change someone else's look" }, { status: 403 })
     }
 
