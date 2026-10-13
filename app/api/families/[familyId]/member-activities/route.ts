@@ -162,8 +162,8 @@ export async function GET(
       return {
         memberId: member.member_id,
         userId: member.user_id,
-        displayName: member.display_name || `${member.first_name} ${member.last_name}`,
-        avatarUrl: member.avatar_url,
+        displayName: member.display_name || childProfile?.display_name || `${member.first_name} ${member.last_name}`,
+        avatarUrl: member.avatar_url || childProfile?.avatar_url || null,
         color: member.color || null,
         emoji: member.emoji || null,
         role: member.role,
@@ -180,7 +180,7 @@ export async function GET(
     // Also add standalone child profiles (those without linked users)
     const standaloneChildren = children.filter((child: { family_member_id: string }) => {
       const linkedMember = members.find((m: { member_id: string }) => m.member_id === child.family_member_id)
-      return !linkedMember?.user_id
+      return !linkedMember?.user_id && !memberActivities.some((a: { memberId: string }) => a.memberId === child.family_member_id)
     })
 
     standaloneChildren.forEach((child: {
