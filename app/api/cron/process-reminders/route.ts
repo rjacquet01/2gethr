@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { sendPushToUser } from "@/lib/services/push"
 import { sendEmail, isResendConfigured } from "@/lib/services/email"
 import { sendSMS, isTwilioConfigured } from "@/lib/services/sms"
+import { ensureReminderChildColumn } from "@/lib/reminder-schema"
 import { isQuietNow } from "@/lib/quiet-hours"
 
 // Delivers standalone reminders (lib: see app/api/reminders) - the
@@ -27,15 +28,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    await ensureReminderChildColumn()
+
     // Due = PENDING, remind_at has arrived, and we haven't already sent for
     // this occurrence (sent_at gets cleared when a recurring reminder rolls
     // forward to its next remind_at, and when a user edits remind_at).
     const due = await sql`
       SELECT r.id, r.title, r.description, r.remind_at, r.user_id,
              r.is_recurring, r.recurrence_rule, r.notify_channels,
-             u.email, u.phone, u.timezone
+             u.email, u.phone, u.timezone,
+             cp.display_name as child_name, cfm.user_id as child_user_id
       FROM reminders r
       JOIN users u ON u.id = r.user_id
+      LEFT JOIN child_profiles cp ON cp.id = r.child_profile_id
+      LEFT JOIN family_members cfm ON cfm.id = cp.family_member_id
       WHERE r.status = 'PENDING'
         AND r.remind_at <= NOW()
         AND r.sent_at IS NULL
@@ -48,6 +54,12 @@ export async function GET(request: NextRequest) {
 
     for (const reminder of due) {
       const channels: string[] = reminder.notify_channels || ['in_app', 'push', 'email']
+      // Reminders set for a child who has no login of their own go to the
+      // parent who created them, so name the child in the message.
+      const displayTitle: string =
+        reminder.child_name && reminder.child_user_id !== reminder.user_id
+          ? `For ${reminder.child_name}: ${reminder.title}`
+          : reminder.title
 
       const settings = await sql`
         SELECT push_enabled, email_enabled, sms_enabled, quiet_hours_start, quiet_hours_end
@@ -69,7 +81,7 @@ export async function GET(request: NextRequest) {
           INSERT INTO notifications (id, user_id, type, title, body, data, is_read, created_at)
           VALUES (
             ${crypto.randomUUID()}, ${reminder.user_id}, 'REMINDER',
-            ${reminder.title},
+            ${displayTitle},
             ${reminder.description || 'Reminder'},
             ${JSON.stringify({ reminderId: reminder.id })}::jsonb,
             false, NOW()
@@ -80,7 +92,7 @@ export async function GET(request: NextRequest) {
       if (channels.includes('push') && userSettings.push_enabled) {
         try {
           await sendPushToUser(reminder.user_id, {
-            title: reminder.title,
+            title: displayTitle,
             body: reminder.description || 'Reminder',
             data: { type: 'REMINDER', reminderId: reminder.id },
             clickAction: '/dashboard/reminders',
@@ -94,9 +106,9 @@ export async function GET(request: NextRequest) {
         try {
           await sendEmail({
             to: reminder.email,
-            subject: `Reminder: ${reminder.title}`,
-            html: `<p>${reminder.title}</p>${reminder.description ? `<p>${reminder.description}</p>` : ''}`,
-            text: `${reminder.title}${reminder.description ? `\n\n${reminder.description}` : ''}`,
+            subject: `Reminder: ${displayTitle}`,
+            html: `<p>${displayTitle}</p>${reminder.description ? `<p>${reminder.description}</p>` : ''}`,
+            text: `${displayTitle}${reminder.description ? `\n\n${reminder.description}` : ''}`,
           })
         } catch (emailError) {
           console.error('[Reminder] Email send failed (non-fatal):', emailError)
@@ -107,7 +119,7 @@ export async function GET(request: NextRequest) {
         try {
           await sendSMS({
             to: reminder.phone,
-            body: `Togethr Reminder: ${reminder.title}`.substring(0, 160),
+            body: `Togethr Reminder: ${displayTitle}`.substring(0, 160),
           })
         } catch (smsError) {
           console.error('[Reminder] SMS send failed (non-fatal):', smsError)

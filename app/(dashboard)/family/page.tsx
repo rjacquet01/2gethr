@@ -62,7 +62,8 @@ import {
   Clock,
   AlertCircle,
   UserMinus,
-  LogOut
+  LogOut,
+  Bell
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -81,6 +82,8 @@ export default function FamilyPage() {
   const { user } = useAuth()
   const { family, generateInviteCode, addChild, removeMember, isLoading: familyLoading } = useFamily(primaryFamily?.id || null)
   const { access } = useSubscription(primaryFamily?.id || null)
+  const viewerRole = (primaryFamily as unknown as { currentUserRole?: string; userRole?: string } | undefined)
+  const viewerIsAdult = ['PARENT', 'GUARDIAN'].includes(viewerRole?.currentUserRole || viewerRole?.userRole || '')
   
   const [copiedCode, setCopiedCode] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -176,6 +179,12 @@ export default function FamilyPage() {
     }>
     taskCount: number
     eventCount: number
+    reminders?: Array<{
+      id: string
+      title: string
+      remind_at: string
+    }>
+    reminderCount?: number
   }
 
   const { data: memberActivities = [], isLoading: activitiesLoading } = useSWR<MemberActivity[]>(
@@ -497,11 +506,24 @@ export default function FamilyPage() {
                             {roleLabel(member.role)}
                           </Badge>)}
                           <span className="text-xs text-muted-foreground">
-                            {member.taskCount} tasks, {member.eventCount} events
+                            {member.taskCount} tasks, {member.eventCount} events, {member.reminderCount || 0} reminders
                           </span>
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
+                        {viewerIsAdult && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            asChild
+                            title="Add reminder"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Link href={`/dashboard/reminders?new=1${member.userId === user?.id ? '' : `&for=${member.memberId}`}`}>
+                              <Bell className="w-4 h-4" />
+                            </Link>
+                          </Button>
+                        )}
                         {member.childProfileId && (
                           <Button 
                             variant="ghost" 
@@ -523,7 +545,7 @@ export default function FamilyPage() {
                     </button>
 
                     {/* Tasks and Events - shown when expanded */}
-                    {expandedMembers.has(member.memberId) && (member.tasks.length > 0 || member.events.length > 0) && (
+                    {expandedMembers.has(member.memberId) && (member.tasks.length > 0 || member.events.length > 0 || (member.reminders?.length ?? 0) > 0) && (
                       <Tabs defaultValue="tasks" className="w-full">
                         <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-auto p-0">
                           <TabsTrigger 
@@ -537,6 +559,12 @@ export default function FamilyPage() {
                             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
                           >
                             Events ({member.events.length})
+                          </TabsTrigger>
+                          <TabsTrigger 
+                            value="reminders"
+                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
+                          >
+                            Reminders ({member.reminderCount || 0})
                           </TabsTrigger>
                         </TabsList>
                         <TabsContent value="tasks" className="mt-0 p-3">
@@ -621,14 +649,45 @@ export default function FamilyPage() {
                             </div>
                           )}
                         </TabsContent>
+                        <TabsContent value="reminders" className="mt-0 p-3">
+                          {(member.reminders?.length ?? 0) === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-4">No pending reminders</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {member.reminders?.map((reminder) => (
+                                <Link
+                                  key={reminder.id}
+                                  href="/dashboard/reminders"
+                                  className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors"
+                                >
+                                  <Bell className="w-4 h-4 text-primary shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">{reminder.title}</p>
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                      <Clock className="w-3 h-3" />
+                                      {formatDueDate(reminder.remind_at)} at {formatEventTime(reminder.remind_at, false)}
+                                    </div>
+                                  </div>
+                                </Link>
+                              ))}
+                              {(member.reminderCount ?? 0) > 5 && (
+                                <Button variant="ghost" size="sm" className="w-full text-xs" asChild>
+                                  <Link href="/dashboard/reminders">
+                                    View all {member.reminderCount} reminders
+                                  </Link>
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </TabsContent>
                       </Tabs>
                     )}
 
                     {/* No activities message - shown when expanded */}
-                    {expandedMembers.has(member.memberId) && member.tasks.length === 0 && member.events.length === 0 && (
+                    {expandedMembers.has(member.memberId) && member.tasks.length === 0 && member.events.length === 0 && (member.reminders?.length ?? 0) === 0 && (
                       <div className="p-4 text-center text-sm text-muted-foreground">
                         <AlertCircle className="w-5 h-5 mx-auto mb-2 opacity-50" />
-                        No tasks or events assigned
+                        Nothing assigned yet
                       </div>
                     )}
                   </div>

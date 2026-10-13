@@ -40,6 +40,8 @@ interface Reminder {
   owner_id?: string
   owner_first_name?: string
   owner_last_name?: string
+  child_profile_id?: string | null
+  child_name?: string | null
   notify_channels?: NotifyChannel[] | null
 }
 
@@ -64,7 +66,8 @@ const NOTIFY_CHANNEL_OPTIONS: { value: NotifyChannel; label: string; icon: typeo
 const DEFAULT_NOTIFY_CHANNELS: NotifyChannel[] = ['in_app', 'push', 'email']
 
 interface FamilyMember {
-  userId: string
+  id: string
+  userId: string | null
   displayName: string
 }
 
@@ -148,6 +151,8 @@ function RemindersPageContent() {
   // reopen the dialog unexpectedly.
   useEffect(() => {
     if (searchParams.get('new') === '1') {
+      const forParam = searchParams.get('for')
+      if (forParam) setAssigneeId(forParam)
       setDialogOpen(true)
       router.replace('/dashboard/reminders')
     }
@@ -165,7 +170,8 @@ function RemindersPageContent() {
         const family = data?.families?.find((f: { id: string }) => f.id === user.primaryFamily?.id)
         if (family?.members) {
           setFamilyMembers(
-            family.members.map((m: { userId: string; displayName: string }) => ({
+            family.members.map((m: { id: string; userId: string | null; displayName: string }) => ({
+              id: m.id,
               userId: m.userId,
               displayName: m.displayName,
             }))
@@ -237,7 +243,7 @@ function RemindersPageContent() {
             // a stale rule behind (harmless since isRecurring=false makes it
             // unused, but confusing if ever inspected or re-enabled).
             recurrenceRule: recurrence !== 'NONE' ? recurrence : null,
-            forUserId: !editingId ? (assigneeId || undefined) : undefined,
+            forMemberId: !editingId ? (assigneeId || undefined) : undefined,
             notifyChannels,
           }),
         }
@@ -426,7 +432,7 @@ function RemindersPageContent() {
                       {familyMembers
                         .filter(m => m.userId !== user?.id)
                         .map(m => (
-                          <SelectItem key={m.userId} value={m.userId}>{m.displayName}</SelectItem>
+                          <SelectItem key={m.id} value={m.id}>{m.displayName}</SelectItem>
                         ))}
                     </SelectContent>
                   </Select>
@@ -495,7 +501,13 @@ function RemindersPageContent() {
                         {reminder.recurrence_rule?.toLowerCase()}
                       </span>
                     )}
-                    {reminder.user_id !== user?.id && (reminder.owner_first_name || reminder.owner_last_name) && (
+                    {reminder.child_name && (
+                      <span className="flex items-center gap-1 ml-1">
+                        <UserIcon className="w-3 h-3" />
+                        {reminder.child_name}
+                      </span>
+                    )}
+                    {!reminder.child_name && reminder.user_id !== user?.id && (reminder.owner_first_name || reminder.owner_last_name) && (
                       <span className="flex items-center gap-1 ml-1">
                         <UserIcon className="w-3 h-3" />
                         {`${reminder.owner_first_name || ''} ${reminder.owner_last_name || ''}`.trim()}

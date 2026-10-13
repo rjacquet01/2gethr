@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { ensureMemberAppearanceColumns } from '@/lib/member-appearance'
+import { ensureReminderChildColumn } from '@/lib/reminder-schema'
 
 // GET - Get tasks and events for each family member
 export async function GET(
@@ -28,6 +29,8 @@ export async function GET(
     }
 
     await ensureMemberAppearanceColumns()
+    await ensureReminderChildColumn()
+    const viewerIsAdult = membership[0].role === 'PARENT' || membership[0].role === 'GUARDIAN'
 
     // Get all family members with their tasks and upcoming events
     const members = await sql`
@@ -103,6 +106,23 @@ export async function GET(
       ORDER BY e.start_time ASC
     `
 
+    // Pending reminders. Privacy: a reminder set for a child is visible to
+    // parents/guardians (and the child's own login); anyone else's personal
+    // reminder is visible only to the person it's for and whoever created it.
+    const reminderRows = await sql`
+      SELECT id, title, remind_at, user_id, created_by_id, child_profile_id,
+             notify_channels, is_recurring, recurrence_rule
+      FROM reminders
+      WHERE family_id = ${familyId} AND status = 'PENDING'
+      ORDER BY remind_at ASC
+    `
+    type ReminderRow = { user_id: string; created_by_id: string; child_profile_id: string | null }
+    const visibleReminders = reminderRows.filter((r: ReminderRow) =>
+      r.child_profile_id
+        ? viewerIsAdult || r.user_id === user.id
+        : r.user_id === user.id || r.created_by_id === user.id
+    )
+
     // Build member activity map
     const memberActivities = members.map((member: {
       member_id: string
@@ -133,6 +153,12 @@ export async function GET(
         ? tasks.filter((t: { child_profile_id: string }) => t.child_profile_id === childProfile.child_id)
         : []
 
+      const memberReminders = visibleReminders.filter((r: ReminderRow) =>
+        r.child_profile_id
+          ? !!childProfile && r.child_profile_id === childProfile.child_id
+          : !!member.user_id && r.user_id === member.user_id
+      )
+
       return {
         memberId: member.member_id,
         userId: member.user_id,
@@ -146,6 +172,8 @@ export async function GET(
         events: memberEvents.slice(0, 5), // Limit to 5 events
         taskCount: memberTasks.length + childTasks.length,
         eventCount: memberEvents.length,
+        reminders: memberReminders.slice(0, 5),
+        reminderCount: memberReminders.length,
       }
     })
 
@@ -164,6 +192,7 @@ export async function GET(
       emoji?: string
     }) => {
       const childTasks = tasks.filter((t: { child_profile_id: string }) => t.child_profile_id === child.child_id)
+      const childReminders = visibleReminders.filter((r: ReminderRow) => r.child_profile_id === child.child_id)
       
       memberActivities.push({
         memberId: child.family_member_id,
@@ -178,6 +207,8 @@ export async function GET(
         events: [],
         taskCount: childTasks.length,
         eventCount: 0,
+        reminders: childReminders.slice(0, 5),
+        reminderCount: childReminders.length,
       })
     })
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import type { NotificationChannel } from '@/lib/notifications'
+import { ensureReminderChildColumn } from '@/lib/reminder-schema'
 
 const VALID_NOTIFY_CHANNELS: NotificationChannel[] = ['in_app', 'push', 'email', 'sms']
 
@@ -17,6 +18,8 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    await ensureReminderChildColumn()
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')?.toUpperCase()
@@ -79,11 +82,13 @@ export async function GET(request: NextRequest) {
              u_creator.first_name as creator_first_name, u_creator.last_name as creator_last_name,
              u_owner.first_name as owner_first_name, u_owner.last_name as owner_last_name,
              u_owner.id as owner_id,
-             f.name as family_name
+             f.name as family_name,
+             cp.display_name as child_name
       FROM reminders r
       LEFT JOIN users u_creator ON r.created_by_id = u_creator.id
       LEFT JOIN users u_owner ON r.user_id = u_owner.id
       LEFT JOIN families f ON r.family_id = f.id
+      LEFT JOIN child_profiles cp ON r.child_profile_id = cp.id
       WHERE (r.user_id = ${user.id} OR r.created_by_id = ${user.id})
         AND r.status = ANY(${statusFilter})
         AND (${familyId || null}::text IS NULL OR r.family_id = ${familyId || null})
@@ -109,6 +114,7 @@ export async function POST(request: NextRequest) {
     const {
       familyId,
       forUserId,
+      forMemberId,
       title,
       description,
       remindAt,
@@ -142,15 +148,40 @@ export async function POST(request: NextRequest) {
 
     // A reminder can be set for someone else in the family (e.g. a parent
     // reminding a child), defaulting to the creator themselves.
-    const ownerId = forUserId || user.id
-    if (ownerId !== user.id) {
-      const ownerMembership = await sql`
-        SELECT 1 FROM family_members
-        WHERE family_id = ${resolvedFamilyId} AND user_id = ${ownerId} AND is_active = true
-      `
-      if (ownerMembership.length === 0) {
+    await ensureReminderChildColumn()
+    const creatorIsAdult = membership[0].role === 'PARENT' || membership[0].role === 'GUARDIAN'
+    let ownerId: string = user.id
+    let childProfileId: string | null = null
+    const wantsOther = !!forMemberId || (!!forUserId && forUserId !== user.id)
+    if (wantsOther) {
+      const targetRows = forMemberId
+        ? await sql`
+            SELECT id, user_id, role FROM family_members
+            WHERE id = ${forMemberId} AND family_id = ${resolvedFamilyId} AND is_active = true
+          `
+        : await sql`
+            SELECT id, user_id, role FROM family_members
+            WHERE user_id = ${forUserId} AND family_id = ${resolvedFamilyId} AND is_active = true
+          `
+      if (targetRows.length === 0) {
         return NextResponse.json({ error: 'That person is not in this family' }, { status: 400 })
       }
+      const target = targetRows[0]
+      const profile = await sql`
+        SELECT id FROM child_profiles WHERE family_member_id = ${target.id} LIMIT 1
+      `
+      if (profile.length > 0 || target.role === 'CHILD') {
+        if (!creatorIsAdult) {
+          return NextResponse.json(
+            { error: 'Only parents and guardians can set reminders for children' },
+            { status: 403 }
+          )
+        }
+        childProfileId = profile[0]?.id ?? null
+      }
+      // A child without their own login has no user_id: the reminder is
+      // delivered to the parent who created it, labeled with the child's name.
+      ownerId = target.user_id || user.id
     }
 
     const normalizedNotifyChannels: NotificationChannel[] | null =
@@ -163,11 +194,11 @@ export async function POST(request: NextRequest) {
     const reminder = await sql`
       INSERT INTO reminders (
         family_id, user_id, created_by_id, title, description, remind_at,
-        is_recurring, recurrence_rule, status, notify_channels
+        is_recurring, recurrence_rule, status, notify_channels, child_profile_id
       ) VALUES (
         ${resolvedFamilyId}, ${ownerId}, ${user.id}, ${title}, ${description || null},
         ${remindAtDate.toISOString()}, ${isRecurring}, ${isRecurring ? recurrenceRule : null},
-        'PENDING', ${normalizedNotifyChannels}
+        'PENDING', ${normalizedNotifyChannels}, ${childProfileId}
       )
       RETURNING *
     `
