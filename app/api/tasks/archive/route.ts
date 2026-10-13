@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
+import { getHistoryDays } from "@/lib/history-limit"
 
 // POST - Archive all completed/cancelled tasks for the family
 export async function POST(request: NextRequest) {
@@ -75,7 +76,9 @@ export async function GET(request: NextRequest) {
 
     const familyId = familyMembership[0].family_id
 
-    // Fetch archived tasks
+    const historyDays = await getHistoryDays(familyId)
+
+    // Fetch archived tasks (only those inside the plan's history window)
     const archivedTasks = await sql`
       SELECT 
         t.id, t.title, t.description, t.status, t.priority, t.category,
@@ -85,6 +88,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN users u ON t.created_by_id = u.id
       WHERE t.family_id = ${familyId}
       AND t.status = 'ARCHIVED'
+      AND t.updated_at >= NOW() - make_interval(days => ${historyDays})
       ORDER BY t.updated_at DESC
       LIMIT 100
     `
@@ -103,7 +107,7 @@ export async function GET(request: NextRequest) {
       creatorName: t.creator_first_name ? `${t.creator_first_name} ${t.creator_last_name || ''}`.trim() : null,
     }))
 
-    return NextResponse.json({ success: true, tasks })
+    return NextResponse.json({ success: true, tasks, historyDays })
   } catch (error) {
     console.error("Get archived tasks error:", error)
     return NextResponse.json(

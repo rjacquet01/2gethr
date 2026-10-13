@@ -46,6 +46,7 @@ export default function ArchivePage() {
   const [events, setEvents] = useState<ArchivedEvent[]>([])
   const [reminders, setReminders] = useState<ArchivedReminder[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [historyDays, setHistoryDays] = useState<number | null>(null)
   const [processingId, setProcessingId] = useState<string | null>(null)
 
   const fetchArchivedItems = useCallback(async () => {
@@ -57,6 +58,7 @@ export default function ArchivePage() {
       if (tasksRes.ok) {
         const tasksData = await tasksRes.json()
         setTasks(tasksData.tasks || [])
+        if (typeof tasksData.historyDays === 'number') setHistoryDays(tasksData.historyDays)
       }
 
       // Fetch archived events
@@ -240,7 +242,7 @@ export default function ArchivePage() {
           </Button>
           <div>
             <h1 className="text-xl font-bold">Archive</h1>
-            <p className="text-sm text-muted-foreground">{totalCount} items</p>
+            <p className="text-sm text-muted-foreground">{totalCount} items{historyDays ? ` · your plan keeps ${historyDays} days of history` : ''}</p>
           </div>
         </div>
       </div>

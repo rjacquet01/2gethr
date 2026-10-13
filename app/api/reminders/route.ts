@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import type { NotificationChannel } from '@/lib/notifications'
+import { getHistoryDays } from '@/lib/history-limit'
 import { ensureReminderChildColumn } from '@/lib/reminder-schema'
 
 const VALID_NOTIFY_CHANNELS: NotificationChannel[] = ['in_app', 'push', 'email', 'sms']
@@ -94,6 +95,21 @@ export async function GET(request: NextRequest) {
         AND (${familyId || null}::text IS NULL OR r.family_id = ${familyId || null})
       ORDER BY r.remind_at ASC
     `
+
+    // The archive view only reaches back as far as the family's plan allows
+    // (hidden, not deleted).
+    if (normalizedStatus === 'ARCHIVED') {
+      const limits = new Map<string, number>()
+      for (const fid of new Set(reminders.map((x: { family_id: string }) => x.family_id))) {
+        limits.set(fid as string, await getHistoryDays(fid as string))
+      }
+      const now = Date.now()
+      return NextResponse.json({
+        data: reminders.filter((x: { family_id: string; updated_at: string }) =>
+          now - new Date(x.updated_at).getTime() <= (limits.get(x.family_id) || 30) * 86400000
+        ),
+      })
+    }
 
     return NextResponse.json({ data: reminders })
   } catch (error) {
