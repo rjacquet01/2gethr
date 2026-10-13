@@ -253,7 +253,18 @@ export async function POST(request: NextRequest) {
     } else {
       // Normal assignment: tell the assignee (including a child profile that has a login).
       if (targetUserId && targetUserId !== user.id) {
-        await notifyTaskAssigned(targetUserId, title, task[0].id, familyId, assignerName, ch)
+        if (isAdultRole(creatorRole) && targetRole === 'CHILD') {
+          // A parent gave a child a task: push + email + text + in-app, always.
+          await createNotification({
+            userId: targetUserId, type: 'TASK_ASSIGNED',
+            title: 'New Task Assigned',
+            body: `${assignerName} assigned you a task: "${title}"`,
+            data: { taskId: task[0].id, familyId },
+            channels: ['in_app', 'push', 'email', 'sms'], force: true,
+          })
+        } else {
+          await notifyTaskAssigned(targetUserId, title, task[0].id, familyId, assignerName, ch)
+        }
       }
       // Parents get an FYI when a child is assigned something.
       if (assignedToChildId) {

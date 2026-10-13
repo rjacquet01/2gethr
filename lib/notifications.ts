@@ -95,6 +95,10 @@ type NotificationData = {
   // unchanged: in_app always written, push always attempted (subject to
   // the recipient's push_enabled), sms/email gated by the flags above.
   channels?: NotificationChannel[]
+  // When true (a parent assigning something to a child), push/email/SMS go out
+  // even if the child's own channel toggles are off, as long as the child has
+  // a push device / email / phone on file.
+  force?: boolean
 }
 
 export async function createNotification({
@@ -105,7 +109,8 @@ export async function createNotification({
   data = {},
   sendSms = false,
   sendEmail: sendEmailFlag = false,
-  channels
+  channels,
+  force = false
 }: NotificationData): Promise<{ success: boolean; notificationId?: string; error?: string }> {
   try {
     const notificationId = crypto.randomUUID()
@@ -151,7 +156,7 @@ export async function createNotification({
         const pushPrefs = await sql`
           SELECT push_enabled FROM reminder_settings WHERE user_id = ${userId}
         `
-        const pushEnabled = pushPrefs.length === 0 || pushPrefs[0].push_enabled
+        const pushEnabled = force || pushPrefs.length === 0 || pushPrefs[0].push_enabled
 
         if (pushEnabled) {
           const clickAction =
@@ -183,7 +188,7 @@ export async function createNotification({
         LEFT JOIN reminder_settings rs ON u.id = rs.user_id
         WHERE u.id = ${userId}
       `
-      if (userSmsPrefs.length > 0 && userSmsPrefs[0].phone && userSmsPrefs[0].sms_enabled) {
+      if (userSmsPrefs.length > 0 && userSmsPrefs[0].phone && (force || userSmsPrefs[0].sms_enabled)) {
         await sendSmsNotification(userSmsPrefs[0].phone, `FamilyApp: ${title} - ${body}`)
       }
     }
@@ -207,7 +212,7 @@ export async function createNotification({
           LEFT JOIN reminder_settings rs ON u.id = rs.user_id
           WHERE u.id = ${userId}
         `
-        if (userEmailPrefs.length > 0 && userEmailPrefs[0].email && userEmailPrefs[0].email_enabled) {
+        if (userEmailPrefs.length > 0 && userEmailPrefs[0].email && (force || userEmailPrefs[0].email_enabled)) {
           const taskTitle = typeof data.taskTitle === 'string' ? data.taskTitle : title
           const newStatus = typeof data.newStatus === 'string' ? data.newStatus : null
           const changedBy = typeof data.changedBy === 'string' ? data.changedBy : 'Someone'
@@ -342,7 +347,8 @@ export async function notifyFamilyAboutEvent(
   eventId: string,
   creatorName: string,
   excludeUserId?: string,
-  channels?: NotificationChannel[] // from the event's notify_channels column, if the creator picked any
+  channels?: NotificationChannel[], // from the event's notify_channels column, if the creator picked any
+  skipUserIds: string[] = [] // people who get their own (forced) notification instead
 ): Promise<void> {
   // Notify ALL active family members with linked accounts
   let members
@@ -368,6 +374,7 @@ export async function notifyFamilyAboutEvent(
   }
   
   for (const member of members) {
+    if (skipUserIds.includes(member.user_id)) continue
     // Create in-app notification
     await createNotification({
       userId: member.user_id,

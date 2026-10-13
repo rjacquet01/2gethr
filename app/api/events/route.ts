@@ -4,7 +4,7 @@ import { ensureEventCategoryColumn } from "@/lib/event-category-column"
 import { ensureTaskEventNotifyChannelsColumns } from "@/lib/notify-channels-schema"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
-import { notifyFamilyAboutEvent, type NotificationChannel } from "@/lib/notifications" // Event notifications
+import { notifyFamilyAboutEvent, createNotification, type NotificationChannel } from "@/lib/notifications" // Event notifications
 import { z } from "zod"
 import { planGateError } from "@/lib/tier-gates"
 import { generateOccurrences, isValidTimeZone, recurrenceFromPreset, type RecurrenceInput } from "@/lib/recurrence"
@@ -688,6 +688,18 @@ export async function POST(request: NextRequest) {
 
     // Notify family members about the new event
     const creatorName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'A family member'
+    // Parent/guardian adds a child to an event: that child always gets push +
+    // email + text + in-app.
+    let childUserIds: string[] = []
+    if (status !== "PENDING" && calendar.role !== "CHILD" && participantUserIds.length > 0) {
+      const kids = await sql`
+        SELECT user_id FROM family_members
+        WHERE family_id = ${calendar.family_id} AND is_active = true AND role = 'CHILD'
+        AND user_id = ANY(${participantUserIds}::text[]) AND user_id <> ${user.id}
+      `
+      childUserIds = kids.map((k) => k.user_id as string)
+    }
+
     if (status === "PENDING" || calendar.role === "CHILD") {
       await notifyEventAssignment({
         familyId: calendar.family_id,
@@ -709,8 +721,21 @@ export async function POST(request: NextRequest) {
       user.id, // Exclude the creator from notifications
       validatedData.notifyChannels && validatedData.notifyChannels.length > 0
         ? (validatedData.notifyChannels as NotificationChannel[])
-        : undefined
+        : undefined,
+      childUserIds
     )
+
+    for (const childId of childUserIds) {
+      await createNotification({
+        userId: childId,
+        type: "EVENT_INVITATION",
+        title: "You have a new event",
+        body: `${creatorName} added you to "${validatedData.title}"`,
+        data: { eventId, familyId: calendar.family_id },
+        channels: ["in_app", "push", "email", "sms"],
+        force: true,
+      })
+    }
 
     return NextResponse.json({
       success: true,
