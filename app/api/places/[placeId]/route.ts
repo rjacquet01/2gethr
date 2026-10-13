@@ -3,6 +3,7 @@ import { ensurePlaceNotifyChannelsColumn } from "@/lib/place-schema"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
+import { del } from "@vercel/blob"
 
 const updatePlaceSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -67,6 +68,7 @@ export async function GET(
         icon: p.icon,
         color: p.color,
         notifyChannels: p.notify_channels,
+        photoPath: p.photo_path ?? null,
         createdAt: p.created_at,
       },
     })
@@ -245,9 +247,10 @@ export async function DELETE(
       )
     }
 
+    await ensurePlaceNotifyChannelsColumn()
     // Check if place exists and user has permission
     const places = await sql`
-      SELECT sp.name, sp.family_id, fm.role
+      SELECT sp.name, sp.family_id, sp.photo_url, fm.role
       FROM saved_places sp
       JOIN family_members fm ON sp.family_id = fm.family_id
       WHERE sp.id = ${placeId} AND fm.user_id = ${user.id} AND fm.is_active = true
@@ -269,6 +272,13 @@ export async function DELETE(
 
     // Delete the place
     await sql`DELETE FROM saved_places WHERE id = ${placeId}`
+    if (places[0].photo_url) {
+      try {
+        await del(places[0].photo_url)
+      } catch (e) {
+        console.warn("Failed to delete place photo:", e)
+      }
+    }
 
     // Audit log
     await logAuditEvent(user.id, "DELETE", "saved_place", placeId, {

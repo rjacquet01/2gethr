@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useFamilies } from '@/hooks/use-family'
 import { useSubscription } from '@/hooks/use-subscription'
 import { authFetch } from '@/hooks/use-auth'
@@ -43,12 +43,130 @@ import {
   Smartphone,
   Mail,
   MessageSquare,
+  ImagePlus,
 } from 'lucide-react'
 import { useFavorites } from '@/components/favorites-dropdown'
 import useSWR from 'swr'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { ColorPicker, IconPicker, getPlaceIcon } from '@/components/customization'
+
+// ---- Saved place photos ----
+// Phone photos are big and serverless requests are limited to ~4.5MB, so shrink
+// the picture in the browser first (the server re-processes it as well).
+async function shrinkPlacePhoto(file: File): Promise<Blob> {
+  const bmp = await createImageBitmap(file)
+  const scale = Math.min(1, 900 / Math.max(bmp.width, bmp.height))
+  const w = Math.max(1, Math.round(bmp.width * scale))
+  const h = Math.max(1, Math.round(bmp.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas not available')
+  ctx.drawImage(bmp, 0, 0, w, h)
+  return await new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not encode photo'))), 'image/jpeg', 0.82)
+  )
+}
+
+async function uploadPlacePhoto(placeId: string, file: File): Promise<boolean> {
+  try {
+    const blob = await shrinkPlacePhoto(file)
+    const formData = new FormData()
+    formData.append('file', blob, 'place.jpg')
+    const res = await authFetch(`/api/places/${placeId}/photo`, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+async function deletePlacePhoto(placeId: string): Promise<boolean> {
+  try {
+    const res = await authFetch(`/api/places/${placeId}/photo`, { method: 'DELETE', credentials: 'include' })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+function PlacePhotoField({
+  currentPath,
+  file,
+  removed,
+  onPick,
+  onRemove,
+}: {
+  currentPath?: string | null
+  file: File | null
+  removed?: boolean
+  onPick: (file: File) => void
+  onRemove: () => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  useEffect(() => {
+    if (!file) {
+      setPreview(null)
+      return
+    }
+    const url = URL.createObjectURL(file)
+    setPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+  const src = preview || (!removed && currentPath ? `/api/files?pathname=${encodeURIComponent(currentPath)}` : null)
+  return (
+    <div className="space-y-2">
+      <Label>Photo (optional)</Label>
+      <div className="flex items-center gap-3">
+        {src ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={src} alt="" className="w-16 h-16 rounded-lg object-cover border" />
+        ) : (
+          <div className="w-16 h-16 rounded-lg border border-dashed flex items-center justify-center text-muted-foreground">
+            <ImagePlus className="w-5 h-5" />
+          </div>
+        )}
+        <div className="flex flex-col gap-1">
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ''
+              if (!f) return
+              if (!f.type.startsWith('image/')) {
+                toast.error('Please choose an image file')
+                return
+              }
+              if (f.size > 25 * 1024 * 1024) {
+                toast.error('That photo is too large')
+                return
+              }
+              onPick(f)
+            }}
+          />
+          <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+            {src ? 'Change photo' : 'Add photo'}
+          </Button>
+          {src && (
+            <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
+              Remove photo
+            </Button>
+          )}
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">Shown on the place card instead of the icon.</p>
+    </div>
+  )
+}
 
 // Address line for a place card. Uses the saved address; if there isn't one it
 // looks it up from the coordinates, and falls back to the coordinates.
@@ -92,6 +210,7 @@ interface SavedPlace {
   alertOnDeparture: boolean
   icon: string | null
   color: string
+  photoPath?: string | null
   notifyChannels: NotifyChannel[] | null
   createdAt: string
 }
@@ -137,6 +256,9 @@ export default function PlacesPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [isLocating, setIsLocating] = useState(false)
   const [editingPlace, setEditingPlace] = useState<SavedPlace | null>(null)
+  const [newPhoto, setNewPhoto] = useState<File | null>(null)
+  const [editPhoto, setEditPhoto] = useState<File | null>(null)
+  const [editRemovePhoto, setEditRemovePhoto] = useState(false)
   const [newPlace, setNewPlace] = useState({
     name: '',
     address: '',
@@ -284,6 +406,11 @@ export default function PlacesPage() {
 
       if (data.success) {
         toast.success('Place saved successfully!')
+        if (newPhoto && data.data?.id) {
+          const ok = await uploadPlacePhoto(data.data.id, newPhoto)
+          if (!ok) toast.error('Place saved, but the photo could not be uploaded')
+        }
+        setNewPhoto(null)
         setAddPlaceOpen(false)
         setNewPlace({
           name: '',
@@ -328,6 +455,8 @@ export default function PlacesPage() {
           ? place.notifyChannels
           : DEFAULT_NOTIFY_CHANNELS,
     })
+    setEditPhoto(null)
+    setEditRemovePhoto(false)
     setEditPlaceOpen(true)
   }
 
@@ -362,6 +491,16 @@ export default function PlacesPage() {
 
       if (data.success) {
         toast.success('Place updated successfully!')
+        if (editingPlace) {
+          if (editPhoto) {
+            const ok = await uploadPlacePhoto(editingPlace.id, editPhoto)
+            if (!ok) toast.error('Place updated, but the photo could not be uploaded')
+          } else if (editRemovePhoto && editingPlace.photoPath) {
+            await deletePlacePhoto(editingPlace.id)
+          }
+        }
+        setEditPhoto(null)
+        setEditRemovePhoto(false)
         setEditPlaceOpen(false)
         setEditingPlace(null)
         mutate()
@@ -505,6 +644,11 @@ export default function PlacesPage() {
                   </p>
                 )}
               </div>
+              <PlacePhotoField
+                file={newPhoto}
+                onPick={setNewPhoto}
+                onRemove={() => setNewPhoto(null)}
+              />
               <div className="space-y-2">
                 <Label>Icon</Label>
                 <IconPicker
@@ -689,6 +833,19 @@ export default function PlacesPage() {
                   </p>
                 )}
               </div>
+              <PlacePhotoField
+                currentPath={editingPlace?.photoPath}
+                file={editPhoto}
+                removed={editRemovePhoto}
+                onPick={(f) => {
+                  setEditPhoto(f)
+                  setEditRemovePhoto(false)
+                }}
+                onRemove={() => {
+                  setEditPhoto(null)
+                  setEditRemovePhoto(true)
+                }}
+              />
               <div className="space-y-2">
                 <Label>Icon</Label>
                 <IconPicker
@@ -867,15 +1024,25 @@ export default function PlacesPage() {
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div
-                        className="p-2 rounded-lg"
-                        style={{ backgroundColor: `${place.color}20` }}
-                      >
-                        <IconComponent
-                          className="w-5 h-5"
-                          style={{ color: place.color }}
+                      {place.photoPath ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`/api/files?pathname=${encodeURIComponent(place.photoPath)}`}
+                          alt={place.name}
+                          className="w-12 h-12 rounded-lg object-cover border-2"
+                          style={{ borderColor: place.color }}
                         />
-                      </div>
+                      ) : (
+                        <div
+                          className="p-2 rounded-lg"
+                          style={{ backgroundColor: `${place.color}20` }}
+                        >
+                          <IconComponent
+                            className="w-5 h-5"
+                            style={{ color: place.color }}
+                          />
+                        </div>
+                      )}
                       <div>
                         <CardTitle className="text-base">{place.name}</CardTitle>
                         <PlaceAddress place={place} />

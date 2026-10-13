@@ -80,6 +80,7 @@ export async function GET(request: NextRequest) {
         icon: p.icon,
         color: p.color,
         notifyChannels: p.notify_channels,
+        photoPath: p.photo_path ?? null,
         createdAt: p.created_at,
       })),
     })
