@@ -428,16 +428,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user can create events
-    // Kids may always invite others (adults then approve, kids accept); a kid
-    // without the create-events permission can't add solo events without approval.
-    const childCanPropose = calendar.role === "CHILD" && participantUserIds_hasOthers
-    if (!calendar.can_create_events && calendar.role !== "PARENT" && !childCanPropose) {
-      return NextResponse.json(
-        { success: false, error: "You don't have permission to create events" },
-        { status: 403 }
-      )
-    }
+    // (create-events permission is checked below, once the invitees are known)
 
     // Who is actually invited. The event form sends `participants`
     // ({ userId } for adult members, { childProfileId } for children), but
@@ -473,6 +464,16 @@ export async function POST(request: NextRequest) {
         AND user_id = ANY(${Array.from(requestedUserIds)}::text[])
       `
       participantUserIds = validMembers.map((m) => m.user_id as string)
+    }
+
+    // Kids may always invite others (adults then approve, kids accept); a kid
+    // without the create-events permission still can't add solo events.
+    const childInvitesOthers = calendar.role === "CHILD" && participantUserIds.some((id) => id !== user.id)
+    if (!calendar.can_create_events && calendar.role !== "PARENT" && !childInvitesOthers) {
+      return NextResponse.json(
+        { success: false, error: "You don't have permission to create events" },
+        { status: 403 }
+      )
     }
 
     // Work out the recurrence (if any) and every occurrence's start/end up
