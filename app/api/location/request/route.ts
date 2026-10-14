@@ -3,7 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription } from "@/lib/auth"
 import { z } from "zod"
 import { ensureLocationRequestsTable } from "@/lib/location-schema"
-import { APPROVAL_WINDOW_MINUTES, PING_WINDOW_MINUTES, PING_LIMIT_ADULT, PING_LIMIT_CHILD, sendApprovalRequest } from "@/lib/location-approval"
+import { APPROVAL_WINDOW_MINUTES, PING_WINDOW_MINUTES, PING_LIMIT_ADULT, PING_LIMIT_CHILD, APPROVED_WINDOW_MINUTES, insertNotification, sendApprovalRequest } from "@/lib/location-approval"
 
 const requestLocationSchema = z.object({
   memberId: z.string().min(1, "Member ID is required"),
@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
         fm.user_id as requester_user_id,
         target.id as target_member_id,
         target.user_id as target_user_id, 
+        target.role as target_role,
         target.nickname as target_name
       FROM family_members fm
       JOIN family_members target ON fm.family_id = target.family_id AND target.id = ${validatedData.memberId}
@@ -106,6 +107,45 @@ export async function POST(request: NextRequest) {
         AND status = 'AWAITING_APPROVAL'
     `
 
+    // A parent/guardian pinging a CHILD who is already sharing needs no
+    // approval - the family can see that child's location anyway, so this just
+    // asks their phone for a fresh fix right now (status PENDING is what the
+    // device poll looks for). Every other ping needs the recipient's approval.
+    const requesterName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "A family member"
+    if (["PARENT", "GUARDIAN", "ADMIN"].includes(requesterRole) && membership[0].target_role === "CHILD") {
+      const sharing = await sql`
+        SELECT 1 FROM location_settings
+        WHERE family_member_id = ${validatedData.memberId} AND mode = 'ACTIVE' AND share_with_family = true
+        LIMIT 1
+      `
+      if (sharing.length > 0) {
+        const directId = `locreq_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+        await sql`
+          INSERT INTO location_requests (id, requester_user_id, target_user_id, family_id, status, created_at, expires_at)
+          VALUES (
+            ${directId}, ${user.id}, ${membership[0].target_user_id}, ${validatedData.familyId},
+            'PENDING', NOW(), NOW() + make_interval(mins => ${APPROVED_WINDOW_MINUTES}::int)
+          )
+        `
+        // Quiet, in-app only: no push, text or email.
+        try {
+          await insertNotification(
+            membership[0].target_user_id,
+            "Location refreshed",
+            `${requesterName} asked for your latest location. You're sharing with your family, so no approval was needed.`,
+            { subType: "LOCATION_REFRESH", requestId: directId, familyId: validatedData.familyId }
+          )
+        } catch (err) {
+          console.error("direct ping in-app notice failed (non-fatal):", err)
+        }
+        return NextResponse.json({
+          success: true,
+          message: "Asked their phone for a fresh location",
+          data: { requestId: directId, status: "PENDING" },
+        })
+      }
+    }
+
     // The target must approve before their device shares anything. Status stays
     // AWAITING_APPROVAL (ignored by the device poll) until they approve.
     const requestId = `locreq_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
@@ -130,7 +170,7 @@ export async function POST(request: NextRequest) {
       await sendApprovalRequest({
         requestId,
         targetUserId: membership[0].target_user_id,
-        requesterName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "A family member",
+        requesterName,
         familyId: validatedData.familyId,
       })
     } catch (err) {
