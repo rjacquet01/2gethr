@@ -50,6 +50,7 @@ import useSWR from 'swr'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { ColorPicker, IconPicker, getPlaceIcon } from '@/components/customization'
+import { GeofenceActivityCard } from '@/components/geofence-activity'
 
 // ---- Saved place photos ----
 // Phone photos are big and serverless requests are limited to ~4.5MB, so shrink
@@ -1003,25 +1004,14 @@ export default function PlacesPage() {
         </Dialog>
       </div>
 
-      {/* Usage Info */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Saved Places</p>
-              <p className="text-2xl font-bold">
-                {currentCount} <span className="text-muted-foreground text-lg font-normal">/ {maxPlaces === Infinity ? 'Unlimited' : maxPlaces}</span>
-              </p>
-            </div>
-            {!canAddMore && (
-              <Badge variant="secondary">
-                <Crown className="w-3 h-3 mr-1" />
-                Upgrade for more
-              </Badge>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Saved places summary + last 24h of geofence arrivals/departures */}
+      <GeofenceActivityCard
+        familyId={primaryFamily.id}
+        placeCount={currentCount}
+        maxPlaces={maxPlaces}
+        geofenceCount={places?.filter((p) => p.geofenceEnabled).length || 0}
+        canAddMore={canAddMore}
+      />
 
       {/* Places Grid */}
       {places?.length === 0 ? (
