@@ -152,7 +152,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         <nav className="p-4 space-y-1">
           {navigation.map((item) => {
-            if (item.explicit ? !(admin?.permissions || []).includes(item.permission as string) : !hasPermission(item.permission)) return null
+            if (item.explicit ? !((admin?.permissions || []).includes(item.permission as string) || admin?.roles.includes('SUPER_ADMIN')) : !hasPermission(item.permission)) return null
             const isActive = pathname === item.href || 
               (item.href !== '/admin' && pathname.startsWith(item.href))
             
