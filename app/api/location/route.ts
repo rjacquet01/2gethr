@@ -1,3 +1,4 @@
+import { isUnderLegalHold } from "@/lib/legal"
 import { ensureLocationRequestsTable } from "@/lib/location-schema"
 import { NextRequest, NextResponse } from "next/server"
 import { ensurePlaceNotifyChannelsColumn } from "@/lib/place-schema"
@@ -333,7 +334,7 @@ export async function POST(request: NextRequest) {
     `
 
     // Free tier gets live location only, not history: keep just the latest ping.
-    if (subscription.tier === "FREE") {
+    if (subscription.tier === "FREE" && !(await isUnderLegalHold(user.id))) {
       await sql`DELETE FROM location_pings WHERE user_id = ${user.id} AND id != ${pingId}`
     }
 
@@ -375,7 +376,7 @@ export async function POST(request: NextRequest) {
 
     // Keep paid-plan history within the plan's window. Runs on ~2% of pings
     // so it doesn't add a write to every ping.
-    if (subscription.tier !== "FREE" && Math.random() < 0.02) {
+    if (subscription.tier !== "FREE" && Math.random() < 0.02 && !(await isUnderLegalHold(user.id))) {
       await sql`
         DELETE FROM location_pings
         WHERE user_id = ${user.id}

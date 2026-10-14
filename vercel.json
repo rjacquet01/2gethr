@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/risk-report",
       "schedule": "0 12 * * 1"
+    },
+    {
+      "path": "/api/cron/legal-retention",
+      "schedule": "15 4 * * *"
     }
   ]
 }

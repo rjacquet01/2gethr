@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, Home, CreditCard,
   TicketIcon, AlertTriangle, LogOut,
   Menu, X, ChevronDown, Settings, Mail, Bell,
-  ArrowUpCircle
+  ArrowUpCircle, Scale
 } from 'lucide-react'
 import { Logo, LogoIcon } from '@/components/logo'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,7 @@ const navigation = [
   { name: 'Upgrade Requests', href: '/admin/upgrades', icon: ArrowUpCircle, permission: null },
   { name: 'Support Tickets', href: '/admin/tickets', icon: TicketIcon, permission: 'support.read' },
   { name: 'Risk Flags', href: '/admin/risk-flags', icon: AlertTriangle, permission: 'trust.read' },
+  { name: 'Legal Requests', href: '/admin/legal', icon: Scale, permission: 'legal.manage', explicit: true },
   { name: 'Weekly Digest', href: '/admin/digest', icon: Mail, permission: null },
   { name: 'Notifications', href: '/admin/notifications', icon: Bell, permission: null },
   { name: 'Settings', href: '/admin/settings', icon: Settings, permission: null },
@@ -151,7 +152,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         <nav className="p-4 space-y-1">
           {navigation.map((item) => {
-            if (!hasPermission(item.permission)) return null
+            if (item.explicit ? !(admin?.permissions || []).includes(item.permission as string) : !hasPermission(item.permission)) return null
             const isActive = pathname === item.href || 
               (item.href !== '/admin' && pathname.startsWith(item.href))
             
