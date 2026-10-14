@@ -26,6 +26,13 @@ export default function LoginPage() {
   // presence of a challenge token is what switches the form to the code step.
   const [challengeToken, setChallengeToken] = useState<string | null>(null)
   const [twoFactorCode, setTwoFactorCode] = useState('')
+  const getRedirectTarget = () => {
+    try {
+      const r = new URLSearchParams(window.location.search).get('redirect')
+      if (r && r.startsWith('/') && !r.startsWith('//') && !r.startsWith('/\\') && !r.startsWith('/login')) return r
+    } catch {}
+    return '/dashboard'
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,7 +45,7 @@ export default function LoginPage() {
     } else if (result.success) {
       toast.success('Welcome back!')
       // Navigate to dashboard - auth state is stored in localStorage
-      router.push('/dashboard')
+      router.push(getRedirectTarget())
     } else {
       toast.error(result.error || 'Login failed')
     }
@@ -55,7 +62,7 @@ export default function LoginPage() {
 
     if (result.success) {
       toast.success('Welcome back!')
-      router.push('/dashboard')
+      router.push(getRedirectTarget())
     } else {
       toast.error(result.error || 'Invalid code')
     }
