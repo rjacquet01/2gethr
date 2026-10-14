@@ -35,6 +35,8 @@ interface PushPayload {
   icon?: string
   badge?: string
   clickAction?: string
+  /** Emergency delivery: Urgency: high header + priority flag for the service worker. */
+  urgent?: boolean
 }
 
 interface PushResult {
@@ -99,7 +101,8 @@ export async function sendPushNotification(
     icon: payload.icon || '/icons/togethr-icon-blue.png',
     badge: payload.badge || '/icons/togethr-icon-blue.png',
     url: payload.clickAction || '/',
-  })
+    ...(payload.urgent ? { priority: 'high' } : {}),
+  }, { urgent: payload.urgent })
 
   if (!result.success) {
     console.error('Web push error:', result.error)
