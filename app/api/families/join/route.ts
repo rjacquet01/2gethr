@@ -69,44 +69,54 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "This invite code was already used. Ask for a new one." }, { status: 400 })
     }
 
-    const ip = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined
-    const ua = request.headers.get("user-agent") || undefined
+    // If anything fails after the code is used up, give the code back so it isn't burned.
+    try {
+      const ip = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined
+      const ua = request.headers.get("user-agent") || undefined
 
-    if (role === "PARENT") {
-      // Parents must be approved by an existing parent before they get access.
-      const requestId = crypto.randomUUID()
-      await sql`
-        INSERT INTO family_join_requests (id, family_id, user_id, invite_id, role, nickname, status)
-        VALUES (${requestId}, ${familyId}, ${user.id}, ${invite.id}, 'PARENT', ${displayName}, 'PENDING')
-      `
-      const fullName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || displayName
-      try {
-        await alertFamilyAdults(familyId, user.id, {
-          title: "Parent join request",
-          body: `${fullName} used a parent invite code for ${invite.family_name}. Open Togethr > Family to approve or decline.`,
-          type: "FAMILY_INVITATION",
-          data: { subType: "JOIN_REQUEST", requestId, familyId },
-          clickAction: "/family",
-          soft: true,
+      if (role === "PARENT") {
+        // Parents must be approved by an existing parent before they get access.
+        const requestId = crypto.randomUUID()
+        await sql`
+          INSERT INTO family_join_requests (id, family_id, user_id, invite_id, role, nickname, status)
+          VALUES (${requestId}, ${familyId}, ${user.id}, ${invite.id}, 'PARENT', ${displayName}, 'PENDING')
+        `
+        const fullName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || displayName
+        try {
+          await alertFamilyAdults(familyId, user.id, {
+            title: "Parent join request",
+            body: `${fullName} used a parent invite code for ${invite.family_name}. Open Togethr > Family to approve or decline.`,
+            type: "FAMILY_INVITATION",
+            data: { subType: "JOIN_REQUEST", requestId, familyId },
+            clickAction: "/family",
+            soft: true,
+          })
+        } catch (e) {
+          console.error("join request alert failed (non-fatal):", e)
+        }
+        await logAuditEvent(user.id, "CREATE", "family_join_request", requestId, { newValue: { familyId, role }, ipAddress: ip, userAgent: ua })
+        return NextResponse.json({
+          success: true,
+          data: { familyId, familyName: invite.family_name, role, status: "PENDING_APPROVAL", requestId },
+          message: "Request sent. A parent in the family needs to approve you.",
         })
-      } catch (e) {
-        console.error("join request alert failed (non-fatal):", e)
       }
-      await logAuditEvent(user.id, "CREATE", "family_join_request", requestId, { newValue: { familyId, role }, ipAddress: ip, userAgent: ua })
+
+      const memberId = await activateMember({ familyId, userId: user.id, role: "CHILD", nickname: displayName })
+      await logAuditEvent(user.id, "CREATE", "family_member", memberId, { newValue: { familyId, role, nickname: displayName }, ipAddress: ip, userAgent: ua })
       return NextResponse.json({
         success: true,
-        data: { familyId, familyName: invite.family_name, role, status: "PENDING_APPROVAL", requestId },
-        message: "Request sent. A parent in the family needs to approve you.",
+        data: { familyId, familyName: invite.family_name, membershipId: memberId, role, status: "JOINED" },
+        message: "Joined family successfully",
       })
+    } catch (inner) {
+      try {
+        await sql`UPDATE family_invites SET used_at = NULL, used_by = NULL WHERE id = ${invite.id} AND used_by = ${user.id}`
+      } catch (restoreErr) {
+        console.error("failed to restore invite after join error:", restoreErr)
+      }
+      throw inner
     }
-
-    const memberId = await activateMember({ familyId, userId: user.id, role: "CHILD", nickname: displayName })
-    await logAuditEvent(user.id, "CREATE", "family_member", memberId, { newValue: { familyId, role, nickname: displayName }, ipAddress: ip, userAgent: ua })
-    return NextResponse.json({
-      success: true,
-      data: { familyId, familyName: invite.family_name, membershipId: memberId, role, status: "JOINED" },
-      message: "Joined family successfully",
-    })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ success: false, error: error.errors[0].message }, { status: 400 })
