@@ -476,7 +476,7 @@ export async function checkAndNotifyEventReminders(): Promise<{ notified: number
            e.created_by_id, c.family_id
     FROM events e
     JOIN calendars c ON e.calendar_id = c.id
-    WHERE e.status IN ('CONFIRMED', 'APPROVED')
+    WHERE e.status IN ('APPROVED')
       AND e.reminder_minutes IS NOT NULL
       AND e.start_time > NOW()
       AND e.start_time <= NOW() + (e.reminder_minutes || ' minutes')::INTERVAL
@@ -631,7 +631,7 @@ export async function checkAndNotifyUpcomingDueDates(): Promise<{
            e.created_by_id, c.family_id
     FROM events e
     JOIN calendars c ON e.calendar_id = c.id
-    WHERE e.status IN ('CONFIRMED', 'APPROVED')
+    WHERE e.status IN ('APPROVED')
       AND e.start_time >= NOW()
       AND e.start_time <= NOW() + INTERVAL '48 hours'
       AND NOT EXISTS (
