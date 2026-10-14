@@ -80,8 +80,36 @@ export function getRolePermissions(role: string) {
  * Create (or reactivate) the family membership for a user with a fixed role.
  * CHILD memberships also get a child profile and default location settings.
  */
-export async function activateMember(opts: { familyId: string; userId: string; role: "PARENT" | "CHILD"; nickname: string }) {
-  const { familyId, userId, role, nickname } = opts
+/**
+ * A parent (or owner) of one family must not become a PARENT of a different
+ * family just because they were invited. Cross-family parents are capped at
+ * GUARDIAN: they can see and add to the calendar but cannot manage members,
+ * invites or conflicts.
+ */
+export async function isParentInOtherFamily(familyId: string, userId: string): Promise<boolean> {
+  const rows = await sql`
+    SELECT 1 FROM families f
+    WHERE f.id <> ${familyId}
+      AND (
+        f.owner_id = ${userId}
+        OR EXISTS (
+          SELECT 1 FROM family_members fm
+          WHERE fm.family_id = f.id AND fm.user_id = ${userId} AND fm.is_active = true AND fm.role = 'PARENT'
+        )
+      )
+    LIMIT 1
+  `
+  return rows.length > 0
+}
+
+export async function effectiveRole(familyId: string, userId: string, requested: "PARENT" | "GUARDIAN" | "CHILD"): Promise<"PARENT" | "GUARDIAN" | "CHILD"> {
+  if (requested === "PARENT" && (await isParentInOtherFamily(familyId, userId))) return "GUARDIAN"
+  return requested
+}
+
+export async function activateMember(opts: { familyId: string; userId: string; role: "PARENT" | "GUARDIAN" | "CHILD"; nickname: string }) {
+  const { familyId, userId, nickname } = opts
+  const role = await effectiveRole(familyId, userId, opts.role)
   const p = getRolePermissions(role)
   const existing = await sql`SELECT id FROM family_members WHERE family_id = ${familyId} AND user_id = ${userId} LIMIT 1`
   let memberId: string
