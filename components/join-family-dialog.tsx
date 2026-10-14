@@ -46,6 +46,12 @@ export function JoinFamilyButton({ variant = 'outline' }: { variant?: 'outline' 
         toast.error(data.error || 'Could not join that family')
         return
       }
+      if (data.data?.status === 'PENDING_APPROVAL') {
+        toast.success(`Request sent. A parent in ${data.data?.familyName || 'that family'} needs to approve you.`)
+        setCode('')
+        setOpen(false)
+        return
+      }
       await globalMutate('/api/families')
       if (data.data?.familyId) setSelectedFamilyId(data.data.familyId)
       toast.success(`Joined ${data.data?.familyName || 'the family'}`)

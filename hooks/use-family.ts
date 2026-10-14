@@ -146,7 +146,13 @@ export function useFamilies() {
       }
       
       await mutate()
-      return { success: true }
+      // Parent codes wait for a parent's approval before the person gets access.
+      return {
+        success: true,
+        pending: data.data?.status === 'PENDING_APPROVAL',
+        familyName: data.data?.familyName as string | undefined,
+        role: data.data?.role as string | undefined,
+      }
     } catch (err) {
       return { success: false, error: 'Network error' }
     }
@@ -193,12 +199,14 @@ export function useFamily(familyId: string | null) {
     }
   }, [familyId, mutate])
   
-  const generateInviteCode = useCallback(async () => {
+  const generateInviteCode = useCallback(async (role: 'PARENT' | 'CHILD' = 'CHILD') => {
     if (!familyId) return { success: false, error: 'No family selected' }
     
     try {
       const res = await authFetch(`/api/families/${familyId}/invite`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
       })
       
       const data = await res.json()
@@ -208,7 +216,7 @@ export function useFamily(familyId: string | null) {
       }
       
       await mutate()
-      return { success: true, inviteCode: data.inviteCode }
+      return { success: true, inviteCode: data.data?.code as string | undefined }
     } catch (err) {
       return { success: false, error: 'Network error' }
     }

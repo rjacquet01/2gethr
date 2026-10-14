@@ -12,7 +12,7 @@ import { toast } from 'sonner'
 import { Users, UserPlus, ArrowRight } from 'lucide-react'
 import { LogoIcon } from '@/components/logo'
 
-type OnboardingStep = 'welcome' | 'create' | 'join'
+type OnboardingStep = 'welcome' | 'create' | 'join' | 'pending'
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -21,6 +21,7 @@ export default function OnboardingPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [familyName, setFamilyName] = useState('')
   const [inviteCode, setInviteCode] = useState('')
+  const [pendingFamily, setPendingFamily] = useState('')
 
   // An invite link looks like /onboarding?code=ABCD1234. Jump straight to the
   // "join" step with the code filled in. The code is also remembered in
@@ -71,7 +72,11 @@ export default function OnboardingPage() {
     setIsLoading(true)
     const result = await joinFamily(inviteCode)
 
-    if (result.success) {
+    if (result.success && result.pending) {
+      try { localStorage.removeItem('togethr-pending-invite') } catch {}
+      setPendingFamily(result.familyName || 'the family')
+      setStep('pending')
+    } else if (result.success) {
       try { localStorage.removeItem('togethr-pending-invite') } catch {}
       toast.success('Joined family successfully!')
       router.push('/dashboard')
@@ -183,6 +188,28 @@ export default function OnboardingPage() {
               </Button>
               <Button onClick={handleCreateFamily} disabled={isLoading} className="flex-1">
                 {isLoading ? <Spinner className="w-4 h-4" /> : 'Create Family'}
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
+  if (step === 'pending') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
+        <div className="w-full max-w-md">
+          <Card className="border-border/50 shadow-lg">
+            <CardHeader>
+              <CardTitle>Waiting for approval</CardTitle>
+              <CardDescription>
+                Your request to join {pendingFamily} as a parent was sent. A parent in the family needs to approve it, and you will get a notification when they do.
+              </CardDescription>
+            </CardHeader>
+            <CardFooter className="flex gap-3">
+              <Button className="flex-1" onClick={() => router.push('/dashboard')}>
+                Continue
               </Button>
             </CardFooter>
           </Card>

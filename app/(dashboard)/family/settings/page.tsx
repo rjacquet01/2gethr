@@ -1,5 +1,6 @@
 'use client'
 
+import { InviteCodesCard } from '@/components/invite-codes'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useFamilies, useFamily } from '@/hooks/use-family'
@@ -259,73 +260,8 @@ export default function FamilySettingsPage() {
             </CardContent>
           </Card>
 
-          {/* Invite Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Invite Members
-              </CardTitle>
-              <CardDescription>
-                Share this code to invite new members to your family
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="flex-1 bg-muted rounded-lg px-4 py-3 font-mono text-lg tracking-wider">
-                  {family?.inviteCode || 'No code generated'}
-                </div>
-                <Button variant="outline" size="icon" onClick={copyInviteCode} title="Copy code">
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-              {family?.inviteCode && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="default">
-                        <Share2 className="h-4 w-4 mr-2" />
-                        Share Invite
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
-                      <DropdownMenuItem onClick={handleShareEmail}>
-                        <Mail className="h-4 w-4 mr-2" />
-                        Share via Email
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={handleShareSMS}>
-                        <MessageSquare className="h-4 w-4 mr-2" />
-                        Share via Text
-                      </DropdownMenuItem>
-                      {typeof navigator !== 'undefined' && navigator.share && (
-                        <DropdownMenuItem onClick={handleShareNative}>
-                          <Share2 className="h-4 w-4 mr-2" />
-                          More Options...
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  {isOwner && (
-                    <Button
-                      variant="outline"
-                      onClick={regenerateInviteCode}
-                      disabled={regeneratingCode}
-                    >
-                      {regeneratingCode ? (
-                        <Spinner className="h-4 w-4 mr-2" />
-                      ) : (
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                      )}
-                      New Code
-                    </Button>
-                  )}
-                </div>
-              )}
-              <p className="text-sm text-muted-foreground">
-                Anyone with this code can request to join your family.
-              </p>
-            </CardContent>
-          </Card>
+          {/* Invite codes (single-use, parent or child) */}
+          {family?.id && <InviteCodesCard familyId={family.id} familyName={family.name || 'our family'} />}
 
           {/* Danger Zone */}
           {isOwner && (
