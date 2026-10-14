@@ -140,7 +140,8 @@ export function isVapidConfigured(): boolean {
  */
 export async function sendWebPush(
   subscription: WebPushSubscription,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  options: { urgent?: boolean } = {}
 ): Promise<WebPushResult> {
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
   const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY
@@ -168,6 +169,9 @@ export async function sendWebPush(
         'Content-Type': 'application/octet-stream',
         'Content-Encoding': 'aes128gcm',
         'TTL': '86400',
+        // Urgency: high lets the push service wake a sleeping (Doze) phone
+        // instead of batching the message for later. Emergencies only.
+        ...(options.urgent ? { 'Urgency': 'high' } : {}),
         'Authorization': authHeader,
       },
       // Buffer is a Uint8Array under the hood, but Node's fetch/BodyInit
