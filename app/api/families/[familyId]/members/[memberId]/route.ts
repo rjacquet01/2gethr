@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
+import { isParentInOtherFamily } from "@/lib/family-invites"
 
 const updateMemberSchema = z.object({
   role: z.enum(["PARENT", "GUARDIAN", "CHILD"]).optional(),
@@ -67,6 +68,14 @@ export async function PATCH(
 
     const body = await request.json()
     const validatedData = updateMemberSchema.parse(body)
+
+    // A parent/owner of a different family can be at most a GUARDIAN here.
+    if (validatedData.role === "PARENT" && (await isParentInOtherFamily(familyId, targetMember[0].user_id))) {
+      return NextResponse.json(
+        { success: false, error: "This person is already a parent in another family, so they can only be a guardian in this one." },
+        { status: 403 }
+      )
+    }
 
     // Build update
     await sql`
