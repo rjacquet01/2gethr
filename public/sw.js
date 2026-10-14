@@ -138,7 +138,7 @@ self.addEventListener('push', (event) => {
   }
 
   // Different notification types have different urgency levels
-  const isUrgent = data.type === 'sos' || data.type === 'geofence' || data.priority === 'high';
+  const isUrgent = data.type === 'sos' || data.type === 'emergency' || data.type === 'geofence' || data.priority === 'high';
   
   const options = {
     body: data.body || 'New notification from Togethr',
@@ -165,6 +165,11 @@ self.addEventListener('push', (event) => {
 // Get default actions based on notification type
 function getDefaultActions(type) {
   switch (type) {
+    case 'emergency':
+      return [
+        { action: 'ok', title: "I'm OK" },
+        { action: 'call', title: 'Call back' }
+      ];
     case 'sos':
       return [
         { action: 'view', title: 'View Location' },
@@ -195,6 +200,24 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const url = event.notification.data?.url || '/';
+
+  // "I'm OK" on an emergency alert: tell the parent right away, without
+  // opening the app. Falls back to opening the app if the session expired.
+  if (event.action === 'ok' && event.notification.data?.type === 'emergency' && event.notification.data?.alertId) {
+    event.waitUntil(
+      fetch('/api/location/emergency-alert/ack', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alertId: event.notification.data.alertId }),
+      })
+        .then((res) => {
+          if (!res.ok && clients.openWindow) return clients.openWindow(url);
+        })
+        .catch(() => (clients.openWindow ? clients.openWindow(url) : undefined))
+    );
+    return;
+  }
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
