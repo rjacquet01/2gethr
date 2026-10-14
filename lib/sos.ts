@@ -144,7 +144,8 @@ export async function dispatchSos(input: SosInput): Promise<RecipientResult[]> {
             const p = await sendPushToUser(r.user_id, {
               title,
               body: inAppBody,
-              data: { type: "LOCATION_ALERT", subType: "SOS", userId: senderId, eventId, ...(hasLoc ? { latitude: String(latitude), longitude: String(longitude) } : {}) },
+              urgent: true,
+              data: { type: "sos", subType: "SOS", userId: senderId, eventId, ...(hasLoc ? { latitude: String(latitude), longitude: String(longitude) } : {}) },
               clickAction: "/location",
             })
             out.push = p.sent > 0 ? "sent" : "failed"
