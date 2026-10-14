@@ -51,6 +51,7 @@ export default function EditEventPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [notifyChannels, setNotifyChannels] = useState<NotificationChannelValue[]>([])
   const [participantUserIds, setParticipantUserIds] = useState<string[]>([])
+  const [participantChildIds, setParticipantChildIds] = useState<string[]>([])
   const eventFamilyId = (event as unknown as { calendar?: { familyId?: string } } | undefined)?.calendar?.familyId
   const { family } = useFamily(eventFamilyId)
   
@@ -94,8 +95,9 @@ export default function EditEventPage() {
     }
     if (event) {
       setNotifyChannels(((event as unknown as { notifyChannels?: NotificationChannelValue[] }).notifyChannels) || [])
-      const existing = (event as unknown as { participants?: Array<{ userId?: string | null }> }).participants || []
+      const existing = (event as unknown as { participants?: Array<{ userId?: string | null; childProfileId?: string | null }> }).participants || []
       setParticipantUserIds(existing.map((p) => p.userId).filter((id): id is string => !!id))
+      setParticipantChildIds(existing.map((p) => p.childProfileId).filter((id): id is string => !!id))
     }
   }, [event])
 
@@ -140,6 +142,7 @@ export default function EditEventPage() {
           color: formData.color || null,
           notifyChannels,
           participantUserIds,
+          participantChildProfileIds: participantChildIds,
         }),
       })
       
@@ -380,7 +383,23 @@ export default function EditEventPage() {
                       </label>
                     </div>
                   ))}
-                  {(family.members || []).length === 0 && (
+                  {(family.children || []).filter((c) => !c.hasLogin).map((c) => (
+                    <div key={c.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`participant-child-${c.id}`}
+                        checked={participantChildIds.includes(c.id)}
+                        onCheckedChange={(checked) =>
+                          setParticipantChildIds((prev) =>
+                            checked ? Array.from(new Set([...prev, c.id])) : prev.filter((id) => id !== c.id)
+                          )
+                        }
+                      />
+                      <label htmlFor={`participant-child-${c.id}`} className="text-sm cursor-pointer">
+                        {c.displayName} <span className="text-xs text-muted-foreground">(child)</span>
+                      </label>
+                    </div>
+                  ))}
+                  {(family.members || []).length === 0 && (family.children || []).length === 0 && (
                     <p className="text-sm text-muted-foreground">No eligible members found.</p>
                   )}
                 </div>

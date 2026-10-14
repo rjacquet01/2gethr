@@ -1,4 +1,4 @@
-import { notifyEventAssignment, isAdultRole } from '@/lib/assignment'
+import { notifyEventAssignment, isAdultRole, ensureEventParticipantChildColumns, resolveLoginlessChildIds } from '@/lib/assignment'
 import { NextRequest, NextResponse } from "next/server"
 import { ensureEventCategoryColumn } from "@/lib/event-category-column"
 import { ensureTaskEventNotifyChannelsColumns } from "@/lib/notify-channels-schema"
@@ -259,15 +259,17 @@ export async function GET(request: NextRequest) {
 
     // Get participants for all events
     const eventIds = filteredEvents.map(e => e.id)
-    let participants: Array<{ event_id: string; user_id: string; status: string; first_name: string; last_name: string }> = []
+    let participants: Array<{ event_id: string; user_id: string | null; child_profile_id: string | null; status: string; first_name: string | null; last_name: string | null; child_name: string | null }> = []
     
     if (eventIds.length > 0) {
+      await ensureEventParticipantChildColumns()
       participants = await sql`
         SELECT 
-          ep.event_id, ep.user_id, ep.status,
-          u.first_name, u.last_name
+          ep.event_id, ep.user_id, ep.child_profile_id, ep.status,
+          u.first_name, u.last_name, cp.display_name AS child_name
         FROM event_participants ep
-        JOIN users u ON ep.user_id = u.id
+        LEFT JOIN users u ON ep.user_id = u.id
+        LEFT JOIN child_profiles cp ON ep.child_profile_id = cp.id
         WHERE ep.event_id = ANY(${eventIds})
       `
     }
@@ -277,11 +279,12 @@ export async function GET(request: NextRequest) {
       if (!acc[p.event_id]) acc[p.event_id] = []
       acc[p.event_id].push({
         userId: p.user_id,
+        childProfileId: p.child_profile_id,
         status: p.status,
-        name: `${p.first_name} ${p.last_name}`,
+        name: p.child_name || `${p.first_name || ''} ${p.last_name || ''}`.trim(),
       })
       return acc
-    }, {} as Record<string, Array<{ userId: string; status: string; name: string }>>)
+    }, {} as Record<string, Array<{ userId: string | null; childProfileId: string | null; status: string; name: string }>>)
 
     return NextResponse.json({
       success: true,
@@ -455,6 +458,9 @@ export async function POST(request: NextRequest) {
       `
       for (const row of childUsers) requestedUserIds.add(row.user_id)
     }
+    // Children with no login are stored by child profile id.
+    await ensureEventParticipantChildColumns()
+    const participantChildIds = await resolveLoginlessChildIds(calendar.family_id, requestedChildIds)
     let participantUserIds: string[] = []
     if (requestedUserIds.size > 0) {
       const validMembers = await sql`
@@ -468,7 +474,7 @@ export async function POST(request: NextRequest) {
 
     // Kids may always invite others (adults then approve, kids accept); a kid
     // without the create-events permission still can't add solo events.
-    const childInvitesOthers = calendar.role === "CHILD" && participantUserIds.some((id) => id !== user.id)
+    const childInvitesOthers = calendar.role === "CHILD" && (participantUserIds.some((id) => id !== user.id) || participantChildIds.length > 0)
     if (!calendar.can_create_events && calendar.role !== "PARENT" && !childInvitesOthers) {
       return NextResponse.json(
         { success: false, error: "You don't have permission to create events" },
@@ -547,6 +553,10 @@ export async function POST(request: NextRequest) {
     // Determine initial status
     // A child inviting a parent/guardian needs that parent's approval.
     let needsParentApproval = false
+    if (calendar.role === "CHILD" && participantChildIds.length > 0) {
+      // A child with no login can't accept anything - a parent has to approve.
+      needsParentApproval = true
+    }
     if (calendar.role === "CHILD" && participantUserIds.length > 0) {
       const adults = await sql`
         SELECT 1 FROM family_members
@@ -554,7 +564,7 @@ export async function POST(request: NextRequest) {
         AND role IN ('PARENT', 'GUARDIAN')
         AND user_id = ANY(${participantUserIds}::text[]) AND user_id <> ${user.id}
       `
-      needsParentApproval = adults.length > 0
+      if (adults.length > 0) needsParentApproval = true
     }
     const status = (calendar.requires_event_approval || needsParentApproval) ? "PENDING" : "APPROVED"
 
@@ -622,6 +632,16 @@ export async function POST(request: NextRequest) {
       `
     }
 
+    // Children with no login: stored by child profile (parent-managed, so
+    // there is nothing for them to accept).
+    if (participantChildIds.length > 0) {
+      await sql`
+        INSERT INTO event_participants (id, event_id, child_profile_id, status, created_at, updated_at)
+        SELECT gen_random_uuid(), ${eventId}, cid, 'ACCEPTED', NOW(), NOW()
+        FROM unnest(${participantChildIds}::text[]) AS cid
+      `
+    }
+
     // Create event request if pending approval
     if (status === "PENDING") {
       await sql`
@@ -665,7 +685,19 @@ export async function POST(request: NextRequest) {
         FROM events ne
         JOIN event_participants ep ON ep.event_id = ${eventId}
         WHERE ne.recurrence_rule_id = ${recurrenceRuleId} AND ne.id <> ${eventId}
+        AND ep.user_id IS NOT NULL
       `
+
+      if (participantChildIds.length > 0) {
+        await sql`
+          INSERT INTO event_participants (id, event_id, child_profile_id, status, created_at, updated_at)
+          SELECT gen_random_uuid(), ne.id, ep.child_profile_id, 'ACCEPTED', NOW(), NOW()
+          FROM events ne
+          JOIN event_participants ep ON ep.event_id = ${eventId}
+          WHERE ne.recurrence_rule_id = ${recurrenceRuleId} AND ne.id <> ${eventId}
+          AND ep.child_profile_id IS NOT NULL
+        `
+      }
 
       if (status === "PENDING") {
         await sql`

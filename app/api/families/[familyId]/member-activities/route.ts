@@ -1,3 +1,4 @@
+import { ensureEventParticipantChildColumns } from '@/lib/assignment'
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
@@ -86,6 +87,7 @@ export async function GET(
     `
 
     // Get upcoming events (next 7 days) with participants
+    await ensureEventParticipantChildColumns()
     const upcomingEvents = await sql`
       SELECT 
         e.id,
@@ -95,7 +97,8 @@ export async function GET(
         e.is_all_day,
         e.location,
         e.color,
-        ep.user_id as participant_user_id
+        ep.user_id as participant_user_id,
+        ep.child_profile_id as participant_child_id
       FROM events e
       JOIN calendars c ON e.calendar_id = c.id
       LEFT JOIN event_participants ep ON e.id = ep.event_id
@@ -193,6 +196,12 @@ export async function GET(
     }) => {
       const childTasks = tasks.filter((t: { child_profile_id: string }) => t.child_profile_id === child.child_id)
       const childReminders = visibleReminders.filter((r: ReminderRow) => r.child_profile_id === child.child_id)
+      const seenEvents = new Set<string>()
+      const childEvents = upcomingEvents.filter((e: { id: string; participant_child_id: string | null }) => {
+        if (e.participant_child_id !== child.child_id || seenEvents.has(e.id)) return false
+        seenEvents.add(e.id)
+        return true
+      })
       
       memberActivities.push({
         memberId: child.family_member_id,
@@ -204,9 +213,9 @@ export async function GET(
         role: 'CHILD',
         childProfileId: child.child_id,
         tasks: childTasks.slice(0, 5),
-        events: [],
+        events: childEvents.slice(0, 5),
         taskCount: childTasks.length,
-        eventCount: 0,
+        eventCount: childEvents.length,
         reminders: childReminders.slice(0, 5),
         reminderCount: childReminders.length,
       })

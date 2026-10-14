@@ -497,6 +497,7 @@ export async function checkAndNotifyEventReminders(): Promise<{ notified: number
       FROM event_participants ep
       WHERE ep.event_id = ${event.id}
         AND ep.status != 'DECLINED'
+        AND ep.user_id IS NOT NULL
     `
     
     const members = await sql`
@@ -659,6 +660,7 @@ export async function checkAndNotifyUpcomingDueDates(): Promise<{
       FROM event_participants ep
       WHERE ep.event_id = ${event.id}
         AND ep.status != 'DECLINED'
+        AND ep.user_id IS NOT NULL
     `
     
     const usersToNotify = new Set<string>()

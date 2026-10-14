@@ -82,7 +82,7 @@ export async function GET(
       SELECT 
         cp.id, cp.display_name, cp.age, cp.school, cp.grade,
         cp.avatar_url, cp.created_at,
-        fm.id as family_member_id, fm.color, fm.emoji
+        fm.id as family_member_id, fm.user_id as member_user_id, fm.color, fm.emoji
       FROM child_profiles cp
       JOIN family_members fm ON cp.family_member_id = fm.id
       WHERE fm.family_id = ${familyId}
@@ -128,6 +128,7 @@ export async function GET(
           birthDate: null,
           avatarUrl: c.avatar_url,
           familyMemberId: c.family_member_id,
+          hasLogin: !!c.member_user_id,
           color: c.color || null,
           emoji: c.emoji || null,
           grade: c.grade,

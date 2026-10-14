@@ -11,7 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/ui/spinner'
 import { Input } from '@/components/ui/input'
 import { useCalendarSync } from '@/hooks/use-calendar-sync'
-import { authFetch } from '@/hooks/use-auth'
+import { authFetch, useAuth } from '@/hooks/use-auth'
+import { useFamily } from '@/hooks/use-family'
+import { Checkbox } from '@/components/ui/checkbox'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 
@@ -767,16 +769,29 @@ function ImportIcsCard() {
   const [feedUrl, setFeedUrl] = useState('')
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<string | null>(null)
+  const [assignUserIds, setAssignUserIds] = useState<string[]>([])
+  const [assignChildIds, setAssignChildIds] = useState<string[]>([])
+
+  const { user } = useAuth()
+  const { family } = useFamily(user?.primaryFamily?.id ?? null)
+  const myRole = (family?.members || []).find((m) => m.userId === user?.id)?.role
+  const canAssign = myRole === 'PARENT' || myRole === 'GUARDIAN'
+  const toggleId = (list: string[], id: string, on: boolean) =>
+    on ? Array.from(new Set([...list, id])) : list.filter((x) => x !== id)
 
   const runImport = async (body: FormData | { url: string }) => {
     setImporting(true)
     setResult(null)
     try {
+      if (body instanceof FormData) {
+        body.append('assignUserIds', JSON.stringify(assignUserIds))
+        body.append('assignChildIds', JSON.stringify(assignChildIds))
+      }
       const res = await authFetch('/api/calendar-sync/ical/import', {
         method: 'POST',
         ...(body instanceof FormData
           ? { body }
-          : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+          : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, assignUserIds, assignChildIds }) }),
       })
       const data = await res.json()
       if (data.success) {
@@ -784,6 +799,8 @@ function ImportIcsCard() {
         toast.success(data.message)
         setFile(null)
         setFeedUrl('')
+        setAssignUserIds([])
+        setAssignChildIds([])
       } else {
         toast.error(data.error || 'Import failed')
       }
@@ -826,6 +843,42 @@ function ImportIcsCard() {
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
+        {canAssign && family && (
+          <div className="space-y-2">
+            <p className="font-medium text-sm">Assign imported events to (optional)</p>
+            <p className="text-xs text-muted-foreground">
+              Everyone in the family can see imported events. Pick people here to also assign every event in the
+              file to them; children get a push, email and text.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2 rounded-lg border border-border p-3">
+              {(family.members || []).filter((m) => m.isActive !== false && m.userId).map((m) => (
+                <div key={m.id} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`import-assign-${m.id}`}
+                    checked={assignUserIds.includes(m.userId)}
+                    onCheckedChange={(c) => setAssignUserIds((prev) => toggleId(prev, m.userId, !!c))}
+                  />
+                  <label htmlFor={`import-assign-${m.id}`} className="text-sm cursor-pointer">
+                    {m.displayName} <span className="text-xs text-muted-foreground capitalize">({m.role.toLowerCase()})</span>
+                  </label>
+                </div>
+              ))}
+              {(family.children || []).filter((c) => !c.hasLogin).map((c) => (
+                <div key={c.id} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`import-assign-child-${c.id}`}
+                    checked={assignChildIds.includes(c.id)}
+                    onCheckedChange={(on) => setAssignChildIds((prev) => toggleId(prev, c.id, !!on))}
+                  />
+                  <label htmlFor={`import-assign-child-${c.id}`} className="text-sm cursor-pointer">
+                    {c.displayName} <span className="text-xs text-muted-foreground">(child)</span>
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="space-y-2">
           <p className="font-medium text-sm">Upload a .ics file</p>
           <div className="flex flex-col sm:flex-row gap-2">

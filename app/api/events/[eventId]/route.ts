@@ -1,3 +1,4 @@
+import { ensureEventParticipantChildColumns, resolveLoginlessChildIds, addEventParticipants, notifyParticipantsAdded } from "@/lib/assignment"
 import { NextRequest, NextResponse } from "next/server"
 import { ensureEventCategoryColumn } from "@/lib/event-category-column"
 import { ensureTaskEventNotifyChannelsColumns } from "@/lib/notify-channels-schema"
@@ -22,6 +23,8 @@ const updateEventSchema = z.object({
   status: z.enum(["APPROVED", "CANCELLED"]).optional(),
   // Full replacement list of invited family members (user ids).
   participantUserIds: z.array(z.string()).optional(),
+  // Full replacement list of invited children who have no login.
+  participantChildProfileIds: z.array(z.string()).optional(),
 })
 
 // Get single event
@@ -69,12 +72,14 @@ export async function GET(
     const event = events[0]
 
     // Get participants
+    await ensureEventParticipantChildColumns()
     const participants = await sql`
       SELECT 
-        ep.id, ep.user_id, ep.status, ep.responded_at,
-        u.first_name, u.last_name, u.email
+        ep.id, ep.user_id, ep.child_profile_id, ep.status, ep.responded_at,
+        u.first_name, u.last_name, u.email, cp.display_name AS child_name
       FROM event_participants ep
-      JOIN users u ON ep.user_id = u.id
+      LEFT JOIN users u ON ep.user_id = u.id
+      LEFT JOIN child_profiles cp ON ep.child_profile_id = cp.id
       WHERE ep.event_id = ${eventId}
     `
 
@@ -151,11 +156,12 @@ export async function GET(
         participants: participants.map(p => ({
           id: p.id,
           userId: p.user_id,
+          childProfileId: p.child_profile_id,
           status: p.status,
           respondedAt: p.responded_at,
-          name: `${p.first_name} ${p.last_name}`,
-          displayName: `${p.first_name} ${p.last_name}`,
-          email: p.email,
+          name: p.child_name || `${p.first_name || ''} ${p.last_name || ''}`.trim(),
+          displayName: p.child_name || `${p.first_name || ''} ${p.last_name || ''}`.trim(),
+          email: p.email || null,
         })),
         eventRequest,
         createdAt: event.created_at,
@@ -250,23 +256,52 @@ export async function PATCH(
       WHERE id = ${eventId}
     `
 
-    // Replace the invited members (only real, active members of this family).
-    if (validatedData.participantUserIds) {
+    // Replace the invited members (only real, active members of this family),
+    // then tell whoever was newly added.
+    if (validatedData.participantUserIds || validatedData.participantChildProfileIds) {
+      await ensureEventParticipantChildColumns()
       const cal = await sql`SELECT family_id FROM calendars WHERE id = ${event.calendar_id}`
-      const valid = cal.length === 0 ? [] : await sql`
-        SELECT DISTINCT user_id FROM family_members
-        WHERE family_id = ${cal[0].family_id} AND is_active = true
-        AND user_id = ANY(${validatedData.participantUserIds}::text[])
-      `
-      const keep = valid.map((m) => m.user_id as string)
-      await sql`DELETE FROM event_participants WHERE event_id = ${eventId} AND NOT (user_id = ANY(${keep}::text[]))`
-      if (keep.length > 0) {
-        await sql`
-          INSERT INTO event_participants (id, event_id, user_id, status, created_at, updated_at)
-          SELECT gen_random_uuid(), ${eventId}, pid, 'INVITED', NOW(), NOW()
-          FROM unnest(${keep}::text[]) AS pid
-          WHERE NOT EXISTS (SELECT 1 FROM event_participants ep WHERE ep.event_id = ${eventId} AND ep.user_id = pid)
+      const familyId = cal.length === 0 ? null : (cal[0].family_id as string)
+      let addedUserIds: string[] = []
+      let addedChildIds: string[] = []
+
+      if (familyId && validatedData.participantUserIds) {
+        const valid = await sql`
+          SELECT DISTINCT user_id FROM family_members
+          WHERE family_id = ${familyId} AND is_active = true
+          AND user_id = ANY(${validatedData.participantUserIds}::text[])
         `
+        const keep = valid.map((m) => m.user_id as string)
+        await sql`DELETE FROM event_participants WHERE event_id = ${eventId} AND user_id IS NOT NULL AND NOT (user_id = ANY(${keep}::text[]))`
+        const added = await addEventParticipants(eventId, keep, [])
+        addedUserIds = added.addedUserIds
+      }
+      if (familyId && validatedData.participantChildProfileIds) {
+        const keepChildren = await resolveLoginlessChildIds(familyId, validatedData.participantChildProfileIds)
+        await sql`DELETE FROM event_participants WHERE event_id = ${eventId} AND child_profile_id IS NOT NULL AND NOT (child_profile_id = ANY(${keepChildren}::text[]))`
+        const added = await addEventParticipants(eventId, [], keepChildren)
+        addedChildIds = added.addedChildIds
+      }
+
+      if (familyId && (addedUserIds.length > 0 || addedChildIds.length > 0)) {
+        try {
+          const actorName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'A family member'
+          await notifyParticipantsAdded({
+            eventId,
+            familyId,
+            title: validatedData.title || event.title,
+            actorUserId: user.id,
+            actorName,
+            actorRole: event.role,
+            addedUserIds,
+            addedChildIds,
+            channels: validatedData.notifyChannels && validatedData.notifyChannels.length > 0
+              ? validatedData.notifyChannels
+              : (event.notify_channels && event.notify_channels.length > 0 ? event.notify_channels : undefined),
+          })
+        } catch (notifyErr) {
+          console.error("Notify added participants failed:", notifyErr)
+        }
       }
     }
 

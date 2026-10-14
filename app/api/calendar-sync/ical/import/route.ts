@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { splitIcsComponents, parseIcsField, parseIcsDateValue } from '@/lib/services/caldav'
+import { createNotification } from '@/lib/notifications'
+import { ensureEventParticipantChildColumns, resolveLoginlessChildIds, isAdultRole } from '@/lib/assignment'
 
 // POST - One-off import of a .ics file (uploaded) or a remote .ics/webcal
 // URL, into the caller's family. This is the generic "import from any
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     const familyMembership = await sql`
-      SELECT family_id FROM family_members
+      SELECT family_id, role FROM family_members
       WHERE user_id = ${user.id} AND is_active = true
       LIMIT 1
     `
@@ -39,6 +41,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'No family found' }, { status: 404 })
     }
     const familyId = familyMembership[0].family_id
+    const importerRole = familyMembership[0].role as string
+
+    // Optional: assign every event in this file to family members. Accounts
+    // (assignUserIds) and children with no login (assignChildIds).
+    let assignUserIds: string[] = []
+    let assignChildIds: string[] = []
+    const parseIdList = (v: unknown): string[] => {
+      if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string')
+      if (typeof v === 'string' && v.trim()) {
+        try {
+          const arr = JSON.parse(v)
+          return Array.isArray(arr) ? arr.filter((x: unknown): x is string => typeof x === 'string') : []
+        } catch { return [] }
+      }
+      return []
+    }
 
     let icsText: string
     let sourceLabel: string
@@ -56,9 +74,13 @@ export async function POST(request: NextRequest) {
       }
       icsText = await file.text()
       sourceLabel = file.name || 'uploaded file'
+      assignUserIds = parseIdList(formData.get('assignUserIds'))
+      assignChildIds = parseIdList(formData.get('assignChildIds'))
     } else {
       const body = await request.json().catch(() => ({}))
       const url: string | undefined = body.url
+      assignUserIds = parseIdList(body.assignUserIds)
+      assignChildIds = parseIdList(body.assignChildIds)
       if (!url) {
         return NextResponse.json({ success: false, error: 'No file or url provided' }, { status: 400 })
       }
@@ -90,6 +112,27 @@ export async function POST(request: NextRequest) {
       icsText = new TextDecoder('utf-8').decode(buf)
       sourceLabel = parsed.hostname
     }
+
+    // Only a parent/guardian can assign; keep only real members of this family.
+    let assignmentNote = ''
+    const wantsAssign = assignUserIds.length > 0 || assignChildIds.length > 0
+    if (wantsAssign && !isAdultRole(importerRole)) {
+      assignUserIds = []
+      assignChildIds = []
+      assignmentNote = ' Only a parent or guardian can assign imported events, so none were assigned.'
+    }
+    if (assignUserIds.length > 0) {
+      const valid = await sql`
+        SELECT DISTINCT user_id FROM family_members
+        WHERE family_id = ${familyId} AND is_active = true
+        AND user_id = ANY(${assignUserIds}::text[])
+      `
+      assignUserIds = valid.map((r) => r.user_id as string)
+    }
+    if (assignChildIds.length > 0) {
+      assignChildIds = await resolveLoginlessChildIds(familyId, assignChildIds)
+    }
+    const importedEventIds: string[] = []
 
     if (!/BEGIN:VCALENDAR/i.test(icsText)) {
       return NextResponse.json({ success: false, error: 'That doesn\'t look like a valid .ics calendar file' }, { status: 400 })
@@ -139,9 +182,19 @@ export async function POST(request: NextRequest) {
           ON CONFLICT (family_id, item_type, title, occurs_at) DO NOTHING
           RETURNING id
         `
-        if (claimed.length === 0) { eventsSkipped++; continue }
+        if (claimed.length === 0) {
+          eventsSkipped++
+          // Already imported earlier: still assign it if asked to.
+          if (assignUserIds.length > 0 || assignChildIds.length > 0) {
+            const existing = await sql`
+              SELECT id FROM events WHERE calendar_id = ${calendarId} AND title = ${summary} AND start_time = ${startTime} LIMIT 1
+            `
+            if (existing.length > 0) importedEventIds.push(existing[0].id as string)
+          }
+          continue
+        }
 
-        await sql`
+        const created = await sql`
           INSERT INTO events (
             calendar_id, title, description, location,
             start_time, end_time, is_all_day, status,
@@ -150,7 +203,9 @@ export async function POST(request: NextRequest) {
             ${calendarId}, ${summary}, ${parseIcsField(raw, 'DESCRIPTION')}, ${parseIcsField(raw, 'LOCATION')},
             ${startTime}, ${endTime}, ${isAllDay}, 'APPROVED', 'FAMILY', ${user.id}
           )
+          RETURNING id
         `
+        if (created.length > 0) importedEventIds.push(created[0].id as string)
         eventsImported++
       }
     }
@@ -200,6 +255,57 @@ export async function POST(request: NextRequest) {
       tasksImported++
     }
 
+    // --- Assign the events to the chosen people ---
+    let eventsAssigned = 0
+    if (importedEventIds.length > 0 && (assignUserIds.length > 0 || assignChildIds.length > 0)) {
+      await ensureEventParticipantChildColumns()
+      if (assignUserIds.length > 0) {
+        await sql`
+          INSERT INTO event_participants (id, event_id, user_id, status, created_at, updated_at)
+          SELECT gen_random_uuid(), e.eid, u.uid, 'INVITED', NOW(), NOW()
+          FROM unnest(${importedEventIds}::text[]) AS e(eid)
+          CROSS JOIN unnest(${assignUserIds}::text[]) AS u(uid)
+          WHERE NOT EXISTS (SELECT 1 FROM event_participants ep WHERE ep.event_id = e.eid AND ep.user_id = u.uid)
+        `
+      }
+      if (assignChildIds.length > 0) {
+        await sql`
+          INSERT INTO event_participants (id, event_id, child_profile_id, status, created_at, updated_at)
+          SELECT gen_random_uuid(), e.eid, c.cid, 'ACCEPTED', NOW(), NOW()
+          FROM unnest(${importedEventIds}::text[]) AS e(eid)
+          CROSS JOIN unnest(${assignChildIds}::text[]) AS c(cid)
+          WHERE NOT EXISTS (SELECT 1 FROM event_participants ep WHERE ep.event_id = e.eid AND ep.child_profile_id = c.cid)
+        `
+      }
+      eventsAssigned = importedEventIds.length
+
+      // One summary notification per person (not one per event).
+      const importerName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'A parent'
+      const kids = assignUserIds.length === 0 ? [] : await sql`
+        SELECT user_id FROM family_members
+        WHERE family_id = ${familyId} AND role = 'CHILD' AND user_id = ANY(${assignUserIds}::text[])
+      `
+      const kidSet = new Set(kids.map((k) => k.user_id as string))
+      for (const uid of assignUserIds) {
+        if (uid === user.id) continue
+        try {
+          const isKid = kidSet.has(uid)
+          await createNotification({
+            userId: uid,
+            type: 'EVENT_INVITATION',
+            title: 'New events on your calendar',
+            body: `${importerName} added ${importedEventIds.length} event${importedEventIds.length === 1 ? '' : 's'} from ${sourceLabel} to your calendar`,
+            data: { familyId, kind: 'ics_import_assigned' },
+            ...(isKid
+              ? { channels: ['in_app', 'push', 'email', 'sms'] as ('in_app' | 'push' | 'email' | 'sms')[], force: true }
+              : { sendEmail: true }),
+          })
+        } catch (e) {
+          console.error('Import assignment notification failed:', e)
+        }
+      }
+    }
+
     if (eventBlocks.length === 0 && todoBlocks.length === 0) {
       return NextResponse.json({ success: false, error: 'No events or tasks found in that calendar file' }, { status: 400 })
     }
@@ -210,8 +316,10 @@ export async function POST(request: NextRequest) {
       eventsSkipped,
       tasksImported,
       tasksSkipped,
+      eventsAssigned,
       message: `Imported ${eventsImported} event(s) and ${tasksImported} task(s) from ${sourceLabel}` +
-        (eventsSkipped || tasksSkipped ? ` (${eventsSkipped + tasksSkipped} already present, skipped)` : ''),
+        (eventsSkipped || tasksSkipped ? ` (${eventsSkipped + tasksSkipped} already present, skipped)` : '') +
+        (eventsAssigned > 0 ? `. Assigned ${eventsAssigned} event(s).` : '') + assignmentNote,
     })
   } catch (error) {
     console.error('iCal import error:', error)

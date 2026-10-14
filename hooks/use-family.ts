@@ -24,6 +24,8 @@ export interface ChildProfile {
   displayName: string
   birthDate: string | null
   familyMemberId?: string
+  /** true when the child has their own login (invited by user account); false = profile only */
+  hasLogin?: boolean
   avatarUrl: string | null
   color?: string | null
   emoji?: string | null
