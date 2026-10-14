@@ -79,7 +79,10 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.push('/login')
+      // Remember where the user was headed (e.g. a tapped push notification)
+      // so the login page can send them back there afterwards.
+      const here = window.location.pathname + window.location.search
+      router.push(here && here !== '/' ? `/login?redirect=${encodeURIComponent(here)}` : '/login')
     }
   }, [isLoading, isAuthenticated, router])
 
