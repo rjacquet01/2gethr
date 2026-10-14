@@ -3,7 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription } from "@/lib/auth"
 import { z } from "zod"
 import { ensureLocationRequestsTable } from "@/lib/location-schema"
-import { APPROVAL_WINDOW_MINUTES, PING_COOLDOWN_MINUTES, sendApprovalRequest } from "@/lib/location-approval"
+import { APPROVAL_WINDOW_MINUTES, PING_WINDOW_MINUTES, PING_LIMIT_ADULT, PING_LIMIT_CHILD, sendApprovalRequest } from "@/lib/location-approval"
 
 const requestLocationSchema = z.object({
   memberId: z.string().min(1, "Member ID is required"),
@@ -77,26 +77,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Limit: one new ping per person per hour, so nobody can be pestered.
+    // Limit pings per person per hour: parents/guardians 5, children 2.
+    const requesterRole = membership[0].role as string
+    const limit = ["PARENT", "GUARDIAN", "ADMIN"].includes(requesterRole) ? PING_LIMIT_ADULT : PING_LIMIT_CHILD
     const recent = await sql`
       SELECT created_at FROM location_requests
       WHERE requester_user_id = ${user.id} AND target_user_id = ${membership[0].target_user_id}
-        AND created_at > NOW() - make_interval(mins => ${PING_COOLDOWN_MINUTES}::int)
-      ORDER BY created_at DESC
-      LIMIT 1
+        AND created_at > NOW() - make_interval(mins => ${PING_WINDOW_MINUTES}::int)
+      ORDER BY created_at ASC
     `
-    if (recent.length > 0) {
-      const waitMin = Math.max(1, Math.ceil(PING_COOLDOWN_MINUTES - (Date.now() - new Date(recent[0].created_at).getTime()) / 60000))
+    if (recent.length >= limit) {
+      // The oldest ping in the window ages out first, freeing a slot.
+      const oldestAgeMin = (Date.now() - new Date(recent[0].created_at).getTime()) / 60000
+      const waitMin = Math.max(1, Math.ceil(PING_WINDOW_MINUTES - oldestAgeMin))
       return NextResponse.json(
-        { success: false, error: `You can ask ${membership[0].target_name || "them"} again in about ${waitMin} minute${waitMin === 1 ? "" : "s"}. Pings are limited to one per hour.`, code: "COOLDOWN" },
+        { success: false, error: `You've reached the limit of ${limit} ping${limit === 1 ? "" : "s"} per hour for this person. You can ask again in about ${waitMin} minute${waitMin === 1 ? "" : "s"}.`, code: "COOLDOWN" },
         { status: 429 }
       )
     }
 
     // A ping notifies the recipient exactly once - there are no reminders or
     // repeats, so someone busy is never nagged. If the requester wants to ask
-    // again after the hour (the first was ignored), a new request replaces the old
-    // one and sends one fresh notification.
+    // again (the first was ignored), a new request replaces the old one and
+    // sends one fresh notification.
     await sql`
       UPDATE location_requests SET status = 'CANCELLED'
       WHERE requester_user_id = ${user.id} AND target_user_id = ${membership[0].target_user_id}
