@@ -29,7 +29,7 @@ export default function TermsPage() {
         <h1 className="text-3xl font-bold mb-8">Terms of Service</h1>
         
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: March 2026</p>
+          <p className="text-muted-foreground">Last updated: October 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Acceptance of Terms</h2>
@@ -87,7 +87,9 @@ export default function TermsPage() {
             <p>
               Some features require a paid subscription. Subscription terms, pricing, and cancellation 
               policies are outlined at the time of purchase. Refunds are handled according to the 
-              policies of your app store or payment provider.
+              policies of your app store or payment provider. Paid subscriptions, including the Premium
+              tier, renew automatically at the end of each billing period until you cancel. You can cancel at
+              any time, and your access continues through the end of the period you have paid for.
             </p>
           </section>
 
@@ -108,7 +110,10 @@ export default function TermsPage() {
             <p>
               Togethr is provided "as is" without warranties of any kind. We are not liable for any 
               damages arising from your use of the Service, including but not limited to direct, indirect, 
-              incidental, or consequential damages.
+              incidental, or consequential damages. In particular, we are not liable for any alert,
+              notification or location update that is delayed, missed or not delivered, including because of
+              loss of connectivity, device or operating-system settings, battery or permission limits, or
+              failures of third-party push or messaging providers.
             </p>
           </section>
 
@@ -143,8 +148,22 @@ export default function TermsPage() {
             </ul>
           </section>
 
+          <section className="space-y-4" id="safety">
+            <h2 className="text-xl font-semibold">11. Safety and Emergency Features</h2>
+            <p>
+              Togethr includes safety features such as SOS alerts and parent-initiated emergency alerts to a
+              child's device. Some of these features may require a Premium subscription.
+            </p>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>These features are a convenience and are not a substitute for calling 911 or local emergency services.</li>
+              <li>Delivery is not guaranteed and depends on connectivity, device settings, permissions and third-party services.</li>
+              <li>Emergency alerts may be rate-limited to prevent abuse.</li>
+              <li>You agree to use these features only for genuine safety purposes and not to harass, frighten or mislead anyone.</li>
+            </ul>
+          </section>
+
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">11. Contact Us</h2>
+            <h2 className="text-xl font-semibold">12. Contact Us</h2>
             <p>
               If you have questions about these Terms, please contact us at{' '}
               <a href="mailto:admin@mytogethr.com" className="text-primary hover:underline">
