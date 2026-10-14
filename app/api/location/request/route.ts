@@ -3,7 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription } from "@/lib/auth"
 import { z } from "zod"
 import { ensureLocationRequestsTable } from "@/lib/location-schema"
-import { APPROVAL_WINDOW_MINUTES, PING_COOLDOWN_MINUTES, sendApprovalRequest } from "@/lib/location-approval"
+import { APPROVAL_WINDOW_MINUTES, sendApprovalRequest } from "@/lib/location-approval"
 
 const requestLocationSchema = z.object({
   memberId: z.string().min(1, "Member ID is required"),
@@ -77,34 +77,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Don't spam: one open approval request per requester/target pair.
-    const open = await sql`
-      SELECT id FROM location_requests
+    // A ping notifies the recipient exactly once - there are no reminders or
+    // repeats, so someone busy is never nagged. If the requester wants to ask
+    // again (the first was ignored), a new request replaces the old one and
+    // sends one fresh notification.
+    await sql`
+      UPDATE location_requests SET status = 'CANCELLED'
       WHERE requester_user_id = ${user.id} AND target_user_id = ${membership[0].target_user_id}
-        AND status = 'AWAITING_APPROVAL' AND expires_at > NOW()
-      LIMIT 1
+        AND status = 'AWAITING_APPROVAL'
     `
-    if (open.length > 0) {
-      return NextResponse.json({
-        success: true,
-        message: "A request is already waiting for approval",
-        data: { requestId: open[0].id, status: "AWAITING_APPROVAL" },
-      })
-    }
-
-    // Cool-down: no repeat ping to the same person within a few minutes.
-    const recent = await sql`
-      SELECT id FROM location_requests
-      WHERE requester_user_id = ${user.id} AND target_user_id = ${membership[0].target_user_id}
-        AND created_at > NOW() - make_interval(mins => ${PING_COOLDOWN_MINUTES}::int)
-      LIMIT 1
-    `
-    if (recent.length > 0) {
-      return NextResponse.json(
-        { success: false, error: `You already pinged them a moment ago. Please wait ${PING_COOLDOWN_MINUTES} minutes before asking again.`, code: "COOLDOWN" },
-        { status: 429 }
-      )
-    }
 
     // The target must approve before their device shares anything. Status stays
     // AWAITING_APPROVAL (ignored by the device poll) until they approve.
