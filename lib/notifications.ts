@@ -476,10 +476,9 @@ export async function checkAndNotifyEventReminders(): Promise<{ notified: number
            e.created_by_id, c.family_id
     FROM events e
     JOIN calendars c ON e.calendar_id = c.id
-    WHERE e.status IN ('APPROVED')
+    WHERE FALSE -- event reminders are sent by /api/cron/event-reminders (reminder_minutes is INTEGER[])
       AND e.reminder_minutes IS NOT NULL
       AND e.start_time > NOW()
-      AND e.start_time <= NOW() + (e.reminder_minutes || ' minutes')::INTERVAL
       AND NOT EXISTS (
         SELECT 1 FROM notifications n 
         WHERE n.data->>'eventId' = e.id 
