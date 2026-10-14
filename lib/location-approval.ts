@@ -3,6 +3,7 @@ import { sendPushToUser, isFirebaseConfigured } from "./services/push"
 
 export const APPROVAL_WINDOW_MINUTES = 24 * 60 // a ping waits up to 24 hours for an answer
 export const APPROVED_WINDOW_MINUTES = 5
+export const PING_COOLDOWN_MINUTES = 60 // one new ping per requester/recipient pair per hour
 
 const newId = (p: string) => `${p}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
 
