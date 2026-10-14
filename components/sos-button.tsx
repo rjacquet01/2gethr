@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { Siren, Loader2 } from 'lucide-react'
+import { EmergencyAlertButton } from '@/components/emergency-alert-button'
 
 /** One tap (plus a confirm) alerts every parent/guardian with the sender's location. */
 export function SosButton({ familyId }: { familyId?: string }) {
@@ -75,6 +76,7 @@ export function SosButton({ familyId }: { familyId?: string }) {
         <Siren className="h-4 w-4" />
         SOS
       </Button>
+      <EmergencyAlertButton familyId={familyId} />
       <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setResult(null) }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
