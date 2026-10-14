@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
-import { ensureInviteTables, canManageInvites, activateMember } from "@/lib/family-invites"
+import { ensureInviteTables, canManageInvites, activateMember, effectiveRole } from "@/lib/family-invites"
 import { createNotification } from "@/lib/notifications"
 
 const schema = z.object({ action: z.enum(["approve", "deny"]) })
@@ -42,6 +42,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     `
     if (upd.length === 0) return NextResponse.json({ success: false, error: "This request was already answered" }, { status: 409 })
 
+    // Parents of another family are capped at GUARDIAN (enforced in activateMember too).
+    const grantedRole = action === "approve" ? await effectiveRole(familyId, r.user_id, "PARENT") : "PARENT"
     if (action === "approve") {
       await activateMember({ familyId, userId: r.user_id, role: "PARENT", nickname: r.nickname || "Member" })
     }
@@ -50,7 +52,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       userId: r.user_id,
       type: "FAMILY_INVITATION",
       title: action === "approve" ? `Welcome to ${r.family_name}` : "Join request declined",
-      body: action === "approve" ? `You were approved to join ${r.family_name} as a parent. Open Togethr to get started.` : `Your request to join ${r.family_name} was declined.`,
+      body: action === "approve" ? `You were approved to join ${r.family_name} as a ${grantedRole === "GUARDIAN" ? "guardian" : "parent"}. Open Togethr to get started.` : `Your request to join ${r.family_name} was declined.`,
       data: { subType: "JOIN_REQUEST_RESULT", outcome: action === "approve" ? "APPROVED" : "DENIED", familyId },
       channels: ["in_app", "push"],
     }).catch((e) => console.error("join result notify failed:", e))
