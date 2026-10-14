@@ -1,3 +1,4 @@
+import { ensureLocationRequestsTable } from "@/lib/location-schema"
 import { NextRequest, NextResponse } from "next/server"
 import { ensurePlaceNotifyChannelsColumn } from "@/lib/place-schema"
 import { sql } from "@/lib/db"
@@ -103,6 +104,21 @@ export async function GET(request: NextRequest) {
       AND fm.is_active = true
     `
     
+    await ensureLocationRequestsTable()
+    const snapshots = await sql`
+      SELECT lr.id, lr.snapshot_lat, lr.snapshot_lng, lr.snapshot_accuracy, lr.snapshot_at,
+             fm.nickname, u.first_name, u.last_name, cp.display_name AS child_display_name
+      FROM location_requests lr
+      JOIN family_members fm ON fm.user_id = lr.target_user_id AND fm.family_id = lr.family_id AND fm.is_active = true
+      LEFT JOIN users u ON u.id = lr.target_user_id
+      LEFT JOIN child_profiles cp ON cp.family_member_id = fm.id
+      WHERE lr.requester_user_id = ${user.id} AND lr.family_id = ${familyId}
+        AND lr.status = 'FULFILLED' AND lr.snapshot_lat IS NOT NULL
+        AND lr.snapshot_at > NOW() - INTERVAL '60 minutes'
+      ORDER BY lr.snapshot_at DESC
+      LIMIT 10
+    `
+
     // Filter based on role:
     // - Parents/guardians can see all family members who have share_with_family enabled
     // - Children can only see family members who share their location (parents sharing with them)
@@ -139,6 +155,26 @@ export async function GET(request: NextRequest) {
           batteryLevel: l.battery_level,
           timestamp: l.timestamp,
         } : null,
+      })),
+      // Everyone else in the family who can be asked for a one-time location
+      // (even if their sharing is off). The recipient has to approve.
+      pingable: locations
+        .filter(l => l.user_id && l.user_id !== user.id)
+        .map(l => ({
+          memberId: l.member_id,
+          name: l.child_display_name || l.nickname || `${l.first_name || ''} ${l.last_name || ''}`.trim() || 'Family member',
+          role: l.role,
+          color: l.color ?? null,
+          emoji: l.emoji ?? null,
+        })),
+      // One-time locations people approved for me in the last hour.
+      snapshots: snapshots.map(r => ({
+        requestId: r.id,
+        name: r.child_display_name || r.nickname || `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Family member',
+        latitude: Number(r.snapshot_lat),
+        longitude: Number(r.snapshot_lng),
+        accuracy: r.snapshot_accuracy != null ? Number(r.snapshot_accuracy) : null,
+        at: r.snapshot_at,
       })),
     })
   } catch (error) {

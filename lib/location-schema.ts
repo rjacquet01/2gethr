@@ -27,6 +27,13 @@ export function ensureLocationRequestsTable(): Promise<void> {
         CHECK (status IN ('AWAITING_APPROVAL', 'PENDING', 'FULFILLED', 'EXPIRED', 'DENIED', 'CANCELLED'))
       `
       await sql`CREATE INDEX IF NOT EXISTS idx_location_requests_target_user ON location_requests(target_user_id, status)`
+      // One-time snapshot taken when the target approves, plus a flag so the
+      // requester is told about an unanswered request only once.
+      await sql`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS snapshot_lat DOUBLE PRECISION`
+      await sql`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS snapshot_lng DOUBLE PRECISION`
+      await sql`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS snapshot_accuracy DOUBLE PRECISION`
+      await sql`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS snapshot_at TIMESTAMPTZ`
+      await sql`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS expiry_notified BOOLEAN NOT NULL DEFAULT false`
     })().catch((err) => {
       ensured = null
       throw err

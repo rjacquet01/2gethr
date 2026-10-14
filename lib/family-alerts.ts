@@ -11,6 +11,8 @@ interface AlertOptions {
   clickAction?: string
   /** Emergencies also text/email people who haven't opted in to SMS. */
   urgent?: boolean
+  /** Quiet heads-up: in-app + push only (no text or email). */
+  soft?: boolean
 }
 
 /**
@@ -61,7 +63,7 @@ export async function alertFamilyAdults(familyId: string, aboutUserId: string, o
         console.error("alertFamilyAdults push failed:", err)
       }
     }
-    const smsOk = opts.urgent ? r.sms_enabled !== false : r.sms_enabled === true
+    const smsOk = opts.soft ? false : opts.urgent ? r.sms_enabled !== false : r.sms_enabled === true
     if (smsOk && r.phone && isTwilioConfigured()) {
       try {
         await sendSMS({ to: r.phone, body: `Togethr: ${opts.title} - ${opts.body}`.substring(0, 300) })
@@ -69,7 +71,7 @@ export async function alertFamilyAdults(familyId: string, aboutUserId: string, o
         console.error("alertFamilyAdults sms failed:", err)
       }
     }
-    const emailOk = opts.urgent ? r.email_enabled !== false : (r.email_enabled ?? true)
+    const emailOk = opts.soft ? false : opts.urgent ? r.email_enabled !== false : (r.email_enabled ?? true)
     if (emailOk && r.email && isResendConfigured() && opts.urgent) {
       try {
         await sendEmail({

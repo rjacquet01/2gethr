@@ -3,7 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription } from "@/lib/auth"
 import { z } from "zod"
 import { ensureLocationRequestsTable } from "@/lib/location-schema"
-import { APPROVAL_WINDOW_MINUTES, sendApprovalRequest } from "@/lib/location-approval"
+import { APPROVAL_WINDOW_MINUTES, PING_COOLDOWN_MINUTES, sendApprovalRequest } from "@/lib/location-approval"
 
 const requestLocationSchema = z.object({
   memberId: z.string().min(1, "Member ID is required"),
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = requestLocationSchema.parse(body)
 
-    // Verify user is a PARENT in this family and get target member info
+    // Verify the requester belongs to this family and get target member info
     const membership = await sql`
       SELECT 
         fm.role, 
@@ -49,17 +49,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Only parents/guardians (and admins) can request another member's location.
-    // The UI already hides the "Ping" button for other roles, but that must also
-    // be enforced server-side, or a CHILD account could directly call this
-    // endpoint to request anyone's location, including a parent's.
-    const requesterRole = membership[0].role
-    if (!["PARENT", "GUARDIAN", "ADMIN"].includes(requesterRole)) {
-      return NextResponse.json(
-        { success: false, error: "Only parents or guardians can request a family member's location" },
-        { status: 403 }
-      )
-    }
+    // Any active family member may ask any other member for a one-time location;
+    // the recipient must approve before anything is shared.
 
     // Prevent pinging yourself
     if (membership[0].target_user_id === user.id) {
@@ -86,21 +77,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if member has location sharing enabled
-    const locationSettings = await sql`
-      SELECT mode, share_with_family FROM location_settings 
-      WHERE family_member_id = ${validatedData.memberId}
-    `
-
-    if (locationSettings.length === 0 || 
-        locationSettings[0].mode === 'OFF' || 
-        !locationSettings[0].share_with_family) {
-      return NextResponse.json(
-        { success: false, error: "This family member has location sharing disabled" },
-        { status: 400 }
-      )
-    }
-
     // Don't spam: one open approval request per requester/target pair.
     const open = await sql`
       SELECT id FROM location_requests
@@ -114,6 +90,20 @@ export async function POST(request: NextRequest) {
         message: "A request is already waiting for approval",
         data: { requestId: open[0].id, status: "AWAITING_APPROVAL" },
       })
+    }
+
+    // Cool-down: no repeat ping to the same person within a few minutes.
+    const recent = await sql`
+      SELECT id FROM location_requests
+      WHERE requester_user_id = ${user.id} AND target_user_id = ${membership[0].target_user_id}
+        AND created_at > NOW() - make_interval(mins => ${PING_COOLDOWN_MINUTES}::int)
+      LIMIT 1
+    `
+    if (recent.length > 0) {
+      return NextResponse.json(
+        { success: false, error: `You already pinged them a moment ago. Please wait ${PING_COOLDOWN_MINUTES} minutes before asking again.`, code: "COOLDOWN" },
+        { status: 429 }
+      )
     }
 
     // The target must approve before their device shares anything. Status stays

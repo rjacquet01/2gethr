@@ -70,6 +70,21 @@ interface FamilyMemberLocation {
   } | null
 }
 
+interface PingableMember {
+  memberId: string
+  name: string
+  role: string
+}
+
+interface LocationSnapshot {
+  requestId: string
+  name: string
+  latitude: number
+  longitude: number
+  accuracy: number | null
+  at: string
+}
+
 interface LocationSettings {
   id: string
   memberId: string
@@ -85,6 +100,8 @@ export default function LocationPage() {
   const selectedFamily = families[0] || null
   const { access, isLoading: subscriptionLoading } = useSubscription(selectedFamily?.id || null)
   const [locations, setLocations] = useState<FamilyMemberLocation[]>([])
+  const [pingable, setPingable] = useState<PingableMember[]>([])
+  const [snapshots, setSnapshots] = useState<LocationSnapshot[]>([])
   const [mySettings, setMySettings] = useState<LocationSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -121,14 +138,29 @@ export default function LocationPage() {
   const answerApproval = async (id: string, action: 'approve' | 'deny') => {
     setAnsweringApproval(id)
     try {
+      let fix: { latitude: number; longitude: number; accuracy: number | null } | null = null
+      if (action === 'approve') {
+        // Approving shares ONE snapshot of where you are right now.
+        fix = await new Promise((resolve) => {
+          if (!navigator.geolocation) return resolve(null)
+          getPositionWithFallback(
+            (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null }),
+            () => resolve(null)
+          )
+        })
+        if (!fix) {
+          toast.error('Allow location access for Togethr on this device to approve - the request is still open.')
+          return
+        }
+      }
       const res = await authFetch(`/api/location/request/${encodeURIComponent(id)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify(fix ? { action, ...fix } : { action }),
       })
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
-        toast.success(action === 'approve' ? 'Approved - sharing your location now' : 'Request declined')
+        toast.success(action === 'approve' ? 'Approved - your location was shared once' : 'Request declined')
       } else {
         toast.error(data.error || 'Could not answer the request')
       }
@@ -175,6 +207,8 @@ export default function LocationPage() {
       const data = await res.json()
       if (res.ok) {
         setLocations(data.data || [])
+        setPingable(Array.isArray(data.pingable) ? data.pingable : [])
+        setSnapshots(Array.isArray(data.snapshots) ? data.snapshots : [])
         setSubscriptionError(false)
       } else if (data.code === 'SUBSCRIPTION_REQUIRED') {
         setSubscriptionError(true)
@@ -714,6 +748,63 @@ export default function LocationPage() {
           </Card>
         ))}
 
+        {/* One-time locations people approved for me */}
+        {snapshots.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Shared with you once</CardTitle>
+              <CardDescription>One-time snapshots people approved. They disappear after an hour.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {snapshots.map((sn) => (
+                <div key={sn.requestId} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                  <div>
+                    <p className="font-medium">{sn.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Shared at {new Date(sn.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                      {sn.accuracy ? ` (±${Math.round(sn.accuracy)}m)` : ''}
+                    </p>
+                  </div>
+                  <Button size="sm" variant="outline" asChild>
+                    <a href={`https://www.google.com/maps?q=${sn.latitude},${sn.longitude}`} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-3 w-3 mr-1" />
+                      Open map
+                    </a>
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Ask someone who isn't sharing for a one-time location */}
+        {pingable.filter((p) => !locations.some((l) => l.memberId === p.memberId)).length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Ask for a one-time location</CardTitle>
+              <CardDescription>They get a request and must approve before anything is shared.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {pingable.filter((p) => !locations.some((l) => l.memberId === p.memberId)).map((p) => (
+                <div key={p.memberId} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                  <div>
+                    <p className="font-medium">{p.name}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{p.role.toLowerCase()} - not sharing</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs"
+                    disabled={requestingLocation === p.memberId}
+                    onClick={() => requestLocationNow(p.memberId, p.name)}
+                  >
+                    {requestingLocation === p.memberId ? <Spinner className="h-3 w-3" /> : (<><Crosshair className="h-3 w-3 mr-1" />Ping</>)}
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         {/* My Location Sharing Status */}
         <Card>
           <CardHeader className="pb-3">
@@ -811,10 +902,8 @@ export default function LocationPage() {
                           {status.label}
                         </Badge>
                         <div className="flex gap-1 flex-wrap justify-end">
-                          {/* Request Location Now button - for parents/guardians to ping others */}
-                          {selectedFamily?.currentUserRole &&
-                           ['ADMIN', 'PARENT', 'GUARDIAN'].includes(selectedFamily.currentUserRole) &&
-                           member.memberId !== mySettings?.memberId && (
+                          {/* Ping: anyone can ask anyone for a one-time location; they must approve */}
+                          {member.memberId !== mySettings?.memberId && (
                             <Button
                               size="sm"
                               variant="default"

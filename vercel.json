@@ -33,6 +33,14 @@
       "schedule": "0 14 * * *"
     },
     {
+      "path": "/api/cron/location-request-expiry",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/location-stale",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/cron/archive",
       "schedule": "0 9 * * *"
     },
