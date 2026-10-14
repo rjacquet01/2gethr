@@ -29,6 +29,7 @@ export async function GET(
         cp.age,
         cp.emergency_notes,
         fm.id as family_member_id,
+        fm.user_id as member_user_id,
         fm.color,
         fm.emoji,
         f.id as family_id,
@@ -52,6 +53,14 @@ export async function GET(
     `
 
     if (membership.length === 0) {
+      return NextResponse.json({ error: 'Not authorized to view this child' }, { status: 403 })
+    }
+
+    // A child's school, grade and emergency notes are for parents/guardians and
+    // the child themself - not for other children in the family.
+    const isAdult = membership[0].role === 'PARENT' || membership[0].role === 'GUARDIAN'
+    const isThatChild = child.member_user_id === user.id
+    if (!isAdult && !isThatChild) {
       return NextResponse.json({ error: 'Not authorized to view this child' }, { status: 403 })
     }
 
