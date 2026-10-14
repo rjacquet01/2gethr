@@ -88,15 +88,10 @@ export function getRolePermissions(role: string) {
  */
 export async function isParentInOtherFamily(familyId: string, userId: string): Promise<boolean> {
   const rows = await sql`
-    SELECT 1 FROM families f
-    WHERE f.id <> ${familyId}
-      AND (
-        f.owner_id = ${userId}
-        OR EXISTS (
-          SELECT 1 FROM family_members fm
-          WHERE fm.family_id = f.id AND fm.user_id = ${userId} AND fm.is_active = true AND fm.role = 'PARENT'
-        )
-      )
+    -- Only an ACTIVE parent membership counts. (Owners always have one; a deleted
+    -- family has all members deactivated, so its old owner is not capped.)
+    SELECT 1 FROM family_members fm
+    WHERE fm.family_id <> ${familyId} AND fm.user_id = ${userId} AND fm.is_active = true AND fm.role = 'PARENT'
     LIMIT 1
   `
   return rows.length > 0
