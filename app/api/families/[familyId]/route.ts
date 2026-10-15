@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { ensureMemberAppearanceColumns } from "@/lib/member-appearance"
+import { ensureAgeColumns } from "@/lib/age-schema"
+import { childAgeInfo } from "@/lib/age"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 
@@ -77,15 +79,19 @@ export async function GET(
       ORDER BY fm.role = 'PARENT' DESC, fm.joined_at ASC
     `
 
-    // Get children (separate from members)
+    // Get children (separate from members). Only CHILD members: someone
+    // promoted to Guardian/Adult at 18 keeps their child_profiles row for
+    // history but is no longer listed as a child.
+    await ensureAgeColumns()
     const children = await sql`
-      SELECT 
+      SELECT
         cp.id, cp.display_name, cp.age, cp.school, cp.grade,
         cp.avatar_url, cp.created_at,
-        fm.id as family_member_id, fm.user_id as member_user_id, fm.color, fm.emoji
+        to_char(cp.date_of_birth, 'YYYY-MM-DD') AS dob, cp.adult_prompt_snoozed_until,
+        fm.id as family_member_id, fm.user_id as member_user_id, fm.role, fm.color, fm.emoji
       FROM child_profiles cp
       JOIN family_members fm ON cp.family_member_id = fm.id
-      WHERE fm.family_id = ${familyId}
+      WHERE fm.family_id = ${familyId} AND fm.role = 'CHILD'
     `
 
     // Return { family } for SWR hook compatibility
@@ -125,7 +131,9 @@ export async function GET(
           id: c.id,
           familyId: familyId,
           displayName: c.display_name,
-          birthDate: null,
+          birthDate: c.dob ?? null,
+          // dateOfBirth, age (derived), canHaveAccount, turns18On, daysUntil18, needsRoleChoice
+          ...childAgeInfo({ dob: c.dob, age: c.age, role: c.role, userId: c.member_user_id, snoozedUntil: c.adult_prompt_snoozed_until }),
           avatarUrl: c.avatar_url,
           familyMemberId: c.family_member_id,
           hasLogin: !!c.member_user_id,

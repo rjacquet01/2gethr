@@ -32,6 +32,16 @@ export interface ChildProfile {
   color?: string | null
   emoji?: string | null
   grade: string | null
+  /** YYYY-MM-DD, when a birthdate was entered */
+  dateOfBirth?: string | null
+  /** Derived from dateOfBirth when known, else the stored integer age */
+  age?: number | null
+  /** 8+ and no login yet: a parent can create their account */
+  canHaveAccount?: boolean
+  turns18On?: string | null
+  daysUntil18?: number | null
+  /** 18+, still a child member, prompt not snoozed */
+  needsRoleChoice?: boolean
   permissions: {
     canCreateEvents: boolean
     requiresApproval: boolean
@@ -230,6 +240,8 @@ export function useFamily(familyId: string | null) {
   const addChild = useCallback(async (childData: {
     displayName: string
     birthDate?: string
+    /** YYYY-MM-DD; the server derives the age from it */
+    dateOfBirth?: string
     grade?: string
     permissions?: Partial<ChildProfile['permissions']>
     existingMemberId?: string // For assigning existing family members as children

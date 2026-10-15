@@ -26,6 +26,11 @@ export async function ensureInviteTables() {
     )
   `
   await sql`CREATE INDEX IF NOT EXISTS idx_family_invites_family ON family_invites(family_id)`
+  // An account invite for an existing accountless child profile carries the
+  // child's member id and the parent's recorded consent.
+  await sql`ALTER TABLE family_invites ADD COLUMN IF NOT EXISTS child_member_id TEXT`
+  await sql`ALTER TABLE family_invites ADD COLUMN IF NOT EXISTS consent_by TEXT`
+  await sql`ALTER TABLE family_invites ADD COLUMN IF NOT EXISTS consent_at TIMESTAMPTZ`
   await sql`
     CREATE TABLE IF NOT EXISTS family_join_requests (
       id TEXT PRIMARY KEY,

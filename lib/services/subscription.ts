@@ -173,7 +173,7 @@ export async function canAddChild(familyId: string): Promise<{
     SELECT COUNT(*) as count
     FROM child_profiles cp
     JOIN family_members fm ON cp.family_member_id = fm.id
-    WHERE fm.family_id = ${familyId}
+    WHERE fm.family_id = ${familyId} AND fm.role = 'CHILD'
   `
   
   const currentCount = parseInt(countResult[0].count, 10)

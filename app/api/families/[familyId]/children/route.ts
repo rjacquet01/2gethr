@@ -3,10 +3,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, hashPassword, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
+import { ensureAgeColumns } from "@/lib/age-schema"
+import { ageFromDob, dobError, childAgeInfo } from "@/lib/age"
 
 const addChildSchema = z.object({
   displayName: z.string().min(1, "Display name is required").max(100),
   age: z.number().int().min(0).max(25).optional(),
+  // YYYY-MM-DD. When sent, it wins over `age` and the age is derived from it.
+  dateOfBirth: z.string().optional().nullable(),
   school: z.string().max(200).optional(),
   grade: z.string().max(50).optional(),
   emergencyNotes: z.string().max(1000).optional(),
@@ -48,11 +52,13 @@ export async function GET(
     }
 
     // Get children
+    await ensureAgeColumns()
     const children = await sql`
-      SELECT 
-        cp.id, cp.display_name, cp.age, cp.school, cp.grade, 
+      SELECT
+        cp.id, cp.display_name, cp.age, cp.school, cp.grade,
         cp.emergency_notes, cp.avatar_url, cp.created_at,
-        fm.id as member_id, fm.user_id, fm.can_create_events,
+        to_char(cp.date_of_birth, 'YYYY-MM-DD') AS dob, cp.adult_prompt_snoozed_until,
+        fm.id as member_id, fm.user_id, fm.role, fm.can_create_events,
         fm.requires_event_approval, fm.can_override_conflicts,
         u.email, u.first_name, u.last_name,
         ls.mode as location_mode, ls.share_with_family as location_sharing
@@ -71,7 +77,9 @@ export async function GET(
         memberId: c.member_id,
         userId: c.user_id,
         displayName: c.display_name,
-        age: c.age,
+        // dateOfBirth, age (derived from the birthdate when known),
+        // canHaveAccount, turns18On, daysUntil18, needsRoleChoice
+        ...childAgeInfo({ dob: c.dob, age: c.age, role: c.role, userId: c.user_id, snoozedUntil: c.adult_prompt_snoozed_until }),
         school: c.school,
         grade: c.grade,
         emergencyNotes: membership[0].role === "PARENT" ? c.emergency_notes : null,
@@ -133,6 +141,16 @@ export async function POST(
 
     const body = await request.json()
     const validatedData = addChildSchema.parse(body)
+
+    // A birthdate wins over a plain age; the stored age is derived from it so
+    // screens that still read child_profiles.age keep working.
+    const dob = validatedData.dateOfBirth || null
+    if (dob) {
+      const bad = dobError(dob)
+      if (bad) return NextResponse.json({ success: false, error: bad }, { status: 400 })
+    }
+    const storedAge = dob ? ageFromDob(dob) : validatedData.age ?? null
+    await ensureAgeColumns()
 
     // Check subscription limits - count only children
     const subscription = await checkFamilySubscription(familyId)
@@ -221,12 +239,12 @@ export async function POST(
       const profileId = crypto.randomUUID()
       await sql`
         INSERT INTO child_profiles (
-          id, family_member_id, display_name, age, school, grade, 
+          id, family_member_id, display_name, age, date_of_birth, school, grade,
           emergency_notes, created_at, updated_at
         )
         VALUES (
-          ${profileId}, ${memberId}, ${validatedData.displayName}, 
-          ${validatedData.age || null}, ${validatedData.school || null}, 
+          ${profileId}, ${memberId}, ${validatedData.displayName},
+          ${storedAge}, ${dob}, ${validatedData.school || null},
           ${validatedData.grade || null}, ${validatedData.emergencyNotes || null},
           NOW(), NOW()
         )
@@ -320,12 +338,12 @@ export async function POST(
     const profileId = crypto.randomUUID()
     await sql`
       INSERT INTO child_profiles (
-        id, family_member_id, display_name, age, school, grade, 
+        id, family_member_id, display_name, age, date_of_birth, school, grade,
         emergency_notes, created_at, updated_at
       )
       VALUES (
-        ${profileId}, ${memberId}, ${validatedData.displayName}, 
-        ${validatedData.age || null}, ${validatedData.school || null}, 
+        ${profileId}, ${memberId}, ${validatedData.displayName},
+        ${storedAge}, ${dob}, ${validatedData.school || null},
         ${validatedData.grade || null}, ${validatedData.emergencyNotes || null},
         NOW(), NOW()
       )

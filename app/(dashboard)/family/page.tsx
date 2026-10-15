@@ -80,17 +80,22 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { MemberAvatar, AppearanceButton } from '@/components/member-avatar'
 import { JoinFamilyButton } from '@/components/join-family-dialog'
+import { BirthdateInput, ChildAccountDialog, RoleChoiceCard, Turns18Chip, type AgeAwareChild } from '@/components/child-age'
 
 export default function FamilyPage() {
   const { families, isLoading: familiesLoading } = useFamilies()
   const primaryFamily = families[0]
   const { user } = useAuth()
-  const { family, generateInviteCode, addChild, removeMember, isLoading: familyLoading } = useFamily(primaryFamily?.id || null)
+  const { family, generateInviteCode, addChild, removeMember, isLoading: familyLoading, mutate: mutateFamily } = useFamily(primaryFamily?.id || null)
   const { access } = useSubscription(primaryFamily?.id || null)
   const viewerRole = (primaryFamily as unknown as { currentUserRole?: string; userRole?: string } | undefined)
   // Parents/guardians only (ADULT members are peers, not supervisors).
   const viewerIsAdult = ['PARENT', 'GUARDIAN'].includes(viewerRole?.currentUserRole || viewerRole?.userRole || '')
   const { isGuest } = useMyRole()
+  // Role choices at 18 and child account invites are parent/owner actions.
+  const viewerIsParent = (viewerRole?.currentUserRole || viewerRole?.userRole) === 'PARENT' || (!!family && !!user && family.ownerId === user.id)
+  const [childBirthdate, setChildBirthdate] = useState('')
+  const [accountChild, setAccountChild] = useState<AgeAwareChild | null>(null)
   
   const [copiedCode, setCopiedCode] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -270,14 +275,16 @@ export default function FamilyPage() {
       }
       
       setIsAddingChild(true)
-      const result = await addChild({ 
+      const result = await addChild({
         displayName: childName.trim() || selectedMember.displayName,
         existingMemberId: selectedMemberId,
+        ...(childBirthdate ? { dateOfBirth: childBirthdate } : {}),
       })
-      
+
       if (result.success) {
         toast.success('Member assigned as child successfully!')
         setChildName('')
+        setChildBirthdate('')
         setSelectedMemberId('')
         setAddChildOpen(false)
         mutateUnassigned()
@@ -296,11 +303,12 @@ export default function FamilyPage() {
     }
     
     setIsAddingChild(true)
-    const result = await addChild({ displayName: childName })
-    
+    const result = await addChild({ displayName: childName, ...(childBirthdate ? { dateOfBirth: childBirthdate } : {}) })
+
     if (result.success) {
       toast.success('Child added successfully!')
       setChildName('')
+      setChildBirthdate('')
       setAddChildOpen(false)
     } else {
       toast.error(result.error || 'Failed to add child')
@@ -442,6 +450,23 @@ export default function FamilyPage() {
         </div>
       </div>
 
+      {/* 18th birthdays: a parent chooses Guardian, Adult or keep as child */}
+      {viewerIsParent &&
+        (family.children || [])
+          .filter((c) => c.needsRoleChoice)
+          .map((c) => (
+            <RoleChoiceCard
+              key={c.id}
+              familyId={family.id}
+              child={c}
+              onChanged={() => {
+                mutateFamily()
+                globalMutate('/api/families')
+              }}
+              onCreateAccount={setAccountChild}
+            />
+          ))}
+
       {/* Join requests wait for a decision, so they are always visible */}
       <JoinRequestsCard familyId={family.id} />
       {inviteOpen && <InviteCodesCard familyId={family.id} familyName={family.name || 'our family'} />}
@@ -486,6 +511,7 @@ export default function FamilyPage() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {memberActivities.map((member) => {
             const RoleIcon = getRoleIcon(member.role)
+            const memberChild = member.childProfileId ? family.children?.find((c) => c.id === member.childProfileId) : undefined
             const expanded = expandedMembers.has(member.memberId)
             const firstTab = member.tasks.length > 0 ? 'tasks' : member.events.length > 0 ? 'events' : 'reminders'
             const nextEvent = member.events[0]
@@ -515,7 +541,11 @@ export default function FamilyPage() {
                           {roleLabel(member.role)}
                         </Badge>
                       )}
+                      {memberChild?.age != null && (
+                        <span className="shrink-0 text-xs text-muted-foreground">Age {memberChild.age}</span>
+                      )}
                     </div>
+                    {memberChild && <div className="mt-1 empty:hidden"><Turns18Chip child={memberChild} /></div>}
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                       <span className="inline-flex items-center gap-1">
                         <ListTodo className="h-3 w-3" />
@@ -922,6 +952,7 @@ export default function FamilyPage() {
                           onChange={(e) => setChildName(e.target.value)}
                         />
                       </div>
+                      <BirthdateInput id="childBirthdateSelect" value={childBirthdate} onChange={setChildBirthdate} />
                     </>
                   ) : addMode === 'select' && unassignedMembers.length === 0 ? (
                     <div className="text-center py-4 text-sm text-muted-foreground">
@@ -945,8 +976,11 @@ export default function FamilyPage() {
                         onChange={(e) => setChildName(e.target.value)}
                       />
                       <p className="text-xs text-muted-foreground">
-                        This creates a child profile without a linked user account. The child won&apos;t be able to log in.
+                        This creates a child profile without a linked user account. From age 8 you can create their own login later.
                       </p>
+                      <div className="pt-2">
+                        <BirthdateInput id="childBirthdate" value={childBirthdate} onChange={setChildBirthdate} />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -955,6 +989,7 @@ export default function FamilyPage() {
                     setAddChildOpen(false)
                     setSelectedMemberId('')
                     setChildName('')
+                    setChildBirthdate('')
                   }}>
                     Cancel
                   </Button>
@@ -995,7 +1030,13 @@ export default function FamilyPage() {
                         <p className="font-medium text-foreground truncate">
                           {child.displayName}
                         </p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          {child.age != null && (
+                            <Badge variant="outline" className="text-xs">
+                              Age {child.age}
+                            </Badge>
+                          )}
+                          <Turns18Chip child={child} />
                           {child.permissions?.locationSharingEnabled && access.featureFlags.locationSharing && (
                             <Badge variant="outline" className="text-xs">
                               <MapPin className="w-3 h-3 mr-1" />
@@ -1009,6 +1050,20 @@ export default function FamilyPage() {
                           )}
                         </div>
                       </div>
+                      {viewerIsParent && child.canHaveAccount && child.familyMemberId && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0"
+                          onClick={(ev) => {
+                            ev.preventDefault()
+                            ev.stopPropagation()
+                            setAccountChild(child)
+                          }}
+                        >
+                          Create account
+                        </Button>
+                      )}
                       {child.familyMemberId && (
                         <AppearanceButton familyId={family.id} memberId={child.familyMemberId} name={child.displayName} avatarUrl={child.avatarUrl} color={child.color} emoji={child.emoji} />
                       )}
@@ -1021,6 +1076,7 @@ export default function FamilyPage() {
         </Card>
       </div>
       </div>
+      <ChildAccountDialog familyId={family.id} child={accountChild} onOpenChange={(open) => { if (!open) setAccountChild(null) }} />
     </div>
   )
 }

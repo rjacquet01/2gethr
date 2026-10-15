@@ -68,7 +68,7 @@ export async function GET(
         cp.family_member_id, fm.color, fm.emoji
       FROM child_profiles cp
       JOIN family_members fm ON cp.family_member_id = fm.id
-      WHERE fm.family_id = ${familyId} AND fm.is_active = true
+      WHERE fm.family_id = ${familyId} AND fm.is_active = true AND fm.role = 'CHILD'
     `
 
     // Get tasks for all members (assigned tasks and child tasks)

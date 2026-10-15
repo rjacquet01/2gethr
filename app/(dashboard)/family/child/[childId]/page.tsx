@@ -1,9 +1,22 @@
 'use client'
 
-import { use } from 'react'
+import { use, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
+import { toast } from 'sonner'
 import { authFetch } from '@/hooks/use-auth'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Spinner } from '@/components/ui/spinner'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { BirthdateInput, Turns18Chip, formatYmd } from '@/components/child-age'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { MemberAvatar, AppearanceButton } from '@/components/member-avatar'
@@ -12,14 +25,16 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Empty } from '@/components/ui/empty'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { 
-  ArrowLeft, 
-  Baby, 
-  Calendar, 
-  ListTodo, 
-  Clock, 
+  ArrowLeft,
+  Baby,
+  Calendar,
+  ListTodo,
+  Clock,
   MapPin,
   GraduationCap,
-  School
+  School,
+  Pencil,
+  Cake
 } from 'lucide-react'
 import Link from 'next/link'
 import { format, formatDistanceToNow, parseISO, isValid } from 'date-fns'
@@ -32,6 +47,12 @@ interface ChildProfile {
   school: string | null
   age: number | null
   birthDate: string | null
+  /** YYYY-MM-DD; age is derived from it when present */
+  dateOfBirth?: string | null
+  turns18On?: string | null
+  daysUntil18?: number | null
+  /** Parents can edit the child's details */
+  canEdit?: boolean
   familyId: string
   familyName: string
   familyMemberId?: string | null
@@ -109,11 +130,51 @@ export default function ChildProfilePage({
 }) {
   const { childId } = use(params)
   const router = useRouter()
-  
-  const { data: childData, isLoading, error } = useSWR<ChildData>(
+
+  const { data: childData, isLoading, error, mutate } = useSWR<ChildData>(
     `/api/children/${childId}`,
     fetcher
   )
+
+  // Edit details (parents only): name, birthdate, school, grade.
+  const [editOpen, setEditOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ displayName: '', dateOfBirth: '', school: '', grade: '' })
+  const openEdit = () => {
+    const p = childData?.profile
+    if (!p) return
+    setForm({ displayName: p.displayName || '', dateOfBirth: p.dateOfBirth || '', school: p.school || '', grade: p.grade || '' })
+    setEditOpen(true)
+  }
+  const saveEdit = async () => {
+    if (!form.displayName.trim()) {
+      toast.error('Please enter a name')
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await authFetch(`/api/children/${childId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          displayName: form.displayName.trim(),
+          dateOfBirth: form.dateOfBirth || null,
+          school: form.school.trim() || null,
+          grade: form.grade.trim() || null,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(data.error || 'Could not save changes')
+        return
+      }
+      toast.success('Details saved')
+      setEditOpen(false)
+      mutate()
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -184,9 +245,56 @@ export default function ChildProfilePage({
                 {profile.school}
               </span>
             )}
+            {profile.age != null && (
+              <Badge variant="outline">
+                <Cake className="w-3 h-3 mr-1" />
+                Age {profile.age}
+                {profile.dateOfBirth ? ` · born ${formatYmd(profile.dateOfBirth)}` : ''}
+              </Badge>
+            )}
+            <Turns18Chip child={{ id: profile.id, displayName: profile.displayName, turns18On: profile.turns18On, daysUntil18: profile.daysUntil18 }} />
           </div>
         </div>
+        {profile.canEdit && (
+          <Button variant="outline" size="sm" className="ml-auto shrink-0" onClick={openEdit}>
+            <Pencil className="w-4 h-4 mr-1.5" />
+            Edit
+          </Button>
+        )}
       </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit {profile.displayName}</DialogTitle>
+            <DialogDescription>Their age is worked out from the birthdate.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="editChildName">Name</Label>
+              <Input id="editChildName" value={form.displayName} onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))} />
+            </div>
+            <BirthdateInput id="editChildBirthdate" value={form.dateOfBirth} onChange={(v) => setForm((f) => ({ ...f, dateOfBirth: v }))} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="editChildSchool">School</Label>
+                <Input id="editChildSchool" value={form.school} onChange={(e) => setForm((f) => ({ ...f, school: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editChildGrade">Grade</Label>
+                <Input id="editChildGrade" value={form.grade} onChange={(e) => setForm((f) => ({ ...f, grade: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button onClick={saveEdit} disabled={saving}>
+              {saving ? <Spinner className="w-4 h-4 mr-2" /> : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 gap-4">

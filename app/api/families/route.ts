@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
             cp.avatar_url, cp.created_at
           FROM child_profiles cp
           JOIN family_members fm ON cp.family_member_id = fm.id
-          WHERE fm.family_id = ${f.id}
+          WHERE fm.family_id = ${f.id} AND fm.role = 'CHILD'
         `
         
         return {
