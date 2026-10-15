@@ -294,6 +294,7 @@ export function TodayTimeline({
       title: r.title,
       href: '/dashboard/reminders',
       when: d,
+      sub: isPast(d) && !isToday(d) ? `Overdue · was ${format(d, 'MMM d')}` : undefined,
       overdue: isPast(d) && !isToday(d),
     })
   }
