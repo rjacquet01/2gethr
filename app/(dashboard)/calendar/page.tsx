@@ -50,8 +50,16 @@ import {
   parseISO,
 } from 'date-fns'
 import { cn } from '@/lib/utils'
+import {
+  useCalendarWeather,
+  CellWeather,
+  DayWeatherLine,
+  ParticipantDots,
+  AgendaList,
+  participantNames,
+} from '@/components/calendar-extras'
 
-type ViewMode = 'month' | 'week' | 'day'
+type ViewMode = 'month' | 'week' | 'day' | 'agenda'
 
 const CATEGORIES = [
   { value: 'ALL', label: 'All Categories' },
@@ -69,11 +77,13 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [viewMode, setViewMode] = useState<ViewMode>('month')
   const [selectedCategory, setSelectedCategory] = useState('ALL')
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const [showEventSheet, setShowEventSheet] = useState(false)
   
   const { families, isLoading: familiesLoading } = useFamilies()
   const primaryFamily = families[0]
+  const weather = useCalendarWeather(primaryFamily?.id)
+  const [personFilter, setPersonFilter] = useState('ALL')
   
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
@@ -82,10 +92,10 @@ export default function CalendarPage() {
   
   const { events, isLoading: eventsLoading } = useEvents({
     familyId: primaryFamily?.id,
-    startDate: viewMode === 'month' 
+    startDate: viewMode !== 'week' 
       ? startOfWeek(monthStart).toISOString()
       : weekStart.toISOString(),
-    endDate: viewMode === 'month'
+    endDate: viewMode !== 'week'
       ? endOfWeek(monthEnd).toISOString()
       : weekEnd.toISOString(),
     category: selectedCategory !== 'ALL' ? selectedCategory : undefined,
@@ -106,7 +116,7 @@ export default function CalendarPage() {
   }, [events])
 
   const calendarDays = useMemo(() => {
-    if (viewMode === 'month') {
+    if (viewMode !== 'week') {
       return eachDayOfInterval({
         start: startOfWeek(monthStart, { weekStartsOn: 0 }),
         end: endOfWeek(monthEnd, { weekStartsOn: 0 }),
@@ -121,7 +131,10 @@ export default function CalendarPage() {
       const matchesCategory =
         selectedCategory === 'ALL' ||
         (event.category || 'OTHER').toLowerCase() === selectedCategory.toLowerCase()
-      return matchesCategory && isSameDay(eventDate, day) && (event.status === 'APPROVED' || event.status === 'ACTIVE')
+      const matchesPerson =
+        personFilter === 'ALL' ||
+        ((event.participants || []) as any[]).some((p) => (p.name || p.displayName) === personFilter)
+      return matchesCategory && matchesPerson && isSameDay(eventDate, day) && (event.status === 'APPROVED' || event.status === 'ACTIVE')
     })
   }
 
@@ -141,7 +154,7 @@ export default function CalendarPage() {
   }
 
   const navigatePrevious = () => {
-    if (viewMode === 'month') {
+    if (viewMode !== 'week') {
       setCurrentDate(subMonths(currentDate, 1))
     } else {
       setCurrentDate(subWeeks(currentDate, 1))
@@ -149,7 +162,7 @@ export default function CalendarPage() {
   }
 
   const navigateNext = () => {
-    if (viewMode === 'month') {
+    if (viewMode !== 'week') {
       setCurrentDate(addMonths(currentDate, 1))
     } else {
       setCurrentDate(addWeeks(currentDate, 1))
@@ -201,7 +214,7 @@ export default function CalendarPage() {
           </div>
 
           <h1 className="text-base sm:text-xl font-bold text-foreground text-center flex-1 min-w-0 truncate px-1 sm:px-2">
-            {format(currentDate, viewMode === 'month' ? 'MMMM yyyy' : "'Week of' MMM d")}
+            {format(currentDate, viewMode !== 'week' ? 'MMMM yyyy' : "'Week of' MMM d")}
           </h1>
 
           <Button asChild size="sm" className="h-10 w-10 sm:w-auto sm:px-4 shrink-0">
@@ -231,10 +244,25 @@ export default function CalendarPage() {
             </SelectContent>
           </Select>
           
+          {participantNames(events as any).length > 0 && (
+            <Select value={personFilter} onValueChange={setPersonFilter}>
+              <SelectTrigger className="w-28 sm:w-40 h-10 text-sm shrink-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Everyone</SelectItem>
+                {participantNames(events as any).map((n) => (
+                  <SelectItem key={n} value={n}>{n}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="flex-1 sm:flex-none">
-            <TabsList className="grid w-full grid-cols-2 h-10">
+            <TabsList className="grid w-full grid-cols-3 h-10">
               <TabsTrigger value="month" className="text-sm">Month</TabsTrigger>
               <TabsTrigger value="week" className="text-sm">Week</TabsTrigger>
+              <TabsTrigger value="agenda" className="text-sm">Agenda</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -244,8 +272,16 @@ export default function CalendarPage() {
         {/* Calendar Grid */}
         <Card className="overflow-hidden">
           <CardContent className="p-2 sm:p-4">
+            {viewMode === 'agenda' && (
+              <AgendaList
+                days={calendarDays.filter((d) => isSameMonth(d, currentDate))}
+                eventsFor={getEventsForDay}
+                weather={weather}
+                members={primaryFamily?.members}
+              />
+            )}
             {/* Day Headers */}
-            <div className="grid grid-cols-7 mb-2">
+            <div className={cn('grid grid-cols-7 mb-2', viewMode === 'agenda' && 'hidden')}>
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, i) => (
                 <div key={i} className="text-center text-xs sm:text-sm font-semibold text-muted-foreground py-2 sm:py-3">
                   <span className="sm:hidden">{day.slice(0, 3)}</span>
@@ -255,7 +291,7 @@ export default function CalendarPage() {
             </div>
             
             {/* Calendar Days */}
-            <div className="grid grid-cols-7 gap-px bg-border rounded-xl overflow-hidden">
+            <div className={cn('grid grid-cols-7 gap-px bg-border rounded-xl overflow-hidden', viewMode === 'agenda' && 'hidden')}>
               {eventsLoading ? (
                 Array.from({ length: 35 }).map((_, i) => (
                   <Skeleton key={i} className="min-h-16 sm:min-h-24" />
@@ -271,7 +307,7 @@ export default function CalendarPage() {
                       key={day.toISOString()}
                       onClick={() => handleDayClick(day)}
                       className={cn(
-                        'min-h-16 sm:min-h-24 p-1.5 sm:p-2 flex flex-col bg-background transition-colors active:bg-muted/70',
+                        'relative min-h-16 sm:min-h-24 p-1.5 sm:p-2 flex flex-col bg-background transition-colors active:bg-muted/70',
                         !isCurrentMonth && 'bg-muted/20 text-muted-foreground/60',
                         isSelected && 'ring-2 ring-primary ring-inset bg-primary/10',
                         isToday(day) && !isSelected && 'bg-primary/5'
@@ -283,6 +319,7 @@ export default function CalendarPage() {
                       )}>
                         {format(day, 'd')}
                       </div>
+                      <CellWeather w={weather[format(day, 'yyyy-MM-dd')]} />
                       {/* Mobile: show colored dots for events */}
                       <div className="flex flex-wrap gap-1 sm:hidden justify-center items-center flex-1">
                         {dayEvents.length > 0 && (
@@ -318,6 +355,11 @@ export default function CalendarPage() {
                             )}
                             style={eventStyle(event)}
                           >
+                            {!event.allDay && (
+                              <span className="opacity-80 mr-1">
+                                {format(parseISO(event.startTime), 'h:mma').toLowerCase()}
+                              </span>
+                            )}
                             {event.title}
                           </div>
                         ))}
@@ -341,6 +383,7 @@ export default function CalendarPage() {
             <h2 className="font-semibold text-foreground mb-4">
               {selectedDate ? format(selectedDate, 'EEEE, MMMM d') : 'Select a day'}
             </h2>
+            {selectedDate && <DayWeatherLine w={weather[format(selectedDate, 'yyyy-MM-dd')]} />}
             
             {selectedDate ? (
               selectedDayEvents.length === 0 ? (
@@ -377,6 +420,7 @@ export default function CalendarPage() {
                               {event.location}
                             </p>
                           )}
+                          <ParticipantDots participants={event.participants as any} members={primaryFamily?.members} />
                           <div className="mt-2">
                             <Badge variant="secondary" className="text-xs">
                               {CATEGORIES.find(c => c.value === event.category)?.label || event.category}
@@ -413,6 +457,7 @@ export default function CalendarPage() {
               </Button>
             </div>
           </SheetHeader>
+          {selectedDate && <DayWeatherLine w={weather[format(selectedDate, 'yyyy-MM-dd')]} />}
           
           <div className="overflow-y-auto h-full pb-20">
             {selectedDate && selectedDayEvents.length === 0 ? (
@@ -450,6 +495,7 @@ export default function CalendarPage() {
                             <span className="truncate">{event.location}</span>
                           </p>
                         )}
+                        <ParticipantDots participants={event.participants as any} members={primaryFamily?.members} />
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Badge variant="secondary">
                             {CATEGORIES.find(c => c.value === event.category)?.label || event.category}
