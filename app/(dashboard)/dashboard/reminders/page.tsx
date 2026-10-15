@@ -691,7 +691,7 @@ function RemindersPageContent() {
                   <span className="ml-1 text-xs font-normal text-muted-foreground">{items.length}</span>
                 </button>
                 {open && (
-                  <div className="grid gap-2 lg:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
                     {items.map((reminder) => {
                       const overdue = g.key === 'overdue'
                       const activeChannels =
@@ -704,7 +704,7 @@ function RemindersPageContent() {
                         <div
                           key={reminder.id}
                           className={cn(
-                            'flex items-start gap-3 rounded-lg border bg-card p-3',
+                            'flex min-w-0 items-start gap-3 rounded-lg border bg-card p-3',
                             overdue ? 'border-red-200' : 'border-border'
                           )}
                         >
