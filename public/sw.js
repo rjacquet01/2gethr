@@ -202,19 +202,32 @@ self.addEventListener('notificationclick', (event) => {
   const url = event.notification.data?.url || '/';
 
   // "I'm OK" on an emergency alert: tell the parent right away, without
-  // opening the app. Falls back to opening the app if the session expired.
+  // opening the app. If the 15-minute access cookie has expired (401), refresh
+  // the session from the 7-day refresh cookie and retry once. Falls back to
+  // opening the app if anything still fails.
   if (event.action === 'ok' && event.notification.data?.type === 'emergency' && event.notification.data?.alertId) {
+    const ack = () => fetch('/api/location/emergency-alert/ack', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alertId: event.notification.data.alertId }),
+    });
+    const openApp = () => (clients.openWindow ? clients.openWindow(url) : undefined);
+
     event.waitUntil(
-      fetch('/api/location/emergency-alert/ack', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alertId: event.notification.data.alertId }),
-      })
-        .then((res) => {
-          if (!res.ok && clients.openWindow) return clients.openWindow(url);
+      ack()
+        .then(async (res) => {
+          if (res.ok) return;
+          if (res.status === 401) {
+            const r = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+            if (r.ok) {
+              const retry = await ack();
+              if (retry.ok) return;
+            }
+          }
+          return openApp();
         })
-        .catch(() => (clients.openWindow ? clients.openWindow(url) : undefined))
+        .catch(() => openApp())
     );
     return;
   }
