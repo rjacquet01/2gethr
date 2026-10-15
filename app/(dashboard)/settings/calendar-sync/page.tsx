@@ -3,9 +3,9 @@
 import { Suspense, useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, RefreshCw, Trash2, ListTodo, Calendar, Copy, Check, Upload, Link2, Smartphone } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Trash2, ListTodo, Calendar, Copy, Check, Upload, Link2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
@@ -14,35 +14,76 @@ import { useCalendarSync } from '@/hooks/use-calendar-sync'
 import { authFetch, useAuth } from '@/hooks/use-auth'
 import { useFamily } from '@/hooks/use-family'
 import { Checkbox } from '@/components/ui/checkbox'
+import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 
-// Google Calendar icon
 function GoogleCalendarIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M18 4H6C4.89543 4 4 4.89543 4 6V18C4 19.1046 4.89543 20 6 20H18C19.1046 20 20 19.1046 20 18V6C20 4.89543 19.1046 4 18 4Z" fill="#FFFFFF" stroke="#4285F4" strokeWidth="2"/>
-      <path d="M16 2V6" stroke="#4285F4" strokeWidth="2" strokeLinecap="round"/>
-      <path d="M8 2V6" stroke="#4285F4" strokeWidth="2" strokeLinecap="round"/>
-      <path d="M4 10H20" stroke="#4285F4" strokeWidth="2"/>
-      <rect x="7" y="13" width="3" height="3" fill="#EA4335"/>
-      <rect x="11" y="13" width="3" height="3" fill="#FBBC05"/>
-      <rect x="15" y="13" width="3" height="3" fill="#34A853"/>
+      <path d="M18 4H6C4.89543 4 4 4.89543 4 6V18C4 19.1046 4.89543 20 6 20H18C19.1046 20 20 19.1046 20 18V6C20 4.89543 19.1046 4 18 4Z" fill="#FFFFFF" stroke="#4285F4" strokeWidth="2" />
+      <path d="M16 2V6" stroke="#4285F4" strokeWidth="2" strokeLinecap="round" />
+      <path d="M8 2V6" stroke="#4285F4" strokeWidth="2" strokeLinecap="round" />
+      <path d="M4 10H20" stroke="#4285F4" strokeWidth="2" />
+      <rect x="7" y="13" width="3" height="3" fill="#EA4335" />
+      <rect x="11" y="13" width="3" height="3" fill="#FBBC05" />
+      <rect x="15" y="13" width="3" height="3" fill="#34A853" />
     </svg>
   )
 }
 
+const INTERVALS = [
+  ['1', 'Every minute'],
+  ['10', 'Every 10 min'],
+  ['30', 'Every 30 min'],
+  ['60', 'Every hour'],
+] as const
 
+function FreqSelect({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  return (
+    <Select value={String(value)} onValueChange={(v) => onChange(Number(v))}>
+      <SelectTrigger className="h-9 w-[150px]">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {INTERVALS.map(([v, l]) => (
+          <SelectItem key={v} value={v}>
+            {l}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
 
-// Next.js requires any component that calls useSearchParams() to be wrapped
-// in a Suspense boundary, or the page fails to prerender at build time
-// ("useSearchParams() should be wrapped in a suspense boundary").
+function SettingRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <div className="min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  )
+}
+
+function StatusChip({ on, label }: { on: boolean; label?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+      <span className={cn('h-2 w-2 rounded-full', on ? 'bg-green-500' : 'bg-muted-foreground/40')} />
+      {label || (on ? 'Connected' : 'Not connected')}
+    </span>
+  )
+}
+
+// useSearchParams() needs a Suspense boundary or the page fails to prerender.
 export default function CalendarSyncPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Spinner className="w-8 h-8" />
+        <div className="flex min-h-[400px] items-center justify-center">
+          <Spinner className="h-8 w-8" />
         </div>
       }
     >
@@ -51,72 +92,39 @@ export default function CalendarSyncPage() {
   )
 }
 
+type Tab = 'accounts' | 'link' | 'import'
+
 function CalendarSyncContent() {
   const searchParams = useSearchParams()
+  const [tab, setTab] = useState<Tab>('accounts')
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
-  const {
-    googleConnection,
-    appleConnection,
-    isLoading,
-    isSyncing,
-    connectGoogle,
-    disconnect,
-    updateConnection,
-    syncNow,
-  } = useCalendarSync()
+  const { googleConnection, appleConnection, isLoading, isSyncing, connectGoogle, disconnect, updateConnection, syncNow } = useCalendarSync()
 
   const [taskSyncEnabled, setTaskSyncEnabled] = useState(false)
   const [isTogglingTaskSync, setIsTogglingTaskSync] = useState(false)
   const [isSyncingAll, setIsSyncingAll] = useState(false)
 
-  // Runs every enabled sync (Google events/tasks, Apple events/tasks) back
-  // to back, rather than making the person click "Sync Now" on each
-  // provider card separately. Each leg is independent - one provider
-  // failing (e.g. an Apple connection missing its password) doesn't stop
-  // the others from running, and the summary reports both successes and
-  // failures instead of masking a partial failure as a silent success.
+  // Runs every enabled sync back to back. Each leg is independent: one
+  // provider failing doesn't stop the others, and partial failure is reported.
   const handleSyncAll = async () => {
     const jobs: { label: string; run: () => Promise<unknown> }[] = []
-
-    if (googleConnection?.syncEnabled) {
-      jobs.push({ label: 'Google Calendar', run: () => syncNow('google') })
+    const taskJob = (url: string) => async () => {
+      const res = await authFetch(url, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Sync failed')
+      return data
     }
-    if (googleConnection?.syncTasks) {
-      jobs.push({
-        label: 'Google Tasks',
-        run: async () => {
-          const res = await authFetch('/api/calendar-sync/google/tasks', { method: 'POST' })
-          const data = await res.json()
-          if (!res.ok || !data.success) throw new Error(data.error || 'Sync failed')
-          return data
-        },
-      })
-    }
-    // externalCalendarId is only ever set once Apple's connect flow fully
-    // succeeds (see app/api/calendar-sync/apple/connect) - a connection row
-    // can have syncEnabled=true with no credentials (an incomplete/stale
-    // connect attempt), and that's not "enabled", it's broken. Skip it
-    // instead of running a sync that's guaranteed to fail, and skip it
-    // entirely for accounts that never connected Apple at all.
+    if (googleConnection?.syncEnabled) jobs.push({ label: 'Google Calendar', run: () => syncNow('google') })
+    if (googleConnection?.syncTasks) jobs.push({ label: 'Google Tasks', run: taskJob('/api/calendar-sync/google/tasks') })
+    // externalCalendarId is only set once Apple's connect flow fully succeeds;
+    // a row without it is a stale attempt, not an enabled sync.
     const appleFullyConnected = !!appleConnection?.externalCalendarId
-    if (appleConnection?.syncEnabled && appleFullyConnected) {
-      jobs.push({ label: 'Apple Calendar', run: () => syncNow('apple') })
-    }
-    if (appleConnection?.syncTasks && appleFullyConnected) {
-      jobs.push({
-        label: 'Apple Reminders',
-        run: async () => {
-          const res = await authFetch('/api/calendar-sync/apple/tasks', { method: 'POST' })
-          const data = await res.json()
-          if (!res.ok || !data.success) throw new Error(data.error || 'Sync failed')
-          return data
-        },
-      })
-    }
+    if (appleConnection?.syncEnabled && appleFullyConnected) jobs.push({ label: 'Apple Calendar', run: () => syncNow('apple') })
+    if (appleConnection?.syncTasks && appleFullyConnected) jobs.push({ label: 'Apple Reminders', run: taskJob('/api/calendar-sync/apple/tasks') })
 
     if (jobs.length === 0) {
-      toast.error('No sync is enabled yet - connect or turn on a calendar below first')
+      toast.error('Nothing to sync yet - connect and turn on a calendar first')
       return
     }
 
@@ -131,18 +139,12 @@ function CalendarSyncContent() {
     }
     setIsSyncingAll(false)
 
-    if (failures.length === 0) {
-      toast.success(`Synced ${jobs.length} source${jobs.length > 1 ? 's' : ''}`)
-    } else if (failures.length === jobs.length) {
-      toast.error(failures[0])
-    } else {
-      toast.error(`${jobs.length - failures.length}/${jobs.length} synced. ${failures[0]}`)
-    }
+    if (failures.length === 0) toast.success(`Synced ${jobs.length} source${jobs.length > 1 ? 's' : ''}`)
+    else if (failures.length === jobs.length) toast.error(failures[0])
+    else toast.error(`${jobs.length - failures.length}/${jobs.length} synced. ${failures[0]}`)
   }
 
-  // Subscription link for Apple Calendar, Outlook, and any other app that
-  // can subscribe to a calendar via URL (rather than a Google-style OAuth
-  // integration built per-provider).
+  // Subscription link (Apple Calendar, Outlook, Samsung via Google, anything with "subscribe by URL")
   const [icalFeedUrl, setIcalFeedUrl] = useState<string | null>(null)
   const [icalLoading, setIcalLoading] = useState(true)
   const [icalGenerating, setIcalGenerating] = useState(false)
@@ -162,7 +164,7 @@ function CalendarSyncContent() {
           if (typeof data.includeReminders === 'boolean') setIcalIncludeReminders(data.includeReminders)
         }
       } catch {
-        // Leave feed unset if this fails; the button below just offers to generate one
+        // no feed yet; the UI offers to create one
       } finally {
         setIcalLoading(false)
       }
@@ -171,11 +173,10 @@ function CalendarSyncContent() {
   }, [])
 
   const handleGenerateIcalFeed = async () => {
+    if (icalFeedUrl && !confirm('Regenerating invalidates your current link. Calendars already subscribed will stop updating. Continue?')) return
     setIcalGenerating(true)
     try {
-      const res = await authFetch('/api/calendar-sync/ical/generate', {
-        method: 'POST',
-      })
+      const res = await authFetch('/api/calendar-sync/ical/generate', { method: 'POST' })
       const data = await res.json()
       if (data.success) {
         setIcalFeedUrl(data.feedUrl)
@@ -190,13 +191,12 @@ function CalendarSyncContent() {
     }
   }
 
-  const handleCopyIcalFeed = async () => {
-    if (!icalFeedUrl) return
+  const copyText = async (text: string, done: (v: boolean) => void, msg: string) => {
     try {
-      await navigator.clipboard.writeText(icalFeedUrl)
-      setIcalCopied(true)
-      toast.success('Link copied')
-      setTimeout(() => setIcalCopied(false), 2000)
+      await navigator.clipboard.writeText(text)
+      done(true)
+      toast.success(msg)
+      setTimeout(() => done(false), 2000)
     } catch {
       toast.error('Failed to copy link')
     }
@@ -213,7 +213,7 @@ function CalendarSyncContent() {
       })
       const data = await res.json()
       if (!data.success) throw new Error('failed')
-      toast.success('Subscription link updated - your calendar app will pick this up on its next refresh')
+      toast.success('Link updated - your calendar app picks it up on its next refresh')
     } catch {
       if (key === 'includeTasks') setIcalIncludeTasks(!value)
       else setIcalIncludeReminders(!value)
@@ -221,48 +221,24 @@ function CalendarSyncContent() {
     }
   }
 
-  const handleCopyTasksOnlyFeed = async () => {
-    if (!icalFeedUrl) return
-    try {
-      await navigator.clipboard.writeText(`${icalFeedUrl}?include=tasks,reminders`)
-      setIcalTasksCopied(true)
-      toast.success('Tasks & reminders link copied')
-      setTimeout(() => setIcalTasksCopied(false), 2000)
-    } catch {
-      toast.error('Failed to copy link')
-    }
-  }
-
-  // Initialize task sync state from connection
   useEffect(() => {
-    if (googleConnection?.syncTasks !== undefined) {
-      setTaskSyncEnabled(googleConnection.syncTasks)
-    }
+    if (googleConnection?.syncTasks !== undefined) setTaskSyncEnabled(googleConnection.syncTasks)
   }, [googleConnection?.syncTasks])
 
   const handleToggleTaskSync = async (enabled: boolean) => {
     setIsTogglingTaskSync(true)
     try {
-      const res = await fetch('/api/calendar-sync/google/tasks', {
+      const res = await authFetch('/api/calendar-sync/google/tasks', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ syncTasks: enabled }),
       })
       const data = await res.json()
-      if (data.success) {
-        setTaskSyncEnabled(enabled)
-        setStatusMessage({ 
-          type: 'success', 
-          message: enabled ? 'Task sync enabled - tasks will sync to Google Tasks' : 'Task sync disabled' 
-        })
-      } else {
-        throw new Error(data.error)
-      }
+      if (!data.success) throw new Error(data.error)
+      setTaskSyncEnabled(enabled)
+      toast.success(enabled ? 'Task sync on - tasks sync to Google Tasks' : 'Task sync off')
     } catch (err) {
-      setStatusMessage({ 
-        type: 'error', 
-        message: err instanceof Error ? err.message : 'Failed to update task sync' 
-      })
+      toast.error(err instanceof Error ? err.message : 'Failed to update task sync')
     } finally {
       setIsTogglingTaskSync(false)
     }
@@ -270,30 +246,20 @@ function CalendarSyncContent() {
 
   const handleSyncTasksNow = async () => {
     try {
-      const res = await fetch('/api/calendar-sync/google/tasks', {
-        method: 'POST',
-      })
+      const res = await authFetch('/api/calendar-sync/google/tasks', { method: 'POST' })
       const data = await res.json()
-      if (data.success) {
-        setStatusMessage({ type: 'success', message: data.message })
-      } else {
-        throw new Error(data.error)
-      }
+      if (!data.success) throw new Error(data.error)
+      toast.success(data.message || 'Tasks synced')
     } catch (err) {
-      setStatusMessage({ 
-        type: 'error', 
-        message: err instanceof Error ? err.message : 'Failed to sync tasks' 
-      })
+      toast.error(err instanceof Error ? err.message : 'Failed to sync tasks')
     }
   }
 
-  // Handle URL params for success/error messages
   useEffect(() => {
     const success = searchParams.get('success')
     const error = searchParams.get('error')
-
     if (success === 'google') {
-      setStatusMessage({ type: 'success', message: 'Google Calendar connected successfully!' })
+      setStatusMessage({ type: 'success', message: 'Google Calendar connected!' })
     } else if (error) {
       const errorMessages: Record<string, string> = {
         denied: 'Calendar access was denied',
@@ -305,8 +271,6 @@ function CalendarSyncContent() {
       }
       setStatusMessage({ type: 'error', message: errorMessages[error] || 'Connection failed' })
     }
-
-    // Clear message after 5 seconds
     if (success || error) {
       const timer = setTimeout(() => setStatusMessage(null), 5000)
       return () => clearTimeout(timer)
@@ -317,453 +281,317 @@ function CalendarSyncContent() {
     try {
       await connectGoogle()
     } catch (err) {
-      setStatusMessage({ 
-        type: 'error', 
-        message: err instanceof Error ? err.message : 'Failed to connect Google Calendar' 
-      })
+      toast.error(err instanceof Error ? err.message : 'Failed to connect Google Calendar')
     }
   }
 
-  const handleDisconnect = async (connectionId: string) => {
-    if (!confirm('Are you sure you want to disconnect Google Calendar?')) {
-      return
-    }
-
+  const handleDisconnect = async (connectionId: string, name: string) => {
+    if (!confirm(`Disconnect ${name}?`)) return
     try {
       await disconnect(connectionId)
-      setStatusMessage({ type: 'success', message: 'Google Calendar disconnected' })
+      toast.success(`${name} disconnected`)
     } catch (err) {
-      setStatusMessage({ 
-        type: 'error', 
-        message: err instanceof Error ? err.message : 'Failed to disconnect' 
-      })
+      toast.error(err instanceof Error ? err.message : 'Failed to disconnect')
     }
   }
 
   const handleSyncNow = async () => {
     try {
       const result = await syncNow('google')
-      setStatusMessage({ type: 'success', message: result.message })
+      toast.success(result.message || 'Google Calendar synced')
     } catch (err) {
-      setStatusMessage({ 
-        type: 'error', 
-        message: err instanceof Error ? err.message : 'Sync failed' 
-      })
+      toast.error(err instanceof Error ? err.message : 'Sync failed')
     }
   }
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Spinner className="w-8 h-8" />
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Spinner className="h-8 w-8" />
       </div>
     )
   }
 
+  const appleOk = !!appleConnection && !!appleConnection.externalCalendarId
+  const connectedCount = (googleConnection ? 1 : 0) + (appleOk ? 1 : 0)
+
   return (
-    <div className="space-y-4 sm:space-y-6 pb-20 lg:pb-0">
-      {/* Header */}
+    <div className="space-y-4 pb-20 sm:space-y-5 lg:pb-0">
       <div className="flex items-center gap-2 sm:gap-3">
-        <Button variant="ghost" size="icon" asChild className="shrink-0 h-9 w-9 sm:h-10 sm:w-10">
-          <Link href="/settings">
-            <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+        <Button variant="ghost" size="icon" asChild className="h-9 w-9 shrink-0">
+          <Link href="/settings" aria-label="Back to settings">
+            <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold">Calendar &amp; Task Sync</h1>
-          <p className="text-sm text-muted-foreground">Connect external calendars, or import events and tasks from any app</p>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Calendar &amp; task sync</h1>
+          <p className="truncate text-sm text-muted-foreground">
+            {connectedCount === 0 ? 'No accounts connected' : `${connectedCount} account${connectedCount > 1 ? 's' : ''} connected`}
+            {icalFeedUrl ? ' · subscription link on' : ''}
+          </p>
         </div>
-        <Button
-          onClick={handleSyncAll}
-          disabled={isSyncingAll || isSyncing}
-          size="sm"
-          className="gap-1.5 shrink-0"
-        >
-          <RefreshCw className={`h-4 w-4 ${isSyncingAll ? 'animate-spin' : ''}`} />
-          <span className="hidden sm:inline">Sync All</span>
+        <Button onClick={handleSyncAll} disabled={isSyncingAll || isSyncing} size="sm" className="shrink-0 gap-1.5">
+          <RefreshCw className={cn('h-4 w-4', isSyncingAll && 'animate-spin')} />
+          <span className="hidden sm:inline">Sync all</span>
         </Button>
       </div>
 
-      {/* Status Message */}
       {statusMessage && (
-        <div className={`p-4 rounded-lg ${
-          statusMessage.type === 'success' 
-            ? 'bg-green-500/10 text-green-600 border border-green-500/20' 
-            : 'bg-red-500/10 text-red-600 border border-red-500/20'
-        }`}>
+        <div
+          className={cn(
+            'flex items-center gap-2 rounded-lg border p-3 text-sm',
+            statusMessage.type === 'success'
+              ? 'border-green-500/20 bg-green-500/10 text-green-600'
+              : 'border-red-500/20 bg-red-500/10 text-red-600'
+          )}
+        >
+          {statusMessage.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
           {statusMessage.message}
         </div>
       )}
 
-      {/* Google Calendar */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <GoogleCalendarIcon className="w-8 h-8" />
-            <div>
-              <CardTitle className="text-lg">Google Calendar</CardTitle>
-              <CardDescription>
-                Sync events bidirectionally with Google Calendar
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {googleConnection ? (
-            <>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg">
-                <div>
-                  <p className="font-medium">{googleConnection.calendarName}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {googleConnection.lastSyncedAt 
-                      ? `Last synced: ${format(new Date(googleConnection.lastSyncedAt), 'MMM d, yyyy h:mm a')}`
-                      : 'Never synced'}
+      <div className="inline-flex rounded-lg bg-muted p-1">
+        {(
+          [
+            ['accounts', 'Accounts'],
+            ['link', 'Subscription link'],
+            ['import', 'Import file'],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            className={cn(
+              'whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              tab === key ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'accounts' && (
+        <div className="grid items-start gap-4 lg:grid-cols-2">
+          {/* Google */}
+          <Card>
+            <CardContent className="space-y-1 p-4">
+              <div className="flex items-center gap-3 pb-2">
+                <GoogleCalendarIcon className="h-8 w-8 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">Google Calendar &amp; Tasks</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {googleConnection
+                      ? googleConnection.lastSyncedAt
+                        ? `${googleConnection.calendarName} · synced ${format(new Date(googleConnection.lastSyncedAt), 'MMM d, h:mm a')}`
+                        : `${googleConnection.calendarName} · never synced`
+                      : 'Two-way sync for events and tasks'}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={handleSyncNow}
-                    disabled={isSyncing}
-                  >
-                    {isSyncing ? (
-                      <Spinner className="w-4 h-4 mr-2" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                    )}
-                    Sync Now
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={() => handleDisconnect(googleConnection.id)}
-                  >
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
-                </div>
+                <StatusChip on={!!googleConnection} />
               </div>
 
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Sync Enabled</p>
-                    <p className="text-sm text-muted-foreground">Automatically sync events</p>
-                  </div>
-                  <Switch 
-                    checked={googleConnection.syncEnabled}
-                    onCheckedChange={(checked) => 
-                      updateConnection(googleConnection.id, { syncEnabled: checked })
-                    }
-                  />
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <p className="font-medium">Sync Direction</p>
-                    <p className="text-sm text-muted-foreground">Choose how events are synced</p>
-                  </div>
-                  <Select 
-                    value={googleConnection.syncDirection}
-                    onValueChange={(value) => 
-                      updateConnection(googleConnection.id, { syncDirection: value })
-                    }
-                  >
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="import">Import only</SelectItem>
-                      <SelectItem value="export">Export only</SelectItem>
-                      <SelectItem value="both">Bidirectional</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <p className="font-medium">Auto-Sync Frequency</p>
-                    <p className="text-sm text-muted-foreground">How often to automatically check for updates while the app is open</p>
-                  </div>
-                  <Select
-                    value={String(googleConnection.syncIntervalMinutes ?? 30)}
-                    onValueChange={(value) =>
-                      updateConnection(googleConnection.id, { syncIntervalMinutes: Number(value) })
-                    }
-                  >
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Every 1 minute</SelectItem>
-                      <SelectItem value="10">Every 10 minutes</SelectItem>
-                      <SelectItem value="30">Every 30 minutes</SelectItem>
-                      <SelectItem value="60">Every 60 minutes</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="border-t pt-4 mt-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <ListTodo className="w-5 h-5 text-muted-foreground" />
-                    <p className="font-medium">Task Sync to Google Tasks</p>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Sync your Togethr tasks with due dates to Google Tasks.
-                    Tasks will appear in a dedicated <strong>&quot;Togethr Tasks&quot;</strong> list in the Google Tasks app and show as reminders on your Android phone.
-                    Completing, editing, or adding a task directly in that list syncs back here too -
-                    but changes in your other Google Tasks lists (like the default &quot;My Tasks&quot;) won&apos;t, since Togethr only watches its own list.
-                  </p>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <Switch
-                        checked={taskSyncEnabled}
-                        onCheckedChange={handleToggleTaskSync}
-                        disabled={isTogglingTaskSync}
+              {googleConnection ? (
+                <div className="divide-y">
+                  <SettingRow label="Sync events" hint="Keep calendars in step automatically">
+                    <Switch
+                      checked={googleConnection.syncEnabled}
+                      onCheckedChange={(checked) => updateConnection(googleConnection.id, { syncEnabled: checked })}
+                    />
+                  </SettingRow>
+                  {googleConnection.syncEnabled && (
+                    <>
+                      <SettingRow label="Direction">
+                        <Select
+                          value={googleConnection.syncDirection}
+                          onValueChange={(value) => updateConnection(googleConnection.id, { syncDirection: value })}
+                        >
+                          <SelectTrigger className="h-9 w-[150px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="import">Import only</SelectItem>
+                            <SelectItem value="export">Export only</SelectItem>
+                            <SelectItem value="both">Both ways</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </SettingRow>
+                      <SettingRow label="Check for updates" hint="While the app is open">
+                        <FreqSelect
+                          value={googleConnection.syncIntervalMinutes ?? 30}
+                          onChange={(n) => updateConnection(googleConnection.id, { syncIntervalMinutes: n })}
+                        />
+                      </SettingRow>
+                    </>
+                  )}
+                  <SettingRow label="Sync tasks" hint='Uses a "Togethr Tasks" list in Google Tasks'>
+                    <Switch checked={taskSyncEnabled} onCheckedChange={handleToggleTaskSync} disabled={isTogglingTaskSync} />
+                  </SettingRow>
+                  {taskSyncEnabled && (
+                    <SettingRow label="Task check frequency">
+                      <FreqSelect
+                        value={googleConnection.taskSyncIntervalMinutes ?? 30}
+                        onChange={(n) => updateConnection(googleConnection.id, { taskSyncIntervalMinutes: n })}
                       />
-                      <span className="text-sm">
-                        {taskSyncEnabled ? 'Enabled' : 'Disabled'}
-                      </span>
-                    </div>
+                    </SettingRow>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2 pt-3">
+                    <Button variant="outline" size="sm" onClick={handleSyncNow} disabled={isSyncing}>
+                      {isSyncing ? <Spinner className="mr-1.5 h-4 w-4" /> : <RefreshCw className="mr-1.5 h-4 w-4" />}
+                      Sync events
+                    </Button>
                     {taskSyncEnabled && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleSyncTasksNow}
-                      >
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                        Sync Tasks Now
+                      <Button variant="outline" size="sm" onClick={handleSyncTasksNow}>
+                        <ListTodo className="mr-1.5 h-4 w-4" />
+                        Sync tasks
                       </Button>
                     )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-auto text-destructive hover:text-destructive"
+                      onClick={() => handleDisconnect(googleConnection.id, 'Google Calendar')}
+                    >
+                      <Trash2 className="mr-1.5 h-4 w-4" />
+                      Disconnect
+                    </Button>
                   </div>
-                  {taskSyncEnabled && (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-4">
-                      <div>
-                        <p className="font-medium text-sm">Task Auto-Sync Frequency</p>
-                        <p className="text-sm text-muted-foreground">How often to automatically sync tasks</p>
-                      </div>
-                      <Select
-                        value={String(googleConnection.taskSyncIntervalMinutes ?? 30)}
-                        onValueChange={(value) =>
-                          updateConnection(googleConnection.id, { taskSyncIntervalMinutes: Number(value) })
-                        }
-                      >
-                        <SelectTrigger className="w-full sm:w-[180px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1">Every 1 minute</SelectItem>
-                          <SelectItem value="10">Every 10 minutes</SelectItem>
-                          <SelectItem value="30">Every 30 minutes</SelectItem>
-                          <SelectItem value="60">Every 60 minutes</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
+                  <p className="pt-3 text-xs text-muted-foreground">
+                    Only the &quot;Togethr Tasks&quot; list syncs back - other Google Tasks lists are never touched.
+                  </p>
                 </div>
-              </div>
-            </>
-          ) : (
-            <Button onClick={handleConnectGoogle} className="w-full sm:w-auto">
-              <GoogleCalendarIcon className="w-5 h-5 mr-2" />
-              Connect Google Calendar
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Apple Calendar & Reminders (real bidirectional CalDAV sync) */}
-      <AppleCalendarCard />
-
-      {/* Generic .ics import - Outlook, Android, or any app that can export/publish a calendar file */}
-      <ImportIcsCard />
-
-      {/* Other Calendars (Outlook, and any app that supports calendar subscription URLs) */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <Calendar className="w-8 h-8 text-muted-foreground" />
-            <div>
-              <CardTitle className="text-lg">Other Calendars</CardTitle>
-              <CardDescription>
-                Events, tasks and reminders in Apple Calendar, Outlook, Android (Google Calendar) or any app that supports subscription links
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {icalLoading ? (
-            <div className="flex justify-center py-4">
-              <Spinner className="w-5 h-5" />
-            </div>
-          ) : icalFeedUrl ? (
-            <>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input readOnly value={icalFeedUrl} className="flex-1 font-mono text-xs" />
-                <Button variant="outline" size="sm" onClick={handleCopyIcalFeed} className="shrink-0">
-                  {icalCopied ? (
-                    <Check className="w-4 h-4 mr-2" />
-                  ) : (
-                    <Copy className="w-4 h-4 mr-2" />
-                  )}
-                  {icalCopied ? 'Copied' : 'Copy link'}
+              ) : (
+                <Button onClick={handleConnectGoogle} className="w-full sm:w-auto">
+                  <GoogleCalendarIcon className="mr-2 h-5 w-5" />
+                  Connect Google Calendar
                 </Button>
-              </div>
-              <div className="space-y-3 rounded-lg border p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium">Include tasks</p>
-                    <p className="text-xs text-muted-foreground">Family tasks with a due date show up as calendar items with an alert</p>
-                  </div>
-                  <Switch checked={icalIncludeTasks} onCheckedChange={(v) => handleFeedToggle('includeTasks', v)} />
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium">Include reminders</p>
-                    <p className="text-xs text-muted-foreground">Your personal reminders show up with an alert at the reminder time</p>
-                  </div>
-                  <Switch checked={icalIncludeReminders} onCheckedChange={(v) => handleFeedToggle('includeReminders', v)} />
-                </div>
-              </div>
-              <div className="text-sm text-muted-foreground space-y-1">
-                <p><strong>iPhone / iPad:</strong> Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar, paste the link.</p>
-                <p><strong>Mac:</strong> Calendar → File → New Calendar Subscription.</p>
-                <p><strong>Outlook:</strong> Add calendar → Subscribe from web, paste the link.</p>
-                <p><strong>Android:</strong> open calendar.google.com on a computer → Other calendars (+) → From URL, paste the link; it then appears in the Google Calendar app on your phone.</p>
-                <p>
-                  Apps refresh subscribed calendars on their own schedule (Apple and Outlook roughly every 15-60 minutes,
-                  Google a few times a day). This is a one-way feed: events, tasks and reminders flow out of Togethr.
-                  Already using Apple login below for events? Subscribe to the tasks &amp; reminders link instead, so
-                  events aren&apos;t duplicated:
-                </p>
-              </div>
-              <Button variant="outline" size="sm" onClick={handleCopyTasksOnlyFeed}>
-                {icalTasksCopied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
-                {icalTasksCopied ? 'Copied' : 'Copy tasks & reminders only link'}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleGenerateIcalFeed}
-                disabled={icalGenerating}
-                className="text-muted-foreground"
-              >
-                {icalGenerating ? <Spinner className="w-4 h-4 mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                Regenerate link (invalidates the old one)
-              </Button>
-            </>
-          ) : (
-            <Button onClick={handleGenerateIcalFeed} disabled={icalGenerating} className="w-full sm:w-auto">
-              {icalGenerating ? <Spinner className="w-4 h-4 mr-2" /> : <Calendar className="w-4 h-4 mr-2" />}
-              Create subscription link
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+              )}
+            </CardContent>
+          </Card>
 
-      {/* Samsung Calendar & Reminders - Samsung has no public Calendar/Samsung
-          Cloud API for third-party apps to connect to (unlike Google's OAuth
-          or Apple's CalDAV), so there's no "Connect" button here the way
-          there is above. This reuses the exact same subscription feed as
-          the "Other Calendars" card below - same link, same token - just
-          presented with Samsung-specific setup steps, since Samsung's own
-          Calendar app only displays calendars that come in through an
-          account it already syncs (Samsung account or Google account), not
-          a direct "subscribe by URL" option of its own. */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <Smartphone className="w-8 h-8 text-muted-foreground" />
+          <AppleCalendarCard />
+        </div>
+      )}
+
+      {tab === 'link' && (
+        <Card>
+          <CardContent className="space-y-4 p-4">
             <div>
-              <CardTitle className="text-lg">Samsung Calendar & Reminders</CardTitle>
-              <CardDescription>
-                Bring your Togethr events (and, best-effort, reminders) into Samsung Calendar
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
-            Samsung doesn&apos;t publish a Calendar or Samsung Cloud API for apps like Togethr to connect
-            to directly, so this isn&apos;t a one-tap &quot;Connect&quot; like Google or Apple above. Instead,
-            it uses the same subscription link other calendar apps use, bridged in through Google
-            Calendar (which Samsung Calendar already knows how to display).
-          </div>
-
-          {icalLoading ? (
-            <div className="flex justify-center py-4">
-              <Spinner className="w-5 h-5" />
-            </div>
-          ) : icalFeedUrl ? (
-            <>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input readOnly value={icalFeedUrl} className="flex-1 font-mono text-xs" />
-                <Button variant="outline" size="sm" onClick={handleCopyIcalFeed} className="shrink-0">
-                  {icalCopied ? (
-                    <Check className="w-4 h-4 mr-2" />
-                  ) : (
-                    <Copy className="w-4 h-4 mr-2" />
-                  )}
-                  {icalCopied ? 'Copied' : 'Copy link'}
-                </Button>
-              </div>
-              <ol className="text-sm text-muted-foreground space-y-1.5 list-decimal list-inside">
-                <li>On any device, open Google Calendar (web or app) and make sure it&apos;s the same Google account your Samsung phone is signed into.</li>
-                <li>On the web: <strong>Other calendars → + → From URL</strong>, and paste the link above. Give it a moment to import.</li>
-                <li>On your Samsung phone: open <strong>Calendar → Menu → Manage calendars</strong>, find it listed under your Google account, and turn it on.</li>
-              </ol>
+              <p className="font-semibold">Subscribe from any calendar app</p>
               <p className="text-xs text-muted-foreground">
-                This is one-way (Togethr → Samsung) and refreshes roughly every 15-60 minutes, same
-                as the Other Calendars link below. Events show up reliably; reminders are included in
-                the feed too, but most calendar apps - Samsung&apos;s included - don&apos;t reliably surface
-                subscribed to-dos the way they do events, so treat that part as a bonus, not a guarantee.
+                One-way feed (Togethr → your calendar) for Apple, Outlook, Android and Samsung. Apps refresh it every 15-60 minutes
+                (Google a few times a day).
               </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleGenerateIcalFeed}
-                disabled={icalGenerating}
-                className="text-muted-foreground"
-              >
-                {icalGenerating ? <Spinner className="w-4 h-4 mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                Regenerate link (invalidates the old one)
-              </Button>
-            </>
-          ) : (
-            <Button onClick={handleGenerateIcalFeed} disabled={icalGenerating} className="w-full sm:w-auto">
-              {icalGenerating ? <Spinner className="w-4 h-4 mr-2" /> : <Smartphone className="w-4 h-4 mr-2" />}
-              Create subscription link
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+            </div>
 
-      {/* Info Card */}
-      <Card className="bg-muted/30">
-        <CardContent className="pt-6">
-          <h4 className="font-medium mb-2">About Calendar &amp; Task Sync</h4>
-          <ul className="text-sm text-muted-foreground space-y-2">
-            <li>• <strong>Google Calendar:</strong> Full bidirectional sync - events flow both ways automatically</li>
-            <li>• <strong>Google Tasks:</strong> Tasks with due dates sync bidirectionally with a dedicated &quot;Togethr Tasks&quot; list in Google Tasks and appear as reminders on Android - only that list syncs, not your other Google Tasks lists</li>
-            <li>• <strong>Apple Calendar & Reminders:</strong> Full bidirectional sync via CalDAV using your Apple ID and an app-specific password - events and reminders flow both ways automatically</li>
-            <li>• <strong>Other Calendars:</strong> Outlook, and any app that supports calendar subscription links, can subscribe to a one-way feed of your Togethr events</li>
-            <li>• <strong>Samsung Calendar & Reminders:</strong> No public Samsung API exists, so this uses the same subscription link, bridged through Google Calendar, to show up in Samsung&apos;s Calendar app</li>
-            <li>• <strong>Import a Calendar File:</strong> Upload a .ics file (exported from Outlook, Android, iOS, or any calendar/task app) or paste a public calendar URL to bring its events and tasks into Togethr once</li>
-            <li>• Auto-sync runs at your chosen frequency (1, 10, 30, or 60 minutes) while Togethr is open in a browser tab or installed app</li>
-            <li>• Your calendar credentials are encrypted and stored securely</li>
-          </ul>
-        </CardContent>
-      </Card>
+            {icalLoading ? (
+              <div className="flex justify-center py-4">
+                <Spinner className="h-5 w-5" />
+              </div>
+            ) : icalFeedUrl ? (
+              <>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input readOnly value={icalFeedUrl} className="flex-1 font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+                  <Button variant="outline" size="sm" className="shrink-0" onClick={() => copyText(icalFeedUrl, setIcalCopied, 'Link copied')}>
+                    {icalCopied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
+                    {icalCopied ? 'Copied' : 'Copy link'}
+                  </Button>
+                </div>
+
+                <div className="divide-y rounded-lg border px-3">
+                  <SettingRow label="Include tasks" hint="Tasks with a due date appear with an alert">
+                    <Switch checked={icalIncludeTasks} onCheckedChange={(v) => handleFeedToggle('includeTasks', v)} />
+                  </SettingRow>
+                  <SettingRow label="Include reminders" hint="Your reminders appear at their time">
+                    <Switch checked={icalIncludeReminders} onCheckedChange={(v) => handleFeedToggle('includeReminders', v)} />
+                  </SettingRow>
+                </div>
+
+                <LinkInstructions />
+
+                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyText(`${icalFeedUrl}?include=tasks,reminders`, setIcalTasksCopied, 'Tasks & reminders link copied')}
+                  >
+                    {icalTasksCopied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
+                    {icalTasksCopied ? 'Copied' : 'Tasks & reminders only link'}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="ml-auto text-muted-foreground" onClick={handleGenerateIcalFeed} disabled={icalGenerating}>
+                    {icalGenerating ? <Spinner className="mr-1.5 h-4 w-4" /> : <RefreshCw className="mr-1.5 h-4 w-4" />}
+                    Regenerate
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Already using Apple login for events? Subscribe to the tasks &amp; reminders only link so events aren&apos;t duplicated.
+                </p>
+              </>
+            ) : (
+              <Button onClick={handleGenerateIcalFeed} disabled={icalGenerating} className="w-full sm:w-auto">
+                {icalGenerating ? <Spinner className="mr-2 h-4 w-4" /> : <Calendar className="mr-2 h-4 w-4" />}
+                Create subscription link
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {tab === 'import' && <ImportIcsCard />}
     </div>
   )
 }
 
-// One-off import of a .ics file or a public calendar URL - the path that
-// actually covers "any standard calendar/task app" (Outlook, Android, iOS,
-// Google Takeout exports, etc.) rather than just the two providers Togethr
-// has a dedicated OAuth/CalDAV connector for. Unlike the Google/Apple cards
-// above, there's no ongoing connection here: each import is a single pull,
-// run again whenever the person wants to bring in a fresher export.
+const APP_STEPS: Record<string, { label: string; steps: React.ReactNode }> = {
+  iphone: {
+    label: 'iPhone / iPad',
+    steps: <>Settings → Calendar → Accounts → Add Account → Other → <strong>Add Subscribed Calendar</strong>, then paste the link.</>,
+  },
+  mac: { label: 'Mac', steps: <>Calendar → File → <strong>New Calendar Subscription</strong>, then paste the link.</> },
+  outlook: { label: 'Outlook', steps: <>Add calendar → <strong>Subscribe from web</strong>, then paste the link.</> },
+  android: {
+    label: 'Android',
+    steps: <>On a computer open calendar.google.com → Other calendars (+) → <strong>From URL</strong> and paste the link. It then shows in Google Calendar on your phone.</>,
+  },
+  samsung: {
+    label: 'Samsung',
+    steps: (
+      <>
+        Samsung has no public calendar API, so bridge it through Google: add the link in Google Calendar on the web (<strong>Other calendars → + → From URL</strong>,
+        same Google account as your phone), then on the phone open <strong>Calendar → Menu → Manage calendars</strong> and turn it on. Events are reliable;
+        reminders are best-effort.
+      </>
+    ),
+  },
+}
+
+function LinkInstructions() {
+  const [app, setApp] = useState('iphone')
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">How to add it</p>
+      <div className="flex flex-wrap gap-1.5">
+        {Object.entries(APP_STEPS).map(([k, v]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setApp(k)}
+            className={cn(
+              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+              app === k ? 'border-primary bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'
+            )}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+      <p className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">{APP_STEPS[app].steps}</p>
+    </div>
+  )
+}
+
+// One-off import of a .ics file or public calendar URL. Not an ongoing sync.
 function ImportIcsCard() {
   const [file, setFile] = useState<File | null>(null)
   const [feedUrl, setFeedUrl] = useState('')
@@ -776,8 +604,7 @@ function ImportIcsCard() {
   const { family } = useFamily(user?.primaryFamily?.id ?? null)
   const myRole = (family?.members || []).find((m) => m.userId === user?.id)?.role
   const canAssign = myRole === 'PARENT' || myRole === 'GUARDIAN'
-  const toggleId = (list: string[], id: string, on: boolean) =>
-    on ? Array.from(new Set([...list, id])) : list.filter((x) => x !== id)
+  const toggleId = (list: string[], id: string, on: boolean) => (on ? Array.from(new Set([...list, id])) : list.filter((x) => x !== id))
 
   const runImport = async (body: FormData | { url: string }) => {
     setImporting(true)
@@ -812,129 +639,105 @@ function ImportIcsCard() {
   }
 
   const handleFileImport = () => {
-    if (!file) {
-      toast.error('Choose a .ics file first')
-      return
-    }
+    if (!file) return toast.error('Choose a .ics file first')
     const formData = new FormData()
     formData.append('file', file)
     runImport(formData)
   }
 
   const handleUrlImport = () => {
-    if (!feedUrl.trim()) {
-      toast.error('Paste a calendar URL first')
-      return
-    }
+    if (!feedUrl.trim()) return toast.error('Paste a calendar URL first')
     runImport({ url: feedUrl.trim() })
   }
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <Upload className="w-8 h-8 text-muted-foreground" />
-          <div>
-            <CardTitle className="text-lg">Import a Calendar File</CardTitle>
-            <CardDescription>
-              Bring in events and tasks from Outlook, Android, iOS, or any app that can export a .ics file
-            </CardDescription>
-          </div>
+      <CardContent className="space-y-4 p-4">
+        <div>
+          <p className="font-semibold">Import a calendar file</p>
+          <p className="text-xs text-muted-foreground">
+            One-time import of events and tasks from Outlook, Android, iOS or any app that exports .ics. Re-importing the same file won&apos;t create duplicates.
+          </p>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        {canAssign && family && (
+
+        <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-2">
-            <p className="font-medium text-sm">Assign imported events to (optional)</p>
-            <p className="text-xs text-muted-foreground">
-              Everyone in the family can see imported events. Pick people here to also assign every event in the
-              file to them; children get a push, email and text.
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2 rounded-lg border border-border p-3">
-              {(family.members || []).filter((m) => m.isActive !== false && m.userId).map((m) => (
-                <div key={m.id} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`import-assign-${m.id}`}
-                    checked={assignUserIds.includes(m.userId)}
-                    onCheckedChange={(c) => setAssignUserIds((prev) => toggleId(prev, m.userId, !!c))}
-                  />
-                  <label htmlFor={`import-assign-${m.id}`} className="text-sm cursor-pointer">
-                    {m.displayName} <span className="text-xs text-muted-foreground capitalize">({m.role.toLowerCase()})</span>
-                  </label>
-                </div>
-              ))}
-              {(family.children || []).filter((c) => !c.hasLogin).map((c) => (
-                <div key={c.id} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`import-assign-child-${c.id}`}
-                    checked={assignChildIds.includes(c.id)}
-                    onCheckedChange={(on) => setAssignChildIds((prev) => toggleId(prev, c.id, !!on))}
-                  />
-                  <label htmlFor={`import-assign-child-${c.id}`} className="text-sm cursor-pointer">
-                    {c.displayName} <span className="text-xs text-muted-foreground">(child)</span>
-                  </label>
-                </div>
-              ))}
+            <p className="text-sm font-medium">Upload a .ics file</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input type="file" accept=".ics,text/calendar" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="flex-1" />
+              <Button onClick={handleFileImport} disabled={importing || !file} className="shrink-0">
+                {importing ? <Spinner className="mr-1.5 h-4 w-4" /> : <Upload className="mr-1.5 h-4 w-4" />}
+                Import
+              </Button>
             </div>
+            <p className="text-xs text-muted-foreground">Outlook: File → Open &amp; Export → Import/Export → Export to a file (.ics).</p>
           </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Or paste a calendar link</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input placeholder="https://... or webcal://..." value={feedUrl} onChange={(e) => setFeedUrl(e.target.value)} className="flex-1" />
+              <Button onClick={handleUrlImport} disabled={importing || !feedUrl.trim()} variant="outline" className="shrink-0">
+                {importing ? <Spinner className="mr-1.5 h-4 w-4" /> : <Link2 className="mr-1.5 h-4 w-4" />}
+                Import
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">A published Outlook/Google link or any public subscription URL.</p>
+          </div>
+        </div>
+
+        {canAssign && family && (
+          <details className="rounded-lg border px-3 py-2">
+            <summary className="cursor-pointer text-sm font-medium">
+              Assign imported events to people (optional)
+              {assignUserIds.length + assignChildIds.length > 0 && (
+                <span className="ml-2 text-xs text-muted-foreground">{assignUserIds.length + assignChildIds.length} selected</span>
+              )}
+            </summary>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Everyone in the family can see imported events. Pick people to also assign every event in the file to them; children get a push, email and text.
+            </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {(family.members || [])
+                .filter((m) => m.isActive !== false && m.userId)
+                .map((m) => (
+                  <div key={m.id} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`import-assign-${m.id}`}
+                      checked={assignUserIds.includes(m.userId)}
+                      onCheckedChange={(c) => setAssignUserIds((prev) => toggleId(prev, m.userId, !!c))}
+                    />
+                    <label htmlFor={`import-assign-${m.id}`} className="cursor-pointer text-sm">
+                      {m.displayName} <span className="text-xs capitalize text-muted-foreground">({m.role.toLowerCase()})</span>
+                    </label>
+                  </div>
+                ))}
+              {(family.children || [])
+                .filter((c) => !c.hasLogin)
+                .map((c) => (
+                  <div key={c.id} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`import-assign-child-${c.id}`}
+                      checked={assignChildIds.includes(c.id)}
+                      onCheckedChange={(on) => setAssignChildIds((prev) => toggleId(prev, c.id, !!on))}
+                    />
+                    <label htmlFor={`import-assign-child-${c.id}`} className="cursor-pointer text-sm">
+                      {c.displayName} <span className="text-xs text-muted-foreground">(child)</span>
+                    </label>
+                  </div>
+                ))}
+            </div>
+          </details>
         )}
-
-        <div className="space-y-2">
-          <p className="font-medium text-sm">Upload a .ics file</p>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Input
-              type="file"
-              accept=".ics,text/calendar"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="flex-1"
-            />
-            <Button onClick={handleFileImport} disabled={importing || !file} className="shrink-0">
-              {importing ? <Spinner className="w-4 h-4 mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
-              Import
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            In Outlook: File → Open &amp; Export → Import/Export → Export to a file (.ics). On Android or iOS, most
-            calendar apps have a similar &quot;Export calendar&quot; option.
-          </p>
-        </div>
-
-        <div className="border-t pt-4 space-y-2">
-          <p className="font-medium text-sm">Or paste a calendar link</p>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Input
-              placeholder="https://... or webcal://..."
-              value={feedUrl}
-              onChange={(e) => setFeedUrl(e.target.value)}
-              className="flex-1"
-            />
-            <Button onClick={handleUrlImport} disabled={importing || !feedUrl.trim()} variant="outline" className="shrink-0">
-              {importing ? <Spinner className="w-4 h-4 mr-2" /> : <Link2 className="w-4 h-4 mr-2" />}
-              Import
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Works with a published Outlook/Google calendar link, or any public calendar subscription URL.
-          </p>
-        </div>
 
         {result && (
-          <div className="p-3 rounded-lg bg-green-500/10 text-green-600 border border-green-500/20 text-sm">
-            {result}
-          </div>
+          <div className="rounded-lg border border-green-500/20 bg-green-500/10 p-3 text-sm text-green-600">{result}</div>
         )}
-
-        <p className="text-xs text-muted-foreground">
-          This is a one-time pull, not an ongoing sync - run it again any time you have a fresher export.
-          Re-importing the same file won&apos;t create duplicates.
-        </p>
       </CardContent>
     </Card>
   )
 }
 
-// Apple's logo isn't ours to reproduce as an icon; a plain calendar glyph
-// stands in for it here (see GoogleCalendarIcon above for the Google one).
 function AppleCalendarCard() {
   const { appleConnection, connectApple, disconnect, updateConnection, syncNow } = useCalendarSync()
   const [appleId, setAppleId] = useState('')
@@ -942,12 +745,10 @@ function AppleCalendarCard() {
   const [connecting, setConnecting] = useState(false)
   const [syncing, setSyncing] = useState(false)
 
-  // A connection row can exist (syncEnabled=true) without ever having
-  // stored real credentials - externalCalendarId is only set once the
-  // connect flow actually succeeds. Treat that as "needs reconnecting",
-  // not "connected", so the broken state doesn't masquerade as a working
-  // one with controls that just fail when used.
+  // A row can exist without credentials; externalCalendarId is only set once
+  // connect succeeds. Treat that as "needs reconnecting".
   const isIncomplete = !!appleConnection && !appleConnection.externalCalendarId
+  const connected = !!appleConnection && !isIncomplete
 
   const handleConnect = async () => {
     if (!appleId || !appPassword) {
@@ -982,151 +783,83 @@ function AppleCalendarCard() {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <Calendar className="w-8 h-8 text-muted-foreground" />
-          <div>
-            <CardTitle className="text-lg">Apple Calendar & Reminders</CardTitle>
-            <CardDescription>
-              Bidirectional sync with iCloud Calendar and Reminders via CalDAV
-            </CardDescription>
+      <CardContent className="space-y-1 p-4">
+        <div className="flex items-center gap-3 pb-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+            <Calendar className="h-5 w-5 text-muted-foreground" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">Apple Calendar &amp; Reminders</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {connected
+                ? appleConnection!.lastSyncedAt
+                  ? `${appleConnection!.calendarName} · synced ${format(new Date(appleConnection!.lastSyncedAt), 'MMM d, h:mm a')}`
+                  : `${appleConnection!.calendarName} · not yet synced`
+                : 'Two-way iCloud sync via CalDAV'}
+            </p>
           </div>
+          <StatusChip on={connected} label={isIncomplete ? 'Needs reconnect' : undefined} />
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {appleConnection && !isIncomplete ? (
-          <>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <p className="font-medium">{appleConnection.calendarName}</p>
-                <p className="text-sm text-muted-foreground">
-                  {appleConnection.lastSyncedAt
-                    ? `Last synced ${format(new Date(appleConnection.lastSyncedAt), 'MMM d, h:mm a')}`
-                    : 'Not yet synced'}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={handleSyncNow} disabled={syncing}>
-                  {syncing ? <Spinner className="w-4 h-4 mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                  Sync Now
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => disconnect(appleConnection.id)}>
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <p className="font-medium">Sync Enabled</p>
-                <p className="text-sm text-muted-foreground">Turn Apple Calendar & Reminders sync on or off</p>
-              </div>
-              <Switch
-                checked={appleConnection.syncEnabled}
-                onCheckedChange={(checked) => updateConnection(appleConnection.id, { syncEnabled: checked })}
-              />
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <p className="font-medium">Auto-Sync Frequency</p>
-                <p className="text-sm text-muted-foreground">How often to automatically check for updates</p>
-              </div>
-              <Select
-                value={String(appleConnection.syncIntervalMinutes ?? 30)}
-                onValueChange={(value) => updateConnection(appleConnection.id, { syncIntervalMinutes: Number(value) })}
+        {connected ? (
+          <div className="divide-y">
+            <SettingRow label="Sync events" hint="Calendar & Reminders sync on or off">
+              <Switch checked={appleConnection!.syncEnabled} onCheckedChange={(checked) => updateConnection(appleConnection!.id, { syncEnabled: checked })} />
+            </SettingRow>
+            {appleConnection!.syncEnabled && (
+              <SettingRow label="Check for updates" hint="While the app is open">
+                <FreqSelect value={appleConnection!.syncIntervalMinutes ?? 30} onChange={(n) => updateConnection(appleConnection!.id, { syncIntervalMinutes: n })} />
+              </SettingRow>
+            )}
+            <SettingRow label="Sync tasks & reminders" hint="Two-way with Apple Reminders">
+              <Switch checked={appleConnection!.syncTasks} onCheckedChange={(checked) => updateConnection(appleConnection!.id, { syncTasks: checked })} />
+            </SettingRow>
+            {appleConnection!.syncTasks && (
+              <SettingRow label="Task check frequency">
+                <FreqSelect value={appleConnection!.taskSyncIntervalMinutes ?? 30} onChange={(n) => updateConnection(appleConnection!.id, { taskSyncIntervalMinutes: n })} />
+              </SettingRow>
+            )}
+            {appleConnection!.appleTasksAvailable === false && (
+              <p className="my-3 rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3 text-sm text-yellow-700">
+                Apple didn&apos;t share a Reminders list with Togethr (lists upgraded in iOS 13+ aren&apos;t available to other apps). Use the Subscription link tab to see tasks on your iPhone.
+              </p>
+            )}
+            <div className="flex items-center gap-2 pt-3">
+              <Button variant="outline" size="sm" onClick={handleSyncNow} disabled={syncing}>
+                {syncing ? <Spinner className="mr-1.5 h-4 w-4" /> : <RefreshCw className="mr-1.5 h-4 w-4" />}
+                Sync now
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto text-destructive hover:text-destructive"
+                onClick={() => {
+                  if (confirm('Disconnect Apple Calendar?')) disconnect(appleConnection!.id)
+                }}
               >
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">Every 1 minute</SelectItem>
-                  <SelectItem value="10">Every 10 minutes</SelectItem>
-                  <SelectItem value="30">Every 30 minutes</SelectItem>
-                  <SelectItem value="60">Every 60 minutes</SelectItem>
-                </SelectContent>
-              </Select>
+                <Trash2 className="mr-1.5 h-4 w-4" />
+                Disconnect
+              </Button>
             </div>
-
-            <div className="border-t pt-4 mt-4">
-              <div className="flex items-center gap-2 mb-3">
-                <ListTodo className="w-5 h-5 text-muted-foreground" />
-                <p className="font-medium">Tasks &amp; reminders in Apple Reminders (two-way)</p>
-              </div>
-              {appleConnection.appleTasksAvailable === false && (
-                <p className="mb-3 rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3 text-sm text-yellow-700">
-                  Apple didn&apos;t share a Reminders list with Togethr (lists upgraded in iOS 13 or later aren&apos;t available to other apps).
-                  Use the subscription link above to see tasks and reminders on your iPhone instead.
-                </p>
-              )}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <Switch
-                    checked={appleConnection.syncTasks}
-                    onCheckedChange={(checked) => updateConnection(appleConnection.id, { syncTasks: checked })}
-                  />
-                  <span className="text-sm">{appleConnection.syncTasks ? 'Enabled' : 'Disabled'}</span>
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-4">
-                <div>
-                  <p className="font-medium text-sm">Task Auto-Sync Frequency</p>
-                  <p className="text-sm text-muted-foreground">How often to automatically sync reminders</p>
-                </div>
-                <Select
-                  value={String(appleConnection.taskSyncIntervalMinutes ?? 30)}
-                  onValueChange={(value) => updateConnection(appleConnection.id, { taskSyncIntervalMinutes: Number(value) })}
-                >
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Every 1 minute</SelectItem>
-                    <SelectItem value="10">Every 10 minutes</SelectItem>
-                    <SelectItem value="30">Every 30 minutes</SelectItem>
-                    <SelectItem value="60">Every 60 minutes</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </>
+          </div>
         ) : (
           <div className="space-y-3">
             {isIncomplete && (
-              <div className="flex items-start justify-between gap-3 p-3 rounded-lg bg-yellow-500/10 text-yellow-700 border border-yellow-500/20 text-sm">
-                <p>
-                  Apple login isn&apos;t connected yet - enter your Apple ID and an app-specific
-                  password below. (Your subscription link above keeps working.)
-                </p>
-              </div>
+              <p className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3 text-sm text-yellow-700">
+                Apple login isn&apos;t finished - enter your Apple ID and an app-specific password below. (Your subscription link keeps working.)
+              </p>
             )}
-            <p className="text-sm text-muted-foreground">
-              Apple requires an app-specific password (not your regular Apple ID password) for
-              third-party apps like Togethr. Generate one at{' '}
-              <a
-                href="https://appleid.apple.com/account/manage"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-              >
+            <p className="text-xs text-muted-foreground">
+              Apple needs an app-specific password, not your regular one. Create it at{' '}
+              <a href="https://appleid.apple.com/account/manage" target="_blank" rel="noopener noreferrer" className="underline">
                 appleid.apple.com
               </a>{' '}
-              under Sign-In and Security → App-Specific Passwords.
+              → Sign-In and Security → App-Specific Passwords.
             </p>
-            <Input
-              placeholder="Apple ID (email)"
-              type="email"
-              value={appleId}
-              onChange={(e) => setAppleId(e.target.value)}
-            />
-            <Input
-              placeholder="App-specific password"
-              type="password"
-              value={appPassword}
-              onChange={(e) => setAppPassword(e.target.value)}
-            />
+            <Input placeholder="Apple ID (email)" type="email" value={appleId} onChange={(e) => setAppleId(e.target.value)} />
+            <Input placeholder="App-specific password" type="password" value={appPassword} onChange={(e) => setAppPassword(e.target.value)} />
             <Button onClick={handleConnect} disabled={connecting} className="w-full sm:w-auto">
-              {connecting ? <Spinner className="w-4 h-4 mr-2" /> : <Calendar className="w-4 h-4 mr-2" />}
+              {connecting ? <Spinner className="mr-2 h-4 w-4" /> : <Calendar className="mr-2 h-4 w-4" />}
               Connect Apple Calendar
             </Button>
           </div>

@@ -21,7 +21,8 @@ import { ChangePasswordButton } from '@/components/change-password-dialog'
 import { ActiveSessions } from '@/components/active-sessions'
 import { usePushNotifications } from '@/hooks/use-push-notifications'
 import { toast } from 'sonner'
-import { Bell, Lock, Shield, Globe, User, Camera, Trash2, Phone, Smartphone, Download, RotateCcw, Sun, Moon, RefreshCw } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Bell, Lock, Shield, Globe, User, Camera, Trash2, Phone, Smartphone, Download, RotateCcw, Sun, Moon, RefreshCw, ChevronRight, Mail } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import {
   Dialog,
@@ -32,6 +33,21 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
+function Row({ label, hint, htmlFor, children, badge }: { label: string; hint?: React.ReactNode; htmlFor?: string; children: React.ReactNode; badge?: React.ReactNode }) {
+  return (
+  <div className="flex items-center justify-between gap-4 py-3">
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-2">
+        <Label htmlFor={htmlFor} className="text-sm font-medium">{label}</Label>
+        {badge}
+      </div>
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+    <div className="shrink-0">{children}</div>
+  </div>
+)
+}
+
 export default function SettingsPage() {
   const { user, mutate } = useAuth()
   const router = useRouter()
@@ -41,7 +57,7 @@ export default function SettingsPage() {
   const { theme, setTheme, resolvedTheme } = useTheme()
   const pushNotifications = usePushNotifications()
   const [mounted, setMounted] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [tab, setTab] = useState<'profile' | 'notifications' | 'security' | 'preferences' | 'account'>('profile')
   const [uploading, setUploading] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -327,19 +343,6 @@ export default function SettingsPage() {
     }
   }
 
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      // In production, this would save to the API
-      await new Promise(resolve => setTimeout(resolve, 500))
-      toast.success('Settings saved successfully')
-    } catch {
-      toast.error('Failed to save settings')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const handleExportData = async (format: 'xlsx' | 'json' = 'xlsx') => {
     setExporting(true)
     try {
@@ -432,44 +435,78 @@ export default function SettingsPage() {
     }
   }
 
+  const TABS = [
+    ['profile', 'Profile', User],
+    ['notifications', 'Notifications', Bell],
+    ['security', 'Security', Lock],
+    ['preferences', 'Preferences', Globe],
+    ['account', 'Account', Shield],
+  ] as const
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">Manage your account preferences</p>
+    <div className="space-y-4 pb-20 sm:space-y-5 lg:pb-0">
+      <div className="flex items-center gap-3">
+        <Avatar className="h-11 w-11">
+          <AvatarImage src={user?.avatarUrl || undefined} alt={user?.displayName || 'User'} />
+          <AvatarFallback className="bg-primary/10 text-primary">{userInitials}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Settings</h1>
+          <p className="truncate text-sm text-muted-foreground">{user?.email}</p>
+        </div>
       </div>
 
-      <div className="grid gap-6">
-        {/* Profile Photo */}
+      {/* Calendar sync shortcut */}
+      <Link
+        href="/settings/calendar-sync"
+        className="flex items-center gap-3 rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50"
+      >
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
+          <RefreshCw className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">Calendar &amp; task sync</p>
+          <p className="truncate text-xs text-muted-foreground">Google, Apple, subscription link or .ics import</p>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+      </Link>
+
+      {/* Tabs */}
+      <div className="-mx-1 overflow-x-auto px-1">
+        <div className="inline-flex rounded-lg bg-muted p-1">
+          {TABS.map(([key, label, Icon]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={cn(
+                'flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                tab === key ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              <span className={cn(tab === key ? '' : 'hidden sm:inline')}>{label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {tab === 'profile' && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              Profile Photo
-            </CardTitle>
-            <CardDescription>
-              Upload a profile photo to personalize your account
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-6">
+          <CardContent className="space-y-5 p-4 sm:p-6">
+            <div className="flex items-center gap-4">
               <div className="relative">
-                <Avatar className="h-24 w-24">
-                  <AvatarImage 
-                    src={user?.avatarUrl || undefined} 
-                    alt={user?.displayName || 'User'} 
-                  />
-                  <AvatarFallback className="text-2xl bg-primary/10 text-primary">
-                    {userInitials}
-                  </AvatarFallback>
+                <Avatar className="h-20 w-20">
+                  <AvatarImage src={user?.avatarUrl || undefined} alt={user?.displayName || 'User'} />
+                  <AvatarFallback className="bg-primary/10 text-2xl text-primary">{userInitials}</AvatarFallback>
                 </Avatar>
                 {uploading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-background/80 rounded-full">
+                  <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/80">
                     <Spinner className="h-6 w-6" />
                   </div>
                 )}
               </div>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col items-start gap-1">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -478,398 +515,223 @@ export default function SettingsPage() {
                   className="hidden"
                   id="photo-upload"
                 />
-                <Button
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                >
-                  <Camera className="h-4 w-4 mr-2" />
-                  {user?.avatarUrl ? 'Change Photo' : 'Upload Photo'}
-                </Button>
-                {user?.avatarUrl && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handlePhotoDelete}
-                    disabled={uploading}
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Remove Photo
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                    <Camera className="mr-1.5 h-4 w-4" />
+                    {user?.avatarUrl ? 'Change' : 'Upload photo'}
                   </Button>
-                )}
+                  {user?.avatarUrl && (
+                    <Button variant="ghost" size="sm" onClick={handlePhotoDelete} disabled={uploading} className="text-destructive hover:text-destructive">
+                      <Trash2 className="mr-1.5 h-4 w-4" />
+                      Remove
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">JPEG, PNG, WebP or GIF. Max 5MB.</p>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="firstName">First name</Label>
+                <Input id="firstName" value={profile.firstName} onChange={(e) => setProfile((p) => ({ ...p, firstName: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lastName">Last name</Label>
+                <Input id="lastName" value={profile.lastName} onChange={(e) => setProfile((p) => ({ ...p, lastName: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  {hasSmsFeature ? (
+                    <Badge variant="secondary" className="text-xs">
+                      <Smartphone className="mr-1 h-3 w-3" />
+                      SMS enabled
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-xs">Upgrade for SMS</Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <Input id="phone" type="tel" value={profile.phone} onChange={(e) => setProfile((p) => ({ ...p, phone: e.target.value }))} placeholder="+1 (555) 123-4567" className="flex-1" />
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  JPEG, PNG, WebP or GIF. Max 5MB.
+                  {hasSmsFeature ? 'Used for SMS notifications and alerts.' : 'Add a number now; SMS alerts need the Basic or Premium plan.'}
                 </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Profile Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              Profile Information
-            </CardTitle>
-            <CardDescription>
-              Update your personal details and contact information
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="firstName">First Name</Label>
-                <Input
-                  id="firstName"
-                  value={profile.firstName}
-                  onChange={(e) => setProfile(prev => ({ ...prev, firstName: e.target.value }))}
-                  placeholder="Enter your first name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name</Label>
-                <Input
-                  id="lastName"
-                  value={profile.lastName}
-                  onChange={(e) => setProfile(prev => ({ ...prev, lastName: e.target.value }))}
-                  placeholder="Enter your last name"
-                />
-              </div>
-            </div>
-            <Separator />
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="phone">Phone Number</Label>
-                {hasSmsFeature ? (
-                  <Badge variant="secondary" className="text-xs">
-                    <Smartphone className="h-3 w-3 mr-1" />
-                    SMS Enabled
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-xs">
-                    Upgrade for SMS
-                  </Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={profile.phone}
-                  onChange={(e) => setProfile(prev => ({ ...prev, phone: e.target.value }))}
-                  placeholder="+1 (555) 123-4567"
-                  className="flex-1"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {hasSmsFeature 
-                  ? 'Your phone number will be used for SMS notifications and alerts.'
-                  : 'Add your phone number to receive SMS notifications. Upgrade to Basic or Premium to enable SMS alerts.'
-                }
-              </p>
-            </div>
             <div className="flex justify-end">
               <Button onClick={handleSaveProfile} disabled={savingProfile}>
-                {savingProfile ? <Spinner className="h-4 w-4 mr-2" /> : null}
-                Save Profile
+                {savingProfile ? <Spinner className="mr-2 h-4 w-4" /> : null}
+                Save profile
               </Button>
             </div>
           </CardContent>
         </Card>
+      )}
 
-        {/* Notifications */}
+      {tab === 'notifications' && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bell className="h-5 w-5" />
-              Notifications
-            </CardTitle>
-            <CardDescription>
-              Choose how you want to be notified about events and updates
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="email-notifications">Email Notifications</Label>
-                <p className="text-sm text-muted-foreground">Receive updates via email</p>
-              </div>
-              <Switch
-                id="email-notifications"
-                checked={settings.emailNotifications}
-                onCheckedChange={() => handleToggle('emailNotifications')}
-              />
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="push-notifications">Push Notifications</Label>
-                <p className="text-sm text-muted-foreground">Receive push notifications on your devices</p>
-              </div>
-              <Switch
-                id="push-notifications"
-                checked={settings.pushNotifications}
-                onCheckedChange={() => handleToggle('pushNotifications')}
-              />
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="sms-notifications">SMS Notifications</Label>
-                  {!hasSmsFeature && (
-                    <Badge variant="outline" className="text-xs">Basic+</Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {hasSmsFeature 
-                    ? 'Receive text message alerts' 
-                    : 'Upgrade to Basic or Premium to enable SMS alerts'
-                  }
-                </p>
-                {!profile.phone && hasSmsFeature && (
-                  <p className="text-xs text-amber-600">Add a phone number in Profile to receive SMS</p>
-                )}
-              </div>
+          <CardContent className="divide-y p-4 sm:px-6 sm:py-2">
+            <Row label="Email" htmlFor="email-notifications" hint="Updates by email">
+              <Switch id="email-notifications" checked={settings.emailNotifications} onCheckedChange={() => handleToggle('emailNotifications')} />
+            </Row>
+            <Row label="Push" htmlFor="push-notifications" hint="Notifications on this device">
+              <Switch id="push-notifications" checked={settings.pushNotifications} onCheckedChange={() => handleToggle('pushNotifications')} />
+            </Row>
+            <Row
+              label="SMS"
+              htmlFor="sms-notifications"
+              badge={!hasSmsFeature ? <Badge variant="outline" className="text-xs">Basic+</Badge> : undefined}
+              hint={
+                !hasSmsFeature ? (
+                  'Upgrade to Basic or Premium for text alerts'
+                ) : !profile.phone ? (
+                  <span className="text-amber-600">Add a phone number in Profile first</span>
+                ) : (
+                  'Text message alerts'
+                )
+              }
+            >
               {!hasSmsFeature ? (
                 <Button variant="outline" size="sm" asChild>
                   <Link href="/subscription">Upgrade</Link>
                 </Button>
               ) : (
-                <Switch
-                  id="sms-notifications"
-                  checked={settings.smsNotifications}
-                  onCheckedChange={() => handleToggle('smsNotifications')}
-                  disabled={!profile.phone}
-                />
+                <Switch id="sms-notifications" checked={settings.smsNotifications} onCheckedChange={() => handleToggle('smsNotifications')} disabled={!profile.phone} />
               )}
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
+            </Row>
+            <Row label="Event reminders" htmlFor="event-reminders" hint="Remind me before events start">
+              <Switch id="event-reminders" checked={settings.eventReminders} onCheckedChange={() => handleToggle('eventReminders')} />
+            </Row>
+            <Row label="Location alerts" htmlFor="location-alerts" hint="Geofence and location alerts">
+              <Switch id="location-alerts" checked={settings.locationAlerts} onCheckedChange={() => handleToggle('locationAlerts')} />
+            </Row>
+            <Row label="Weekly digest" htmlFor="weekly-digest" hint="A weekly summary email">
+              <Switch id="weekly-digest" checked={settings.weeklyDigest} onCheckedChange={() => handleToggle('weeklyDigest')} />
+            </Row>
+            <div className="space-y-3 py-3">
               <div>
-                <Label htmlFor="event-reminders">Event Reminders</Label>
-                <p className="text-sm text-muted-foreground">Get reminded before events start</p>
-              </div>
-              <Switch
-                id="event-reminders"
-                checked={settings.eventReminders}
-                onCheckedChange={() => handleToggle('eventReminders')}
-              />
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="location-alerts">Location Alerts</Label>
-                <p className="text-sm text-muted-foreground">Receive geofence and location alerts</p>
-              </div>
-              <Switch
-                id="location-alerts"
-                checked={settings.locationAlerts}
-                onCheckedChange={() => handleToggle('locationAlerts')}
-              />
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="weekly-digest">Weekly Digest</Label>
-                <p className="text-sm text-muted-foreground">Receive a weekly summary email</p>
-              </div>
-              <Switch
-                id="weekly-digest"
-                checked={settings.weeklyDigest}
-                onCheckedChange={() => handleToggle('weeklyDigest')}
-              />
-            </div>
-            <Separator />
-            <div className="space-y-3">
-              <div>
-                <Label>Default Reminder Times</Label>
-                <p className="text-sm text-muted-foreground">
-                  New events start with these reminders already selected. You can still change them on each event.
-                </p>
+                <Label className="text-sm font-medium">Default reminder times</Label>
+                <p className="text-xs text-muted-foreground">New events start with these selected. You can change them per event.</p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
-                {DEFAULT_REMINDER_CHOICES.map((opt) => (
-                  <div key={opt.value} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`default-reminder-${opt.value}`}
-                      checked={defaultReminders.includes(opt.value)}
-                      onCheckedChange={(checked) => handleToggleDefaultReminder(opt.value, checked === true)}
-                      disabled={settingsLoading || (!tierLoading && !access?.featureFlags.customReminderTimes && opt.value !== 15)}
-                    />
-                    <label htmlFor={`default-reminder-${opt.value}`} className="text-sm cursor-pointer">
-                      {opt.label}{!tierLoading && !access?.featureFlags.customReminderTimes && opt.value !== 15 ? ' (Basic)' : ''}
-                    </label>
-                  </div>
-                ))}
+                {DEFAULT_REMINDER_CHOICES.map((opt) => {
+                  const locked = !tierLoading && !access?.featureFlags.customReminderTimes && opt.value !== 15
+                  return (
+                    <div key={opt.value} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`default-reminder-${opt.value}`}
+                        checked={defaultReminders.includes(opt.value)}
+                        onCheckedChange={(checked) => handleToggleDefaultReminder(opt.value, checked === true)}
+                        disabled={settingsLoading || locked}
+                      />
+                      <label htmlFor={`default-reminder-${opt.value}`} className="cursor-pointer text-sm">
+                        {opt.label}{locked ? ' (Basic)' : ''}
+                      </label>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           </CardContent>
         </Card>
+      )}
 
-        {/* Calendar & Task Sync - renamed from "Calendar Sync" since this
-            section also covers the one-off .ics file/URL import, not just
-            ongoing Google/Apple sync. */}
+      {tab === 'security' && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <RefreshCw className="h-5 w-5" />
-              Calendar &amp; Task Sync
-            </CardTitle>
-            <CardDescription>
-              Connect Google or Apple Calendar, or import from any calendar app
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">
-                  Sync with external calendars, or import a .ics file from Outlook, Android, or iOS
-                </p>
-              </div>
-              <Button variant="outline" asChild>
-                <Link href="/settings/calendar-sync">
-                  Manage
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Security */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Lock className="h-5 w-5" />
-              Security
-            </CardTitle>
-            <CardDescription>
-              Manage your account security settings
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Password</Label>
-                <p className="text-sm text-muted-foreground">Change your account password</p>
-              </div>
+          <CardContent className="space-y-1 p-4 sm:px-6 sm:py-3">
+            <Row label="Password" hint="Change your account password">
               <ChangePasswordButton />
+            </Row>
+            <Separator />
+            <div className="py-3">
+              <TwoFactorSettings />
             </div>
             <Separator />
-            <TwoFactorSettings />
-          <Separator />
-          <ActiveSessions />
+            <div className="py-3">
+              <ActiveSessions />
+            </div>
           </CardContent>
         </Card>
+      )}
 
-        {/* Preferences */}
+      {tab === 'preferences' && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe className="h-5 w-5" />
-              Preferences
-            </CardTitle>
-            <CardDescription>
-              Customize your app experience
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {mounted && resolvedTheme === 'dark' ? (
-                  <Moon className="h-5 w-5 text-muted-foreground" />
-                ) : (
-                  <Sun className="h-5 w-5 text-muted-foreground" />
-                )}
-                <div>
-                  <Label htmlFor="dark-mode">Dark Mode</Label>
-                  <p className="text-sm text-muted-foreground">Use dark theme</p>
-                </div>
+          <CardContent className="divide-y p-4 sm:px-6 sm:py-2">
+            <Row
+              label="Dark mode"
+              htmlFor="dark-mode"
+              hint="Use the dark theme"
+            >
+              <div className="flex items-center gap-2">
+                {mounted && resolvedTheme === 'dark' ? <Moon className="h-4 w-4 text-muted-foreground" /> : <Sun className="h-4 w-4 text-muted-foreground" />}
+                <Switch id="dark-mode" checked={mounted ? resolvedTheme === 'dark' : false} onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')} />
               </div>
-              <Switch
-                id="dark-mode"
-                checked={mounted ? resolvedTheme === 'dark' : false}
-                onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
-              />
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Language</Label>
-                <p className="text-sm text-muted-foreground">Select your preferred language</p>
-              </div>
+            </Row>
+            <Row label="Language" hint="Your preferred language">
               <select
                 value={settings.language}
-                onChange={(e) => setSettings(prev => ({ ...prev, language: e.target.value }))}
+                onChange={(e) => setSettings((prev) => ({ ...prev, language: e.target.value }))}
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="en">English</option>
                 <option value="es">Spanish</option>
                 <option value="fr">French</option>
               </select>
-            </div>
+            </Row>
           </CardContent>
         </Card>
+      )}
 
-        {/* Danger Zone */}
-        <Card className="border-destructive/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-destructive">
-              <Shield className="h-5 w-5" />
-              Danger Zone
-            </CardTitle>
-            <CardDescription>
-              Irreversible actions for your account
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Export Data</Label>
-                <p className="text-sm text-muted-foreground">
-                  Download everything Togethr stores about you: profile, families, location history, events, tasks,
-                  reminders, notifications, SOS alerts, billing and account activity. Choose Excel to read it, or JSON for a complete machine-readable copy.
-                </p>
-              </div>
-              <div className="flex shrink-0 gap-2">
-                <Button variant="outline" onClick={() => handleExportData('xlsx')} disabled={exporting}>
-                  {exporting ? <Spinner className="w-4 h-4 mr-2" /> : <Download className="w-4 h-4 mr-2" />}
-                  Excel
-                </Button>
-                <Button variant="outline" onClick={() => handleExportData('json')} disabled={exporting}>
-                  JSON
-                </Button>
-              </div>
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-amber-600">Reset Account</Label>
-                <p className="text-sm text-muted-foreground">Clear all data and start fresh (keeps your login)</p>
-              </div>
-              <Button variant="outline" className="text-amber-600 border-amber-600 hover:bg-amber-50" onClick={() => setShowResetDialog(true)}>
-                <RotateCcw className="w-4 h-4 mr-2" />
-                Reset Account
-              </Button>
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-destructive">Delete Account</Label>
-                <p className="text-sm text-muted-foreground">Permanently delete your account and all data</p>
-              </div>
-              <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete Account
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      {tab === 'account' && (
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="p-4 sm:px-6 sm:py-3">
+              <Row
+                label="Export my data"
+                hint="Profile, families, locations, events, tasks, reminders, notifications, SOS alerts, billing and activity. Excel to read, JSON for a complete copy."
+              >
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => handleExportData('xlsx')} disabled={exporting}>
+                    {exporting ? <Spinner className="mr-1.5 h-4 w-4" /> : <Download className="mr-1.5 h-4 w-4" />}
+                    Excel
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => handleExportData('json')} disabled={exporting}>
+                    JSON
+                  </Button>
+                </div>
+              </Row>
+            </CardContent>
+          </Card>
 
-        {/* Delete Account Dialog */}
+          <Card className="border-destructive/40">
+            <CardContent className="divide-y p-4 sm:px-6 sm:py-2">
+              <p className="flex items-center gap-2 pb-2 text-sm font-semibold text-destructive sm:pt-2">
+                <Shield className="h-4 w-4" />
+                Danger zone
+              </p>
+              <Row label="Reset account" hint="Clear all data and start fresh (keeps your login)">
+                <Button variant="outline" size="sm" className="border-amber-600 text-amber-600 hover:bg-amber-50" onClick={() => setShowResetDialog(true)}>
+                  <RotateCcw className="mr-1.5 h-4 w-4" />
+                  Reset
+                </Button>
+              </Row>
+              <Row label="Delete account" hint="Permanently delete your account and all data">
+                <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
+                  <Trash2 className="mr-1.5 h-4 w-4" />
+                  Delete
+                </Button>
+              </Row>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Delete Account Dialog */}
         <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
           <DialogContent>
             <DialogHeader>
@@ -950,13 +812,6 @@ export default function SettingsPage() {
           </DialogContent>
         </Dialog>
 
-        <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? <Spinner className="w-4 h-4 mr-2" /> : null}
-            Save Changes
-          </Button>
-        </div>
-      </div>
     </div>
   )
 }
