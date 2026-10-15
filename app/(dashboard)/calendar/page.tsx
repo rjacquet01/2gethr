@@ -355,7 +355,7 @@ export default function CalendarPage() {
                             )}
                             style={eventStyle(event)}
                           >
-                            {!event.allDay && (
+                            {!(event.allDay || (event as any).isAllDay) && (
                               <span className="opacity-80 mr-1">
                                 {format(parseISO(event.startTime), 'h:mma').toLowerCase()}
                               </span>
@@ -408,7 +408,7 @@ export default function CalendarPage() {
                         <div className={cn('w-1 h-full min-h-12 rounded-full', eventBg(event))} style={eventStyle(event)} />
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-foreground">{event.title}</p>
-                          {!event.allDay && (
+                          {!(event.allDay || (event as any).isAllDay) && (
                             <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
                               <Clock className="w-3 h-3" />
                               {format(parseISO(event.startTime), 'h:mm a')} - {format(parseISO(event.endTime), 'h:mm a')}
