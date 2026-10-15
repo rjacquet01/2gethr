@@ -226,9 +226,9 @@ export default function CalendarPage() {
         </div>
         
         {/* Filters Row */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="flex-1 sm:w-44 sm:flex-none h-10 text-sm">
+            <SelectTrigger className="min-w-0 flex-1 sm:w-44 sm:flex-none h-10 text-sm">
               <Filter className="w-4 h-4 mr-2 shrink-0" />
               <SelectValue />
             </SelectTrigger>
@@ -258,7 +258,7 @@ export default function CalendarPage() {
             </Select>
           )}
 
-          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="flex-1 sm:flex-none">
+          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="w-full sm:w-auto sm:flex-none">
             <TabsList className="grid w-full grid-cols-3 h-10">
               <TabsTrigger value="month" className="text-sm">Month</TabsTrigger>
               <TabsTrigger value="week" className="text-sm">Week</TabsTrigger>

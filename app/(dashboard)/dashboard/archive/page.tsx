@@ -413,7 +413,7 @@ export default function ArchivePage() {
               {g.label}
               <span className="ml-1 text-xs font-normal">{g.rows.length}</span>
             </h2>
-            <div className="grid gap-2 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
               {g.rows.map((it) => {
                 const meta = KIND_META[it.kind]
                 const Icon = meta.icon
@@ -423,7 +423,7 @@ export default function ArchivePage() {
                   <div
                     key={it.key}
                     className={cn(
-                      'flex items-center gap-3 rounded-lg border bg-card p-3',
+                      'flex min-w-0 items-center gap-3 rounded-lg border bg-card p-3',
                       isSel && 'border-primary bg-primary/5'
                     )}
                   >

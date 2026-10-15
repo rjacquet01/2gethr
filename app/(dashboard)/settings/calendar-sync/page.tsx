@@ -373,9 +373,9 @@ function CalendarSyncContent() {
       </div>
 
       {tab === 'accounts' && (
-        <div className="grid items-start gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
           {/* Google */}
-          <Card>
+          <Card className="min-w-0">
             <CardContent className="space-y-1 p-4">
               <div className="flex items-center gap-3 pb-2">
                 <GoogleCalendarIcon className="h-8 w-8 shrink-0" />
@@ -782,7 +782,7 @@ function AppleCalendarCard() {
   }
 
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardContent className="space-y-1 p-4">
         <div className="flex items-center gap-3 pb-2">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
