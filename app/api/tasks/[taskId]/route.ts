@@ -4,6 +4,7 @@ import { getUserFromRequest } from '@/lib/auth'
 import { notifyTaskCompleted, createNotification } from '@/lib/notifications'
 import { ensureAssignmentColumns, isSupervisorRole } from '@/lib/assignment'
 import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
+import { taskInvolvesUser } from '@/lib/guest-scope'
 
 // Helper to sync task status updates across all related tables
 async function syncTaskStatusUpdate(
@@ -130,12 +131,16 @@ export async function GET(
     
     // Verify user has access to this family
     const membership = await sql`
-      SELECT 1 FROM family_members
+      SELECT role FROM family_members
       WHERE family_id = ${task[0].family_id} AND user_id = ${user.id} AND is_active = true
     `
-    
+
     if (membership.length === 0) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    // Guests only reach tasks they created or are assigned to.
+    if (membership[0].role === 'GUEST' && !taskInvolvesUser(task[0], user.id)) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     }
     
     // Get task history
@@ -203,7 +208,10 @@ export async function PATCH(
     if (membership.length === 0) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
-    
+    if (membership[0].role === 'GUEST' && !taskInvolvesUser(task, user.id)) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+    }
+
     // Assignment approval / acceptance
     if (action === 'accept_assignment' || action === 'decline_assignment') {
       await ensureAssignmentColumns()
@@ -590,10 +598,13 @@ export async function DELETE(
     if (membership.length === 0) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
-    
+    if (membership[0].role === 'GUEST' && !taskInvolvesUser(task[0], user.id)) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+    }
+
     const isCreator = task[0].created_by_id === user.id
     const isOwner = membership[0].role === 'owner'
-    
+
     if (!isCreator && !isOwner) {
       return NextResponse.json({ error: 'Only task creator or family owner can delete' }, { status: 403 })
     }

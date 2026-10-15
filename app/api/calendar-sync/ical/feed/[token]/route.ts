@@ -3,6 +3,7 @@ import { sql } from '@/lib/db'
 import { ensureSyncSchema } from '@/lib/sync-schema'
 import { checkFamilySubscription } from '@/lib/auth'
 import { getTierDefinition } from '@/lib/subscription-tiers'
+import { guestScopeUserId } from '@/lib/guest-scope'
 
 // Public, unauthenticated ICS feed. Security comes from the `token` being an
 // unguessable random value (calendar_sync_connections.ical_token) rather than
@@ -151,6 +152,9 @@ export async function GET(
     if (u[0]?.timezone) timeZone = u[0].timezone
   }
 
+  // A guest's feed only carries the events/tasks that involve them.
+  const guestUserId = await guestScopeUserId(familyId, feedUserId)
+
   // Export a rolling window: 3 months back, 12 months ahead, so the feed
   // doesn't grow unbounded but still covers most calendar apps' default view.
   const events = include.has('events')
@@ -163,6 +167,8 @@ export async function GET(
         AND e.status != 'CANCELLED'
         AND e.start_time >= NOW() - INTERVAL '3 months'
         AND e.start_time <= NOW() + INTERVAL '12 months'
+        AND (${guestUserId}::text IS NULL OR e.created_by_id = ${guestUserId}
+             OR EXISTS (SELECT 1 FROM event_participants ep WHERE ep.event_id = e.id AND ep.user_id = ${guestUserId}))
         ORDER BY e.start_time ASC
       `
     : []
@@ -184,6 +190,7 @@ export async function GET(
           AND t.due_date >= NOW() - INTERVAL '3 months'
           AND t.due_date <= NOW() + INTERVAL '12 months'
           AND (t.status != 'COMPLETED' OR t.due_date >= NOW() - INTERVAL '14 days')
+          AND (${guestUserId}::text IS NULL OR t.created_by_id = ${guestUserId} OR t.assigned_to_id = ${guestUserId})
         ORDER BY t.due_date ASC
       `
     : []

@@ -1,6 +1,7 @@
 import { sql } from '@/lib/db'
 import { decrypt } from '@/lib/encryption'
 import { ensureSyncSchema } from '@/lib/sync-schema'
+import { guestScopeUserId } from '@/lib/guest-scope'
 import {
   buildVTodo,
   deleteCalDavItem,
@@ -178,12 +179,15 @@ export async function syncAppleReminders(
   }
 
   // ---------------------------------------------------------------- push: tasks
+  // A guest only pushes the tasks they created or are assigned to.
+  const guestUserId = await guestScopeUserId(familyId, userId)
   const tasks = await sql`
     SELECT t.id, t.title, t.description, t.due_date, t.status, t.updated_at,
            st.id AS map_id, st.apple_reminder_uid, st.last_synced_at
     FROM tasks t
     LEFT JOIN synced_tasks st ON st.familyhub_task_id = t.id AND st.connection_id = ${connection.id}
     WHERE t.family_id = ${familyId}
+      AND (${guestUserId}::text IS NULL OR t.created_by_id = ${guestUserId} OR t.assigned_to_id = ${guestUserId})
       AND t.status NOT IN ('ARCHIVED', 'CANCELLED')
       AND (t.due_date IS NOT NULL OR st.id IS NOT NULL)
       AND (st.id IS NULL OR t.updated_at > st.last_synced_at)

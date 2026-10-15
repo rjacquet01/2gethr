@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { createNotification } from "@/lib/notifications"
+import { guestCanSeeEvent } from "@/lib/guest-scope"
 
 const approvalSchema = z.object({
   action: z.enum(["APPROVE", "REJECT"]),
@@ -42,6 +43,14 @@ export async function POST(
     }
 
     const event = events[0]
+
+    // Guests can't approve anything; an event they can't see is simply not found.
+    if (event.role === "GUEST" && !(await guestCanSeeEvent(user.id, eventId))) {
+      return NextResponse.json(
+        { success: false, error: "Event not found or access denied" },
+        { status: 404 }
+      )
+    }
 
     if (event.role !== "PARENT" && event.role !== "GUARDIAN") {
       return NextResponse.json(

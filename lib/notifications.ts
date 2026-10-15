@@ -350,7 +350,8 @@ export async function notifyFamilyAboutEvent(
   channels?: NotificationChannel[], // from the event's notify_channels column, if the creator picked any
   skipUserIds: string[] = [] // people who get their own (forced) notification instead
 ): Promise<void> {
-  // Notify ALL active family members with linked accounts
+  // Notify ALL active family members with linked accounts - except guests,
+  // who only hear about events they are invited to (via their own invitation).
   let members
   if (excludeUserId) {
     members = await sql`
@@ -360,6 +361,7 @@ export async function notifyFamilyAboutEvent(
       WHERE fm.family_id = ${familyId}
         AND fm.is_active = true
         AND fm.user_id IS NOT NULL
+        AND fm.role <> 'GUEST'
         AND fm.user_id != ${excludeUserId}
     `
   } else {
@@ -370,6 +372,7 @@ export async function notifyFamilyAboutEvent(
       WHERE fm.family_id = ${familyId}
         AND fm.is_active = true
         AND fm.user_id IS NOT NULL
+        AND fm.role <> 'GUEST'
     `
   }
   

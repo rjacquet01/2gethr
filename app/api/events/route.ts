@@ -7,6 +7,7 @@ import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/li
 import { notifyFamilyAboutEvent, createNotification, type NotificationChannel } from "@/lib/notifications" // Event notifications
 import { z } from "zod"
 import { planGateError } from "@/lib/tier-gates"
+import { getGuestFamilyIds, filterEventsForGuest } from "@/lib/guest-scope"
 import { generateOccurrences, isValidTimeZone, recurrenceFromPreset, type RecurrenceInput } from "@/lib/recurrence"
 
 const createEventSchema = z.object({
@@ -231,7 +232,21 @@ export async function GET(request: NextRequest) {
         LIMIT 500
       `
     }
-    
+
+    // Guests only see events they created or were invited to, and never a
+    // saved place's address (family location data).
+    const guestFamilyIds = await getGuestFamilyIds(user.id)
+    if (guestFamilyIds.length > 0) {
+      let scopeFamilyId: string | null = familyId
+      if (!scopeFamilyId && calendarId) {
+        const cal = await sql`SELECT family_id FROM calendars WHERE id = ${calendarId} LIMIT 1`
+        scopeFamilyId = cal[0]?.family_id ?? null
+      }
+      const familyOf = (e: Record<string, any>) => (e.family_id as string | undefined) ?? scopeFamilyId
+      events = await filterEventsForGuest(events as Array<Record<string, any> & { id: string }>, user.id, familyOf, guestFamilyIds)
+      events = events.map((e) => (guestFamilyIds.includes(familyOf(e) ?? "") ? { ...e, place_address: null } : e))
+    }
+
     // Apply history limit based on subscription (for past events)
     // FREE: 30 days, PREMIUM (Basic): 90 days, PREMIUM_PLUS (Premium): 365 days
     const effectiveFamilyId = familyId || (events[0]?.family_id ? events[0].family_id : null)

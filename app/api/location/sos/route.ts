@@ -15,7 +15,8 @@ const schema = z.object({
   longitude: z.number().min(-180).max(180).optional(),
 })
 
-// "I need help": immediately alerts every parent/guardian in the family on
+// "I need help": any non-guest member (adults included) can send it. It
+// immediately alerts every parent/guardian/adult in the family on
 // all channels (push, text, email, in-app) with a map link to the sender's
 // most recent location. Works from the web app (session) or the Android
 // background service (device token).

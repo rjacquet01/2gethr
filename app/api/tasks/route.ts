@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
+import { filterTasksForGuest } from '@/lib/guest-scope'
 import { notifyTaskAssigned, type NotificationChannel } from '@/lib/notifications'
 
 // GET - List tasks for the current user's families
@@ -113,7 +114,15 @@ export async function GET(request: NextRequest) {
         ORDER BY t.due_date ASC NULLS LAST, t.priority DESC, t.created_at DESC
       `
     }
-    
+
+    // Guests only see tasks they created or are assigned to.
+    const guestFamilyIds: string[] = memberships
+      .filter((m) => m.role === 'GUEST')
+      .map((m) => m.family_id as string)
+    if (guestFamilyIds.length > 0) {
+      tasks = await filterTasksForGuest(tasks, user.id, (t) => t.family_id, guestFamilyIds)
+    }
+
     return NextResponse.json({ data: tasks })
   } catch (error) {
     console.error('Tasks GET error:', error)

@@ -86,7 +86,10 @@ async function sendSmsWithRetry(to: string, body: string): Promise<{ ok: boolean
   return { ok: false, error: last }
 }
 
-/** Alert every parent/guardian (or, if none, every other member) on all channels in parallel. */
+/**
+ * Alert every parent, guardian and adult member (or, if there are none, every
+ * other non-guest member) on all channels in parallel. Guests never get SOS.
+ */
 export async function dispatchSos(input: SosInput): Promise<RecipientResult[]> {
   const { eventId, familyId, senderId, senderName, latitude, longitude, locationNote } = input
   const hasLoc = latitude != null && longitude != null
@@ -98,11 +101,11 @@ export async function dispatchSos(input: SosInput): Promise<RecipientResult[]> {
     JOIN users u ON u.id = fm.user_id
     LEFT JOIN reminder_settings rs ON rs.user_id = fm.user_id
     WHERE fm.family_id = ${familyId} AND fm.is_active = true AND fm.user_id != ${senderId}
-      AND fm.role IN ('PARENT', 'GUARDIAN')
+      AND fm.role IN ('PARENT', 'GUARDIAN', 'ADULT')
   `
   if (recipients.length === 0) {
-    // No other parent/guardian: an emergency should still reach whoever is in
-    // the family - but never guests, who get no location data.
+    // No other grown-up: an emergency should still reach whoever is in the
+    // family - but never guests, who get no location data.
     recipients = await sql`
       SELECT fm.user_id, u.email, u.phone, u.first_name, rs.email_enabled, rs.sms_enabled
       FROM family_members fm

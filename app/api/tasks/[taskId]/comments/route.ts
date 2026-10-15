@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { notifyTaskComment } from '@/lib/notifications'
+import { taskInvolvesUser } from '@/lib/guest-scope'
 
 // POST - Add a comment to a task
 export async function POST(
@@ -24,7 +25,7 @@ export async function POST(
 
     // Verify task exists and user has access
     const task = await sql`
-      SELECT family_id, assigned_to_id, title FROM tasks WHERE id = ${taskId}
+      SELECT family_id, assigned_to_id, created_by_id, title FROM tasks WHERE id = ${taskId}
     `
 
     if (task.length === 0) {
@@ -32,12 +33,16 @@ export async function POST(
     }
 
     const membership = await sql`
-      SELECT 1 FROM family_members
+      SELECT role FROM family_members
       WHERE family_id = ${task[0].family_id} AND user_id = ${user.id} AND is_active = true
     `
 
     if (membership.length === 0) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    // Guests only reach tasks they created or are assigned to.
+    if (membership[0].role === 'GUEST' && !taskInvolvesUser(task[0], user.id)) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     }
 
     const commentId = crypto.randomUUID()
@@ -100,7 +105,7 @@ export async function PATCH(
     }
 
     const task = await sql`
-      SELECT family_id, assigned_to_id, title FROM tasks WHERE id = ${taskId}
+      SELECT family_id, assigned_to_id, created_by_id, title FROM tasks WHERE id = ${taskId}
     `
 
     if (task.length === 0) {
@@ -108,12 +113,15 @@ export async function PATCH(
     }
 
     const membership = await sql`
-      SELECT 1 FROM family_members
+      SELECT role FROM family_members
       WHERE family_id = ${task[0].family_id} AND user_id = ${user.id} AND is_active = true
     `
 
     if (membership.length === 0) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    if (membership[0].role === 'GUEST' && !taskInvolvesUser(task[0], user.id)) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     }
 
     const existing = await sql`

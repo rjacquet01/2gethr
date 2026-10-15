@@ -6,6 +6,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { planGateError } from "@/lib/tier-gates"
+import { guestCanSeeEvent } from "@/lib/guest-scope"
 
 const updateEventSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -48,7 +49,7 @@ export async function GET(
     const events = await sql`
       SELECT 
         e.*,
-        c.name as calendar_name, c.color as calendar_color, c.family_id,
+        c.name as calendar_name, c.color as calendar_color, c.family_id, fm.role as member_role,
         u.first_name as creator_first_name, u.last_name as creator_last_name,
         sp.name as place_name, sp.address as place_address, sp.latitude, sp.longitude,
         rr.frequency, rr.interval, rr.days_of_week, rr.day_of_month, 
@@ -70,6 +71,14 @@ export async function GET(
     }
 
     const event = events[0]
+    // Guests only reach events they created or were invited to.
+    const viewerIsGuest = event.member_role === "GUEST"
+    if (viewerIsGuest && !(await guestCanSeeEvent(user.id, eventId))) {
+      return NextResponse.json(
+        { success: false, error: "Event not found or access denied" },
+        { status: 404 }
+      )
+    }
 
     // Get participants
     await ensureEventParticipantChildColumns()
@@ -137,12 +146,13 @@ export async function GET(
           color: event.calendar_color,
           familyId: event.family_id,
         },
+        // Guests get the place name only, never its address or coordinates.
         savedPlace: event.saved_place_id ? {
           id: event.saved_place_id,
           name: event.place_name,
-          address: event.place_address,
-          latitude: event.latitude,
-          longitude: event.longitude,
+          address: viewerIsGuest ? null : event.place_address,
+          latitude: viewerIsGuest ? null : event.latitude,
+          longitude: viewerIsGuest ? null : event.longitude,
         } : null,
         recurrence: event.is_recurring ? {
           frequency: event.frequency,
@@ -212,6 +222,12 @@ export async function PATCH(
     }
 
     const event = events[0]
+    if (event.role === "GUEST" && !(await guestCanSeeEvent(user.id, eventId))) {
+      return NextResponse.json(
+        { success: false, error: "Event not found or access denied" },
+        { status: 404 }
+      )
+    }
     const isOwner = event.created_by_id === user.id
     const isParent = event.role === "PARENT"
 
@@ -366,6 +382,12 @@ export async function DELETE(
     }
 
     const event = events[0]
+    if (event.role === "GUEST" && !(await guestCanSeeEvent(user.id, eventId))) {
+      return NextResponse.json(
+        { success: false, error: "Event not found or access denied" },
+        { status: 404 }
+      )
+    }
     const isOwner = event.created_by_id === user.id
     const isParent = event.role === "PARENT"
 

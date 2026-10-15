@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth'
 import { decrypt, encrypt } from '@/lib/encryption'
 import { sql } from '@/lib/db'
+import { guestScopeUserId } from '@/lib/guest-scope'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
@@ -273,12 +274,15 @@ export async function POST(request: NextRequest) {
     // BUG FIX: synced_tasks' column linking back to tasks is `familyhub_task_id`,
     // not `task_id` (see scripts/add-synced-tasks-table.sql) - the old name
     // doesn't exist, so this join always threw and task sync never ran.
+    // A guest only pushes the tasks they created or are assigned to.
+    const guestUserId = await guestScopeUserId(familyId, user.id)
     const tasks = await sql`
       SELECT t.id, t.title, t.description, t.due_date, t.status, t.updated_at,
              st.id as sync_id, st.google_task_id, st.last_synced_at
       FROM tasks t
       LEFT JOIN synced_tasks st ON t.id = st.familyhub_task_id AND st.connection_id = ${connection.id}
       WHERE t.family_id = ${familyId}
+      AND (${guestUserId}::text IS NULL OR t.created_by_id = ${guestUserId} OR t.assigned_to_id = ${guestUserId})
       AND t.due_date IS NOT NULL
       AND t.status NOT IN ('ARCHIVED', 'CANCELLED')
       AND (

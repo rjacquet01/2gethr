@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
+import { getGuestFamilyIds, guestCanSeeEvent, taskInvolvesUser } from "@/lib/guest-scope"
 
 // GET - Get user's favorites
 export async function GET(request: NextRequest) {
@@ -28,19 +29,35 @@ export async function GET(request: NextRequest) {
       `
     }
 
+    // Guests only get favorites for tasks/events that involve them, and no
+    // saved places at all, in the families where they are a guest.
+    const guestFamilyIds = await getGuestFamilyIds(user.id)
+
     // Fetch the actual items for each favorite
     const enrichedFavorites = await Promise.all(
       favorites.map(async (fav) => {
         let item = null
         if (fav.item_type === 'task') {
-          const tasks = await sql`SELECT id, title, status, priority, due_date FROM tasks WHERE id = ${fav.item_id}`
-          item = tasks[0] || null
+          const tasks = await sql`SELECT id, title, status, priority, due_date, family_id, created_by_id, assigned_to_id FROM tasks WHERE id = ${fav.item_id}`
+          const t = tasks[0]
+          if (t && (!guestFamilyIds.includes(t.family_id) || taskInvolvesUser(t, user.id))) {
+            item = { id: t.id, title: t.title, status: t.status, priority: t.priority, due_date: t.due_date }
+          }
         } else if (fav.item_type === 'event') {
-          const events = await sql`SELECT id, title, start_time, end_time, event_type FROM events WHERE id = ${fav.item_id}`
-          item = events[0] || null
+          const events = await sql`
+            SELECT e.id, e.title, e.start_time, e.end_time, e.event_type, c.family_id
+            FROM events e JOIN calendars c ON c.id = e.calendar_id WHERE e.id = ${fav.item_id}
+          `
+          const e = events[0]
+          if (e && (!guestFamilyIds.includes(e.family_id) || (await guestCanSeeEvent(user.id, e.id)))) {
+            item = { id: e.id, title: e.title, start_time: e.start_time, end_time: e.end_time, event_type: e.event_type }
+          }
         } else if (fav.item_type === 'place') {
-          const places = await sql`SELECT id, name, address, icon, color FROM saved_places WHERE id = ${fav.item_id}`
-          item = places[0] || null
+          const places = await sql`SELECT id, name, address, icon, color, family_id FROM saved_places WHERE id = ${fav.item_id}`
+          const p = places[0]
+          if (p && !guestFamilyIds.includes(p.family_id)) {
+            item = { id: p.id, name: p.name, address: p.address, icon: p.icon, color: p.color }
+          }
         }
         return { ...fav, item }
       })

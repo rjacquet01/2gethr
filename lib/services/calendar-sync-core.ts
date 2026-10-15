@@ -1,6 +1,7 @@
 import { sql } from '@/lib/db'
 import { encrypt, decrypt } from '@/lib/encryption'
 import { listCalDavItems, putCalDavItem, buildVEvent, parseIcsField, CalDavCredentials } from '@/lib/services/caldav'
+import { guestScopeUserId } from '@/lib/guest-scope'
 
 /**
  * Connection-row-scoped calendar sync logic, shared by:
@@ -190,6 +191,8 @@ export async function syncGoogleConnection(
   }
 
   if (syncDirection === 'export' || syncDirection === 'both') {
+    // A guest only exports the events that involve them.
+    const guestUserId = await guestScopeUserId(familyId, userId)
     const localEvents = await sql`
       SELECT e.id, e.title, e.description, e.location,
              e.start_time, e.end_time, e.is_all_day
@@ -201,6 +204,8 @@ export async function syncGoogleConnection(
       AND e.status != 'CANCELLED'
       AND e.start_time >= NOW()
       AND se.id IS NULL
+      AND (${guestUserId}::text IS NULL OR e.created_by_id = ${guestUserId}
+           OR EXISTS (SELECT 1 FROM event_participants ep WHERE ep.event_id = e.id AND ep.user_id = ${guestUserId}))
       LIMIT 50
     `
 
@@ -368,6 +373,8 @@ export async function syncAppleConnection(
   }
 
   if (syncDirection === 'export' || syncDirection === 'both') {
+    // A guest only exports the events that involve them.
+    const guestUserId = await guestScopeUserId(familyId, userId)
     const localEvents = await sql`
       SELECT e.id, e.title, e.description, e.location, e.start_time, e.end_time, e.is_all_day
       FROM events e
@@ -377,6 +384,8 @@ export async function syncAppleConnection(
       AND e.status != 'CANCELLED'
       AND e.start_time >= NOW()
       AND se.id IS NULL
+      AND (${guestUserId}::text IS NULL OR e.created_by_id = ${guestUserId}
+           OR EXISTS (SELECT 1 FROM event_participants ep WHERE ep.event_id = e.id AND ep.user_id = ${guestUserId}))
       LIMIT 50
     `
 

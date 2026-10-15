@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
     // Get family ID
     const familyMembership = await sql`
-      SELECT family_id FROM family_members 
+      SELECT family_id, role FROM family_members
       WHERE user_id = ${user.id} AND is_active = true
       LIMIT 1
     `
@@ -23,13 +23,16 @@ export async function POST(request: NextRequest) {
     }
 
     const familyId = familyMembership[0].family_id
+    // A guest only archives tasks they created or are assigned to.
+    const guestUserId: string | null = familyMembership[0].role === "GUEST" ? user.id : null
 
     // Archive all completed or cancelled tasks
     const result = await sql`
-      UPDATE tasks 
+      UPDATE tasks
       SET status = 'ARCHIVED', updated_at = NOW()
       WHERE family_id = ${familyId}
       AND status IN ('COMPLETED', 'CANCELLED')
+      AND (${guestUserId}::text IS NULL OR created_by_id = ${guestUserId} OR assigned_to_id = ${guestUserId})
       RETURNING id
     `
 
@@ -65,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     // Get family ID
     const familyMembership = await sql`
-      SELECT family_id FROM family_members 
+      SELECT family_id, role FROM family_members
       WHERE user_id = ${user.id} AND is_active = true
       LIMIT 1
     `
@@ -75,12 +78,14 @@ export async function GET(request: NextRequest) {
     }
 
     const familyId = familyMembership[0].family_id
+    // Guests only see tasks they created or are assigned to.
+    const guestUserId: string | null = familyMembership[0].role === "GUEST" ? user.id : null
 
     const historyDays = await getHistoryDays(familyId)
 
     // Fetch archived tasks (only those inside the plan's history window)
     const archivedTasks = await sql`
-      SELECT 
+      SELECT
         t.id, t.title, t.description, t.status, t.priority, t.category,
         t.due_date, t.created_at, t.updated_at,
         u.first_name as creator_first_name, u.last_name as creator_last_name
@@ -89,6 +94,7 @@ export async function GET(request: NextRequest) {
       WHERE t.family_id = ${familyId}
       AND t.status = 'ARCHIVED'
       AND t.updated_at >= NOW() - make_interval(days => ${historyDays})
+      AND (${guestUserId}::text IS NULL OR t.created_by_id = ${guestUserId} OR t.assigned_to_id = ${guestUserId})
       ORDER BY t.updated_at DESC
       LIMIT 100
     `
