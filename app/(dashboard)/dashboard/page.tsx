@@ -38,6 +38,14 @@ import { useState, useEffect, useCallback } from 'react'
 import { format, isToday, isTomorrow, parseISO, isPast } from 'date-fns'
 import { authFetch } from '@/hooks/use-auth'
 import { Bell } from 'lucide-react'
+import {
+  FamilyStatusStrip,
+  AttentionBanner,
+  TodayTimeline,
+  TaskProgress,
+  DashboardActivityPanel,
+  DashboardShortcuts,
+} from '@/components/dashboard-widgets'
 
 export default function DashboardPage() {
   const { families, isLoading: familiesLoading } = useFamilies()
@@ -304,134 +312,27 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-3 grid-cols-2">
-        <Link href="/family">
-          <Card className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50 active:scale-[0.98]">
-            <CardContent className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 p-3 sm:p-6">
-              {/* Facepile of member profile photos instead of a generic icon.
-                  Capped at 3 avatars + a "+N" bubble so it stays legible in
-                  this small card; falls back to initials (matching the
-                  Family page) for members without a photo, and to the Users
-                  icon if the family somehow has no members. */}
-              <div className="flex items-center -space-x-2 sm:-space-x-3 shrink-0">
-                {visibleFamilyMembers.length > 0 ? (
-                  visibleFamilyMembers.map((member) => {
-                    const initials = member.displayName
-                      ?.split(' ')
-                      .map(n => n[0])
-                      .join('')
-                      .toUpperCase() || '?'
-                    return (
-                      <Avatar
-                        key={member.id}
-                        className="w-9 h-9 sm:w-11 sm:h-11 border-2 border-background"
-                      >
-                        <AvatarImage
-                          src={member.avatarUrl ? `/api/files?pathname=${encodeURIComponent(member.avatarUrl)}` : undefined}
-                          alt={member.displayName}
-                        />
-                        <AvatarFallback className="text-xs sm:text-sm bg-primary/10 text-primary">
-                          {initials}
-                        </AvatarFallback>
-                      </Avatar>
-                    )
-                  })
-                ) : (
-                  <div className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-primary/10 text-primary border-2 border-background">
-                    <Users className="w-4 h-4 sm:w-5 sm:h-5" />
-                  </div>
-                )}
-                {extraFamilyMemberCount > 0 && (
-                  <div className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-muted text-muted-foreground text-xs sm:text-sm font-medium border-2 border-background">
-                    +{extraFamilyMemberCount}
-                  </div>
-                )}
-              </div>
-              <div className="text-center sm:text-left">
-                <p className="text-xl sm:text-2xl font-bold">{primaryFamily.members?.length || 0}</p>
-                <p className="text-[10px] sm:text-sm text-muted-foreground leading-tight">Family</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
+      {/* Needs-attention banner (hidden when nothing is due) */}
+      <AttentionBanner
+        overdueTasks={overdueCount}
+        approvals={pendingApprovalTasks.length}
+        overdueReminders={reminders.filter((r) => isPast(parseISO(r.remind_at))).length}
+      />
 
-        <Link href="/dashboard/upcoming-events">
-          <Card className="cursor-pointer transition-all hover:shadow-md hover:border-blue-500/50 active:scale-[0.98]">
-            <CardContent className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 p-3 sm:p-6">
-              <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-blue-500/10 text-blue-500">
-                <Calendar className="w-5 h-5 sm:w-6 sm:h-6" />
-              </div>
-              <div className="text-center sm:text-left">
-                <p className="text-xl sm:text-2xl font-bold">{upcomingEvents.length}</p>
-                <p className="text-[10px] sm:text-sm text-muted-foreground leading-tight">Events</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      </div>
+      {/* Who is where right now */}
+      <FamilyStatusStrip familyId={primaryFamily.id} members={familyMembers} />
 
-      {/* Task Status Overview Bubbles */}
-      <div>
-        <h2 className="text-base sm:text-lg font-semibold mb-2 sm:mb-3">Task Status</h2>
-        <div className="grid gap-2 sm:gap-3 grid-cols-4">
-          <Link href="/tasks?status=pending">
-            <Card className="cursor-pointer transition-all hover:shadow-md hover:border-muted-foreground/50 active:scale-[0.98]">
-              <CardContent className="flex flex-col sm:flex-row items-center gap-1 sm:gap-3 p-2 sm:p-4">
-                <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-muted text-muted-foreground">
-                  <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
-                </div>
-                <div className="text-center sm:text-left">
-                  <p className="text-lg sm:text-xl font-bold">{taskStatusCounts.pending}</p>
-                  <p className="text-[9px] sm:text-xs text-muted-foreground">Pending</p>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
+      {/* Two-column layout: main content left, family activity right (stacks on phones) */}
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 lg:items-start">
+      <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
+      <TodayTimeline
+        events={events.filter((e) => e.status !== 'CANCELLED' && e.status !== 'REJECTED')}
+        reminders={reminders}
+        tasks={tasks}
+        loading={eventsLoading || tasksLoading || remindersLoading}
+      />
 
-          <Link href="/tasks?status=in_progress">
-            <Card className="cursor-pointer transition-all hover:shadow-md hover:border-blue-500/50 active:scale-[0.98]">
-              <CardContent className="flex flex-col sm:flex-row items-center gap-1 sm:gap-3 p-2 sm:p-4">
-                <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-blue-500/10 text-blue-500">
-                  <Play className="w-4 h-4 sm:w-5 sm:h-5" />
-                </div>
-                <div className="text-center sm:text-left">
-                  <p className="text-lg sm:text-xl font-bold">{taskStatusCounts.inProgress}</p>
-                  <p className="text-[9px] sm:text-xs text-muted-foreground">Active</p>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link href="/tasks?status=on_hold">
-            <Card className="cursor-pointer transition-all hover:shadow-md hover:border-yellow-500/50 active:scale-[0.98]">
-              <CardContent className="flex flex-col sm:flex-row items-center gap-1 sm:gap-3 p-2 sm:p-4">
-                <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-yellow-500/10 text-yellow-500">
-                  <Pause className="w-4 h-4 sm:w-5 sm:h-5" />
-                </div>
-                <div className="text-center sm:text-left">
-                  <p className="text-lg sm:text-xl font-bold">{taskStatusCounts.onHold}</p>
-                  <p className="text-[9px] sm:text-xs text-muted-foreground">Hold</p>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link href="/tasks?status=completed">
-            <Card className="cursor-pointer transition-all hover:shadow-md hover:border-green-500/50 active:scale-[0.98]">
-              <CardContent className="flex flex-col sm:flex-row items-center gap-1 sm:gap-3 p-2 sm:p-4">
-                <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-green-500/10 text-green-500">
-                  <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                </div>
-                <div className="text-center sm:text-left">
-                  <p className="text-lg sm:text-xl font-bold">{taskStatusCounts.completed}</p>
-                  <p className="text-[9px] sm:text-xs text-muted-foreground">Done</p>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        </div>
-      </div>
+      <TaskProgress counts={taskStatusCounts} overdue={overdueCount} />
 
       {/* Premium Banner */}
       {!access.hasPremium && purchaseUi.canPurchase && (
@@ -741,6 +642,13 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+      </div>
+
+      <div className="space-y-4 sm:space-y-6">
+        <DashboardActivityPanel familyId={primaryFamily.id} />
+        <DashboardShortcuts />
+      </div>
+      </div>
     </div>
   )
 }
