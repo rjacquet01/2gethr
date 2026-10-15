@@ -120,7 +120,9 @@ export default function TasksPage() {
     (!!user && t.assigned_to_id === user.id) || (!!t.child_profile_id && myChildIds.includes(t.child_profile_id))
 
   const awaitingAll = allTasks.filter((t) => norm(t.status) === 'pending_approval')
-  const defaultTab: Tab = isManager ? (awaitingAll.length > 0 ? 'approval' : 'everyone') : 'mine'
+  const defaultTab: Tab = isManager
+    ? awaitingAll.length > 0 ? 'approval' : 'everyone'
+    : allTasks.some(isMine) ? 'mine' : 'everyone'
   const tab = tabState ?? defaultTab
 
   const person = people.find((p) => p.key === personKey)
@@ -481,7 +483,7 @@ export default function TasksPage() {
                 personKey === p.key ? 'border-primary bg-primary/10 font-medium text-primary' : 'text-muted-foreground hover:bg-muted'
               )}
             >
-              {p.name.split(' ')[0]}
+              {p.name}
             </button>
           ))}
         </div>
