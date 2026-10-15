@@ -856,8 +856,8 @@ function AppleCalendarCard() {
               </a>{' '}
               → Sign-In and Security → App-Specific Passwords.
             </p>
-            <Input placeholder="Apple ID (email)" type="email" value={appleId} onChange={(e) => setAppleId(e.target.value)} />
-            <Input placeholder="App-specific password" type="password" value={appPassword} onChange={(e) => setAppPassword(e.target.value)} />
+            <Input placeholder="Apple ID (email)" type="email" autoComplete="off" value={appleId} onChange={(e) => setAppleId(e.target.value)} />
+            <Input placeholder="App-specific password" type="password" autoComplete="new-password" value={appPassword} onChange={(e) => setAppPassword(e.target.value)} />
             <Button onClick={handleConnect} disabled={connecting} className="w-full sm:w-auto">
               {connecting ? <Spinner className="mr-2 h-4 w-4" /> : <Calendar className="mr-2 h-4 w-4" />}
               Connect Apple Calendar

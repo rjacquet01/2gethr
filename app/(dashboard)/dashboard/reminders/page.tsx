@@ -74,6 +74,7 @@ interface Reminder {
   owner_last_name?: string
   child_profile_id?: string | null
   child_name?: string | null
+  created_by_id?: string | null
   notify_channels?: NotifyChannel[] | null
 }
 
@@ -377,7 +378,9 @@ function RemindersPageContent() {
   // those carry their own profile name too, so for a child viewer it's mine.
   const viewerIsChild = familyMembers.find((m) => m.userId === user?.id)?.role === 'CHILD'
   const isMine = useCallback(
-    (r: Reminder) => r.user_id === user?.id && (!r.child_name || viewerIsChild),
+    (r: Reminder) =>
+      r.user_id === user?.id &&
+      (!r.child_name || viewerIsChild || (!!r.created_by_id && r.created_by_id !== user?.id)),
     [user?.id, viewerIsChild]
   )
   const mineCount = reminders.filter(isMine).length
