@@ -112,7 +112,7 @@ export function ComingUp({
   }
   for (const t of tasks || []) {
     const raw = t.dueDate || t.due_date
-    if (!raw || (t.status !== 'pending' && t.status !== 'in_progress')) continue
+    if (!raw || (!['pending', 'in_progress'].includes((t.status || '').toLowerCase()))) continue
     const d = parseISO(raw)
     if (d > afterToday && d <= horizon)
       rows.push({ key: 't' + t.id, at: d, title: t.title, href: '/tasks', kind: 'task' })
