@@ -260,6 +260,29 @@ export async function DELETE(
       )
     }
 
+    // Don't orphan live billing: a family with an active Stripe subscription
+    // must cancel it in Manage Billing first, otherwise Stripe would keep
+    // charging a family that no longer exists. (Free plans and local free
+    // trials have no stripe_subscription_id and are never blocked.)
+    const liveBilling = await sql`
+      SELECT 1 FROM subscriptions
+      WHERE family_id = ${familyId}
+        AND stripe_subscription_id IS NOT NULL
+        AND status::text IN ('ACTIVE', 'TRIALING', 'PAST_DUE', 'UNPAID')
+        AND COALESCE(cancel_at_period_end, false) = false
+      LIMIT 1
+    `
+    if (liveBilling.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "This family has an active paid subscription. Cancel it first under Subscription > Manage Billing, then delete the family.",
+        },
+        { status: 409 }
+      )
+    }
+
     // Soft delete - deactivate all members and mark family
     await sql`
       UPDATE family_members 
@@ -273,6 +296,16 @@ export async function DELETE(
       SET status = 'CANCELLED', updated_at = NOW()
       WHERE family_id = ${familyId} AND status IN ('ACTIVE', 'TRIALING')
     `
+
+    // Unused invite codes for a deleted family must stop working.
+    try {
+      await sql`
+        UPDATE family_invites SET revoked_at = NOW()
+        WHERE family_id = ${familyId} AND used_at IS NULL AND revoked_at IS NULL
+      `
+    } catch (e) {
+      console.error("revoke invites on family delete failed (non-fatal):", e)
+    }
 
     // Audit log
     await logAuditEvent(user.id, "DELETE", "family", familyId, {
