@@ -10,17 +10,18 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
-import { ArrowLeft, Send, Lightbulb } from 'lucide-react'
+import { ArrowLeft, Send, Lightbulb, CreditCard, Wrench, User, LifeBuoy } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useFamilies } from '@/hooks/use-family'
 import { authFetch } from '@/hooks/use-events'
 
-const categories = [
-  { value: 'BILLING', label: 'Billing & Payments', icon: '💳', description: 'Subscription, charges, refunds' },
-  { value: 'TECHNICAL', label: 'Technical Issue', icon: '🔧', description: 'Bugs, errors, app not working' },
-  { value: 'ACCOUNT', label: 'Account & Profile', icon: '👤', description: 'Login, settings, privacy' },
-  { value: 'FEATURE_REQUEST', label: 'Feature Request', icon: '💡', description: 'Suggestions for new features' },
-  { value: 'GENERAL', label: 'General Inquiry', icon: '📋', description: 'Other questions' },
+const categories: { value: string; label: string; icon: React.ComponentType<{ className?: string }>; description: string }[] = [
+  { value: 'BILLING', label: 'Billing & Payments', icon: CreditCard, description: 'Subscription, charges, refunds' },
+  { value: 'TECHNICAL', label: 'Technical Issue', icon: Wrench, description: 'Bugs, errors, app not working' },
+  { value: 'ACCOUNT', label: 'Account & Profile', icon: User, description: 'Login, settings, privacy' },
+  { value: 'FEATURE_REQUEST', label: 'Feature Request', icon: Lightbulb, description: 'Suggestions for new features' },
+  { value: 'GENERAL', label: 'General Inquiry', icon: LifeBuoy, description: 'Other questions' },
 ]
 
 const priorities = [
@@ -59,7 +60,7 @@ export default function NewTicketPage() {
           description,
           category,
           priority,
-          familyId: familyId || null,
+          familyId: familyId && familyId !== 'none' ? familyId : null,
         }),
       })
 
@@ -81,47 +82,50 @@ export default function NewTicketPage() {
   const selectedCategory = categories.find(c => c.value === category)
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="mx-auto max-w-2xl space-y-4 pb-20 sm:space-y-5 lg:pb-0">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
+      <div className="flex items-center gap-2 sm:gap-3">
+        <Button variant="ghost" size="icon" asChild className="h-9 w-9 shrink-0">
           <Link href="/support">
             <ArrowLeft className="w-4 h-4" />
           </Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">New Support Ticket</h1>
-          <p className="text-muted-foreground">Describe your issue and we'll help you out</p>
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">New ticket</h1>
+          <p className="text-sm text-muted-foreground">Tell us what's going on and we'll help</p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4">
         {/* Category Selection */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">What do you need help with?</CardTitle>
-            <CardDescription>Select the category that best describes your issue</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {categories.map((cat) => (
-                <button
-                  key={cat.value}
-                  type="button"
-                  onClick={() => setCategory(cat.value)}
-                  className={`flex items-start gap-3 p-4 rounded-lg border text-left transition-colors ${
-                    category === cat.value
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/50'
-                  }`}
-                >
-                  <span className="text-2xl">{cat.icon}</span>
-                  <div>
-                    <p className="font-medium">{cat.label}</p>
-                    <p className="text-xs text-muted-foreground">{cat.description}</p>
-                  </div>
-                </button>
-              ))}
+            <div className="grid gap-2 sm:grid-cols-2">
+              {categories.map((cat) => {
+                const Icon = cat.icon
+                return (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    onClick={() => setCategory(cat.value)}
+                    className={cn(
+                      'flex items-center gap-3 rounded-lg border p-3 text-left transition-colors',
+                      category === cat.value ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                    )}
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{cat.label}</p>
+                      <p className="truncate text-xs text-muted-foreground">{cat.description}</p>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           </CardContent>
         </Card>
@@ -129,8 +133,7 @@ export default function NewTicketPage() {
         {/* Ticket Details */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Ticket Details</CardTitle>
-            <CardDescription>Please provide as much detail as possible</CardDescription>
+            <CardTitle className="text-base">Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -151,7 +154,7 @@ export default function NewTicketPage() {
                 placeholder="Please describe your issue in detail. Include any error messages, steps to reproduce, or relevant information..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                rows={6}
+                rows={5}
                 required
               />
             </div>

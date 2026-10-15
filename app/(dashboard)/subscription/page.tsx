@@ -8,7 +8,7 @@ import { useFamilies } from '@/hooks/use-family'
 import { useSubscription, useSubscriptionTiers } from '@/hooks/use-subscription'
 import { authFetch } from '@/hooks/use-events'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import {
@@ -28,13 +28,12 @@ import {
   Crown,
   Check,
   Sparkles,
-  Shield,
-  MapPin,
   Clock,
   Users,
   AlertCircle,
   CreditCard,
-  X
+  X,
+  Mail,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePurchaseUi } from '@/hooks/use-purchase-ui'
@@ -141,7 +140,7 @@ export default function SubscriptionPage() {
 
   if (!primaryFamily) {
     return (
-      <div className="container max-w-4xl py-8">
+      <div className="py-8">
         <Empty
           icon={Users}
           title="No Family Yet"
@@ -155,428 +154,277 @@ export default function SubscriptionPage() {
   const isTrialing = subscription?.status === 'TRIALING'
   const trialEndsAt = subscription?.trialEnd ? new Date(subscription.trialEnd) : null
 
+  const daysLeft = trialEndsAt ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : 0
+  const FEATURES = [
+    { key: 'locationSharing' as const, label: 'Real-time location sharing' },
+    { key: 'geofencing' as const, label: 'Geofence alerts' },
+    { key: 'smsNotifications' as const, label: 'SMS notifications' },
+    { key: 'customReminderTimes' as const, label: 'Custom reminder times' },
+    { key: 'advancedRecurrence' as const, label: 'Advanced recurring events' },
+    { key: 'exportCalendar' as const, label: 'Calendar export' },
+    { key: 'prioritySupport' as const, label: 'Priority support' },
+  ]
+
   return (
-    <div className="container max-w-5xl py-8 space-y-8">
-      {/* Header */}
+    <div className="space-y-4 pb-20 sm:space-y-5 lg:pb-0">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Subscription</h1>
-        <p className="text-muted-foreground mt-1">
-          Manage your Togethr subscription and unlock premium features
-        </p>
+        <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Subscription</h1>
+        <p className="text-sm text-muted-foreground">{primaryFamily.name}</p>
       </div>
 
       {!isOwner && (
-        <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
-          <CardContent className="pt-6 text-sm">
-            <span className="font-medium">Plan changes are managed by the account holder.</span>{' '}
-            Because you were invited to this family, you cannot upgrade, downgrade or cancel the subscription{ownerName ? <> - please ask {ownerName}</> : ''}.
-          </CardContent>
-        </Card>
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:bg-amber-950/20">
+          <span className="font-medium">Plan changes are managed by the account holder.</span>{' '}
+          Because you were invited to this family, you cannot upgrade, downgrade or cancel the subscription{ownerName ? <> - please ask {ownerName}</> : ''}.
+        </div>
       )}
 
-      {/* Current Plan Card */}
+      {/* Current plan */}
       <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Crown className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <CardTitle>Current Plan</CardTitle>
-                <CardDescription>
-                  {primaryFamily.name}
-                </CardDescription>
-              </div>
+        <CardContent className="space-y-4 p-4 sm:p-5">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+              <Crown className="h-5 w-5 text-primary" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-muted-foreground">Current plan</p>
+              <p className="text-lg font-semibold leading-tight">
+                {formatTierName(currentTier)}
+                {isTrialing && <span className="ml-2 text-sm font-normal text-muted-foreground">Trial</span>}
+              </p>
             </div>
-            <Badge
-              variant={access.hasPremium ? "default" : "secondary"}
-              className="text-sm px-3 py-1"
-            >
-              {formatTierName(currentTier)}
-              {isTrialing && " (Trial)"}
-            </Badge>
+            {canPurchase && access.hasPremium && !isTrialing && (
+              <div className="flex shrink-0 gap-2">
+                <Button variant="outline" size="sm" onClick={handleManageBilling} disabled={isCanceling}>
+                  {isCanceling ? <Spinner className="h-4 w-4 sm:mr-1.5" /> : <CreditCard className="h-4 w-4 sm:mr-1.5" />}
+                  <span className="hidden sm:inline">{subscription?.cancelAtPeriodEnd ? 'Resume / manage' : 'Manage billing'}</span>
+                </Button>
+                {!subscription?.cancelAtPeriodEnd && (
+                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleManageBilling} disabled={isCanceling}>
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            )}
+            {isTrialing && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="sm" className="shrink-0 text-destructive hover:text-destructive" disabled={isCancelingTrial}>
+                    Cancel trial
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Cancel your free trial?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Your family will move to the Free plan right away and lose the premium
+                      features. You won&apos;t be charged, and you can subscribe at any time.
+                      The free trial can only be used once.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep my trial</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleCancelTrial}>Cancel trial</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+
           {isTrialing && trialEndsAt && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-warning/10 text-warning-foreground">
-              <Clock className="h-4 w-4" />
-              <span className="text-sm">
-                Trial ends {trialEndsAt.toLocaleDateString()} ({Math.ceil((trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days left)
-              </span>
+            <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 p-2.5 text-sm">
+              <Clock className="h-4 w-4 shrink-0" />
+              Trial ends {trialEndsAt.toLocaleDateString()} ({daysLeft} day{daysLeft === 1 ? '' : 's'} left)
             </div>
           )}
 
           {subscription?.cancelAtPeriodEnd && !isTrialing && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-warning/10 text-warning-foreground">
-              <AlertCircle className="h-4 w-4" />
-              <span className="text-sm">
-                Your subscription is cancelled
-                {subscription.currentPeriodEnd
-                  ? ` and ends on ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`
-                  : ' and will end at the close of the billing period'}
-                . You keep your premium features until then.
+            <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 p-2.5 text-sm">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                Cancelled
+                {subscription.currentPeriodEnd ? ` - ends ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}` : ' at the end of the billing period'}
+                . You keep premium features until then.
               </span>
             </div>
           )}
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center p-3 rounded-lg bg-muted/50">
-              <div className="text-2xl font-bold">
-                {access.limits.maxChildren === -1 ? (
-                  <span className="text-primary">Unlimited</span>
-                ) : (
-                  access.limits.maxChildren
-                )}
-              </div>
-              <div className="text-xs text-muted-foreground">Max Children</div>
-            </div>
-            <div className="text-center p-3 rounded-lg bg-muted/50">
-              <div className="text-2xl font-bold">{access.limits.historyDays}</div>
-              <div className="text-xs text-muted-foreground">Days History</div>
-            </div>
-            <div className="text-center p-3 rounded-lg bg-muted/50">
-              <div className="text-2xl font-bold">{access.features.length}</div>
-              <div className="text-xs text-muted-foreground">Features</div>
-            </div>
-            <div className="text-center p-3 rounded-lg bg-muted/50">
-              <div className="text-2xl font-bold">
-                {access.featureFlags.locationSharing ? (
-                  <Check className="h-6 w-6 mx-auto text-primary" />
-                ) : (
-                  <X className="h-6 w-6 mx-auto text-muted-foreground" />
-                )}
-              </div>
-              <div className="text-xs text-muted-foreground">Location</div>
-            </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              [access.limits.maxChildren === -1 ? 'Unlimited' : String(access.limits.maxChildren), 'children'],
+              [String(access.limits.historyDays), 'days history'],
+              [String(access.features.length), 'features'],
+            ].map(([v, l]) => (
+              <span key={l} className="rounded-full bg-muted px-3 py-1 text-xs">
+                <span className="font-semibold">{v}</span> <span className="text-muted-foreground">{l}</span>
+              </span>
+            ))}
           </div>
 
-          {/* What's included - every gated capability, spelled out for this
-              specific family's tier, not just the 4 headline stats above. */}
-          <div className="pt-2">
-            <p className="text-sm font-medium mb-3">What&apos;s included in {formatTierName(currentTier)}</p>
-            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-6 text-sm">
-              {[
-                { key: 'locationSharing' as const, label: 'Real-time location sharing' },
-                { key: 'geofencing' as const, label: 'Geofence alerts' },
-                { key: 'smsNotifications' as const, label: 'SMS notifications' },
-                { key: 'customReminderTimes' as const, label: 'Custom reminder times' },
-                { key: 'advancedRecurrence' as const, label: 'Advanced/complex recurring events' },
-                { key: 'exportCalendar' as const, label: 'Calendar export' },
-                { key: 'prioritySupport' as const, label: 'Priority support' },
-              ].map(({ key, label }) => {
+          <details className="group rounded-lg border bg-background/60 px-3 py-2">
+            <summary className="cursor-pointer list-none text-sm font-medium">
+              What&apos;s included in {formatTierName(currentTier)}
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                {FEATURES.filter((f) => access.featureFlags[f.key]).length} of {FEATURES.length}
+              </span>
+            </summary>
+            <ul className="mt-2 grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
+              {FEATURES.map(({ key, label }) => {
                 const included = access.featureFlags[key]
                 return (
                   <li key={key} className="flex items-center gap-2">
-                    {included ? (
-                      <Check className="h-4 w-4 text-primary shrink-0" />
-                    ) : (
-                      <X className="h-4 w-4 text-muted-foreground shrink-0" />
-                    )}
+                    {included ? <Check className="h-4 w-4 shrink-0 text-primary" /> : <X className="h-4 w-4 shrink-0 text-muted-foreground" />}
                     <span className={included ? '' : 'text-muted-foreground'}>{label}</span>
                   </li>
                 )
               })}
             </ul>
-          </div>
+          </details>
         </CardContent>
-        {canPurchase && access.hasPremium && !isTrialing && (
-          <CardFooter className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleManageBilling}
-              disabled={isCanceling}
-            >
-              {isCanceling ? <Spinner className="h-4 w-4 mr-2" /> : <CreditCard className="h-4 w-4 mr-2" />}
-              {subscription?.cancelAtPeriodEnd ? 'Resume or Manage Billing' : 'Manage Billing'}
-            </Button>
-            {!subscription?.cancelAtPeriodEnd && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={handleManageBilling}
-                disabled={isCanceling}
-              >
-                Cancel Subscription
-              </Button>
-            )}
-          </CardFooter>
-        )}
-        {isTrialing && (
-          <CardFooter>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                  disabled={isCancelingTrial}
-                >
-                  Cancel Trial
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Cancel your free trial?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Your family will move to the Free plan right away and lose the premium
-                    features. You won&apos;t be charged, and you can subscribe at any time.
-                    The free trial can only be used once.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Keep my trial</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleCancelTrial}>Cancel trial</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </CardFooter>
-        )}
       </Card>
 
-      {/* Billing Toggle */}
-      {canPurchase && (<>
-      <div className="flex justify-center">
-        <div className="inline-flex items-center gap-2 p-1 rounded-lg bg-muted">
-          <button
-            className={cn(
-              "px-4 py-2 rounded-md text-sm font-medium transition-colors",
-              selectedBilling === 'monthly'
-                ? "bg-background shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            onClick={() => setSelectedBilling('monthly')}
-          >
-            Monthly
-          </button>
-          <button
-            className={cn(
-              "px-4 py-2 rounded-md text-sm font-medium transition-colors",
-              selectedBilling === 'annual'
-                ? "bg-background shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            onClick={() => setSelectedBilling('annual')}
-          >
-            Annual
-            <Badge variant="secondary" className="ml-2 text-xs">Save up to 33%</Badge>
-          </button>
-        </div>
-      </div>
-
-      {/* Pricing Cards */}
-      <div className="grid md:grid-cols-3 gap-6">
-        {tiers.map((tier, index) => {
-          const tierKey = tierNameToKey[tier.name] || 'FREE'
-          const isCurrentTier = tierKey === access.tier
-          const isPremium = tier.name === 'Premium'
-          const isSelected = selectedTierIndex === index
-          const price = selectedBilling === 'monthly' ? tier.price.monthly : tier.price.annual
-
-          const handleCardClick = () => {
-            if (isCurrentTier || tier.name === 'Free') return
-            if (ownerOnly()) return
-            setSelectedTierIndex(index)
-            // Navigate to upgrade page with selected tier
-            router.push(`/subscription/upgrade?tier=${tierKey}&billing=${selectedBilling}`)
-          }
-
-          return (
-            <Card
-              key={tier.name}
-              onClick={handleCardClick}
-              className={cn(
-                "relative overflow-hidden transition-all",
-                isPremium && "border-primary shadow-lg scale-105",
-                isCurrentTier && "ring-2 ring-primary",
-                isSelected && "ring-2 ring-blue-500",
-                !isCurrentTier && tier.name !== 'Free' && "cursor-pointer hover:shadow-lg hover:border-primary/50"
-              )}
-            >
-              {isPremium && (
-                <div className="absolute top-0 right-0 bg-primary text-primary-foreground px-3 py-1 text-xs font-medium rounded-bl-lg">
-                  Most Popular
-                </div>
-              )}
-
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  {tier.name}
-                  {isCurrentTier && (
-                    <Badge variant="outline" className="text-xs">Current</Badge>
+      {canPurchase && (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold">Plans</h2>
+            <div className="inline-flex rounded-lg bg-muted p-1">
+              {(
+                [
+                  ['monthly', 'Monthly'],
+                  ['annual', 'Annual'],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setSelectedBilling(k)}
+                  className={cn(
+                    'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                    selectedBilling === k ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
                   )}
-                </CardTitle>
-                <CardDescription>{tier.description}</CardDescription>
-              </CardHeader>
+                >
+                  {label}
+                  {k === 'annual' && <span className="ml-1.5 text-xs text-green-600">Save up to 33%</span>}
+                </button>
+              ))}
+            </div>
+          </div>
 
-              <CardContent className="space-y-4">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-bold">
-                    ${selectedBilling === 'monthly' ? price : (price / 12).toFixed(2)}
-                  </span>
-                  <span className="text-muted-foreground">/month</span>
-                </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {tiers.map((tier, index) => {
+              const tierKey = tierNameToKey[tier.name] || 'FREE'
+              const isCurrentTier = tierKey === access.tier
+              const isPopular = tier.name === 'Premium'
+              const price = selectedBilling === 'monthly' ? tier.price.monthly : tier.price.annual
+              const go = () => router.push(`/subscription/upgrade?tier=${tierKey}&billing=${selectedBilling}`)
 
-                {selectedBilling === 'annual' && price > 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    ${price}/year billed annually
-                  </p>
-                )}
+              return (
+                <Card
+                  key={tier.name}
+                  onClick={() => {
+                    if (isCurrentTier || tier.name === 'Free') return
+                    if (ownerOnly()) return
+                    setSelectedTierIndex(index)
+                    go()
+                  }}
+                  className={cn(
+                    'relative flex flex-col overflow-hidden transition-all',
+                    isPopular && 'border-primary shadow-md',
+                    isCurrentTier && 'ring-2 ring-primary',
+                    !isCurrentTier && tier.name !== 'Free' && 'cursor-pointer hover:border-primary/50 hover:shadow-md'
+                  )}
+                >
+                  {isPopular && (
+                    <span className="absolute right-0 top-0 rounded-bl-lg bg-primary px-2.5 py-0.5 text-[11px] font-medium text-primary-foreground">
+                      Most popular
+                    </span>
+                  )}
+                  <CardContent className="flex-1 space-y-3 p-4 sm:p-5">
+                    <div>
+                      <p className="flex items-center gap-2 font-semibold">
+                        {tier.name}
+                        {isCurrentTier && <Badge variant="outline" className="text-xs">Current</Badge>}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{tier.description}</p>
+                    </div>
+                    <div>
+                      <p className="flex items-baseline gap-1">
+                        <span className="text-3xl font-bold">${selectedBilling === 'monthly' ? price : (price / 12).toFixed(2)}</span>
+                        <span className="text-sm text-muted-foreground">/month</span>
+                      </p>
+                      <p className="h-4 text-xs text-muted-foreground">
+                        {selectedBilling === 'annual' && price > 0 ? `$${price}/year billed annually` : ''}
+                      </p>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {tier.features.map((feature) => (
+                        <li key={feature} className="flex items-start gap-2 text-sm">
+                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
 
-                <ul className="space-y-2">
-                  {tier.features.map((feature) => (
-                    <li key={feature} className="flex items-center gap-2 text-sm">
-                      <Check className="h-4 w-4 text-primary shrink-0" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
+                  <CardFooter className="p-4 pt-0 sm:p-5 sm:pt-0">
+                    {isCurrentTier ? (
+                      <Button className="w-full" variant="outline" disabled>Current plan</Button>
+                    ) : tier.name === 'Free' ? (
+                      <Button className="w-full" variant="outline" disabled>Included</Button>
+                    ) : !access.hasPremium && index > 0 ? (
+                      <div className="w-full space-y-2">
+                        <Button
+                          className="w-full"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleStartTrial(tierKey as 'PREMIUM' | 'PREMIUM_PLUS')
+                          }}
+                          disabled={isStartingTrial}
+                        >
+                          {isStartingTrial ? <Spinner className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                          Start 14-day trial
+                        </Button>
+                        <Button
+                          className="w-full"
+                          variant={isPopular ? 'default' : 'outline'}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (!ownerOnly()) go()
+                          }}
+                        >
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          Upgrade now
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        className="w-full"
+                        variant={isPopular ? 'default' : 'outline'}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          go()
+                        }}
+                      >
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        {access.tier === 'PREMIUM_PLUS' && tierKey === 'PREMIUM' ? 'Downgrade' : 'Upgrade'}
+                      </Button>
+                    )}
+                  </CardFooter>
+                </Card>
+              )
+            })}
+          </div>
+        </>
+      )}
 
-              <CardFooter>
-                {isCurrentTier ? (
-                  <Button className="w-full" variant="outline" disabled>
-                    Current Plan
-                  </Button>
-                ) : tier.name === 'Free' ? (
-                  <Button className="w-full" variant="outline" disabled>
-                    Included
-                  </Button>
-                ) : !access.hasPremium && index > 0 ? (
-                  <div className="space-y-2 w-full">
-                    <Button
-                      className="w-full"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleStartTrial(tierKey as 'PREMIUM' | 'PREMIUM_PLUS')
-                      }}
-                      disabled={isStartingTrial}
-                    >
-                      {isStartingTrial ? (
-                        <Spinner className="h-4 w-4 mr-2" />
-                      ) : (
-                        <Sparkles className="h-4 w-4 mr-2" />
-                      )}
-                      Start 14-Day Trial
-                    </Button>
-                    <Button
-                      className="w-full"
-                      variant={isPremium ? "default" : "outline"}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (!ownerOnly()) router.push(`/subscription/upgrade?tier=${tierKey}&billing=${selectedBilling}`)
-                      }}
-                    >
-                      <CreditCard className="h-4 w-4 mr-2" />
-                      Upgrade Now
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    className="w-full"
-                    variant={isPremium ? "default" : "outline"}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      router.push(`/subscription/upgrade?tier=${tierKey}&billing=${selectedBilling}`)
-                    }}
-                  >
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    {access.tier === 'PREMIUM_PLUS' && tierKey === 'PREMIUM' ? 'Downgrade' : 'Upgrade'}
-                  </Button>
-                )}
-              </CardFooter>
-            </Card>
-          )
-        })}
+      <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
+        <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <p className="min-w-0 flex-1 text-sm text-muted-foreground">Questions about billing? We&apos;re happy to help.</p>
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/support">Contact support</Link>
+        </Button>
       </div>
-
-      </>)}
-
-      {/* Features Comparison */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Premium Features</CardTitle>
-          <CardDescription>
-            What you get with Togethr Premium
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="flex gap-4">
-              <div className="p-2 rounded-lg bg-primary/10 h-fit">
-                <MapPin className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h4 className="font-medium">Real-Time Location Sharing</h4>
-                <p className="text-sm text-muted-foreground">
-                  See where your children are in real-time with optional location sharing
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="p-2 rounded-lg bg-primary/10 h-fit">
-                <Shield className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h4 className="font-medium">Geofence Alerts</h4>
-                <p className="text-sm text-muted-foreground">
-                  Get notified when family members arrive or leave saved places
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="p-2 rounded-lg bg-primary/10 h-fit">
-                <Users className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h4 className="font-medium">Unlimited Children</h4>
-                <p className="text-sm text-muted-foreground">
-                  Add as many children as you need to your family
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="p-2 rounded-lg bg-primary/10 h-fit">
-                <Clock className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h4 className="font-medium">Extended History</h4>
-                <p className="text-sm text-muted-foreground">
-                  Access up to 1 year of event and location history
-                </p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* FAQ or Support */}
-      <Card>
-        <CardContent className="flex items-center justify-between py-6">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-muted-foreground" />
-            <div>
-              <p className="font-medium">Have questions about billing?</p>
-              <p className="text-sm text-muted-foreground">
-                Contact our support team for help with subscriptions
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => window.open('mailto:admin@mytogethr.com', '_blank')}
-          >
-            Contact Support
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   )
 }

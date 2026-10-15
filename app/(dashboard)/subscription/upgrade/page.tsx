@@ -16,7 +16,6 @@ import { toast } from 'sonner'
 import {
   ArrowLeft,
   Check,
-  Crown,
   Lock,
   Shield,
   Sparkles,
@@ -85,6 +84,12 @@ function UpgradeForm() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  useEffect(() => {
+    if (rawTierParam) {
+      setSelectedTier(getTierKey(rawTierParam))
+    }
+  }, [rawTierParam])
+
   const primaryFamily = families?.[0]
   const tier = tiers[selectedTier] ?? tiers.PREMIUM
 
@@ -98,7 +103,7 @@ function UpgradeForm() {
 
   if (!authLoading && !familiesLoading && primaryFamily && user && primaryFamily.ownerId !== user.id) {
     return (
-      <div className="container max-w-xl py-12">
+      <div className="py-8">
         <Card>
           <CardHeader>
             <CardTitle>Only the account holder can change the plan</CardTitle>
@@ -125,12 +130,6 @@ function UpgradeForm() {
 
   const price = billingCycle === 'annual' ? tier.price.annual : tier.price.monthly
   const monthlyEquivalent = billingCycle === 'annual' ? (tier.price.annual / 12).toFixed(2) : tier.price.monthly
-
-  useEffect(() => {
-    if (rawTierParam) {
-      setSelectedTier(getTierKey(rawTierParam))
-    }
-  }, [rawTierParam])
 
   // Redirects to Stripe Checkout. Stripe collects and stores the card
   // details directly on its hosted page — no payment data is ever
@@ -176,217 +175,137 @@ function UpgradeForm() {
     )
   }
 
-  return (
-    <div className="container max-w-4xl py-8 space-y-8">
-      {/* Back Button */}
-      <Button variant="ghost" size="sm" asChild>
-        <Link href="/subscription">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Subscription
-        </Link>
-      </Button>
+  const choice = (active: boolean) =>
+    cn(
+      'rounded-lg border-2 p-3 text-left transition-all',
+      active ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+    )
 
-      {/* Header */}
-      <div className="text-center space-y-2">
-        <div className="inline-flex items-center justify-center p-3 rounded-full bg-primary/10 mb-4">
-          <Crown className="h-8 w-8 text-primary" />
+  return (
+    <div className="space-y-4 pb-20 sm:space-y-5 lg:pb-0">
+      <div className="flex items-center gap-2 sm:gap-3">
+        <Button variant="ghost" size="icon" asChild className="h-9 w-9 shrink-0">
+          <Link href="/subscription" aria-label="Back to subscription">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </Button>
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Upgrade to {tier.name}</h1>
+          <p className="truncate text-sm text-muted-foreground">{primaryFamily?.name}</p>
         </div>
-        <h1 className="text-3xl font-bold tracking-tight">Upgrade to {tier.name}</h1>
-        <p className="text-muted-foreground max-w-md mx-auto">
-          Unlock premium features and give your family the best protection
-        </p>
       </div>
 
-      <div className="grid lg:grid-cols-5 gap-8">
-        {/* Left Column - Plan Selection */}
-        <div className="lg:col-span-3 space-y-6">
-          {/* Plan Selection */}
+      <div className="grid items-start gap-4 lg:grid-cols-5">
+        <div className="space-y-4 lg:col-span-3">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Select Plan</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                {(Object.entries(tiers) as [keyof typeof tiers, typeof tiers.PREMIUM][]).map(([key, t]) => (
-                  <button
-                    key={key}
-                    onClick={() => setSelectedTier(key)}
-                    className={cn(
-                      "p-4 rounded-lg border-2 text-left transition-all",
-                      selectedTier === key
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/50"
-                    )}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-semibold">{t.name}</span>
-                      {selectedTier === key && (
+            <CardContent className="space-y-4 p-4 sm:p-5">
+              <div>
+                <p className="mb-2 text-sm font-semibold">Plan</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {(Object.entries(tiers) as [keyof typeof tiers, typeof tiers.PREMIUM][]).map(([key, t]) => (
+                    <button key={key} type="button" onClick={() => setSelectedTier(key)} className={choice(selectedTier === key)}>
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold">{t.name}</span>
+                        {selectedTier === key && <Check className="h-4 w-4 text-primary" />}
+                      </div>
+                      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{t.description}</p>
+                      <p className="mt-2 text-lg font-bold">
+                        ${billingCycle === 'annual' ? (t.price.annual / 12).toFixed(2) : t.price.monthly}
+                        <span className="text-xs font-normal text-muted-foreground">/mo</span>
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-sm font-semibold">Billing</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => setBillingCycle('monthly')} className={choice(billingCycle === 'monthly')}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold">Monthly</span>
+                      {billingCycle === 'monthly' && <Check className="h-4 w-4 text-primary" />}
+                    </div>
+                    <p className="mt-1 text-xl font-bold">${tier.price.monthly}</p>
+                    <p className="text-xs text-muted-foreground">Billed monthly</p>
+                  </button>
+                  <button type="button" onClick={() => setBillingCycle('annual')} className={choice(billingCycle === 'annual')}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold">Annual</span>
+                      {billingCycle === 'annual' ? (
                         <Check className="h-4 w-4 text-primary" />
+                      ) : (
+                        <Badge className="bg-green-500 text-[10px]">Save up to 33%</Badge>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground">{t.description}</p>
-                    <p className="text-lg font-bold mt-2">
-                      ${billingCycle === 'annual' ? (t.price.annual / 12).toFixed(2) : t.price.monthly}
-                      <span className="text-sm font-normal text-muted-foreground">/mo</span>
-                    </p>
+                    <p className="mt-1 text-xl font-bold">${tier.price.annual}</p>
+                    <p className="text-xs text-muted-foreground">${(tier.price.annual / 12).toFixed(2)}/mo billed yearly</p>
                   </button>
-                ))}
+                </div>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Billing Cycle */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Billing Cycle</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={() => setBillingCycle('monthly')}
-                  className={cn(
-                    "p-4 rounded-lg border-2 text-left transition-all",
-                    billingCycle === 'monthly'
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  )}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-semibold">Monthly</span>
-                    {billingCycle === 'monthly' && (
-                      <Check className="h-4 w-4 text-primary" />
-                    )}
-                  </div>
-                  <p className="text-2xl font-bold">${tier.price.monthly}</p>
-                  <p className="text-sm text-muted-foreground">Billed monthly</p>
-                </button>
-
-                <button
-                  onClick={() => setBillingCycle('annual')}
-                  className={cn(
-                    "p-4 rounded-lg border-2 text-left transition-all relative overflow-hidden",
-                    billingCycle === 'annual'
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  )}
-                >
-                  <Badge className="absolute top-2 right-2 bg-green-500">Save up to 33%</Badge>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-semibold">Annual</span>
-                    {billingCycle === 'annual' && (
-                      <Check className="h-4 w-4 text-primary" />
-                    )}
-                  </div>
-                  <p className="text-2xl font-bold">${tier.price.annual}</p>
-                  <p className="text-sm text-muted-foreground">
-                    ${(tier.price.annual / 12).toFixed(2)}/mo billed yearly
-                  </p>
-                </button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Payment info card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Lock className="h-5 w-5" />
-                Payment
-              </CardTitle>
-              <CardDescription>
-                You&apos;ll enter your card details on Stripe&apos;s secure checkout page in the next step.
-                We never see or store your card number.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="p-4 rounded-lg bg-muted/50 border flex items-center gap-2 text-sm text-muted-foreground">
-                <Shield className="h-4 w-4" />
-                <span>Payments are processed by Stripe, a PCI Level 1 certified payment provider.</span>
+              <div className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+                <Shield className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  You&apos;ll enter your card on Stripe&apos;s secure checkout in the next step. We never see or store your card number.
+                </span>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Right Column - Order Summary */}
         <div className="lg:col-span-2">
-          <Card className="sticky top-8">
-            <CardHeader>
-              <CardTitle className="text-lg">Order Summary</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5">
-                <div className="p-2 rounded-lg bg-primary/10">
+          <Card className="lg:sticky lg:top-4">
+            <CardContent className="space-y-3 p-4 sm:p-5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
                   <Sparkles className="h-5 w-5 text-primary" />
-                </div>
+                </span>
                 <div>
                   <p className="font-semibold">{tier.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {billingCycle === 'annual' ? 'Annual' : 'Monthly'} billing
-                  </p>
+                  <p className="text-xs text-muted-foreground">{billingCycle === 'annual' ? 'Annual' : 'Monthly'} billing</p>
                 </div>
               </div>
 
               <Separator />
 
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">{tier.name} Plan</span>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{tier.name} plan</span>
                   <span>${price.toFixed(2)}</span>
                 </div>
                 {billingCycle === 'annual' && (
-                  <div className="flex justify-between text-sm text-green-600">
+                  <div className="flex justify-between text-green-600">
                     <span>Annual discount</span>
-                    <span>-${((tier.price.monthly * 12) - tier.price.annual).toFixed(2)}</span>
+                    <span>-${(tier.price.monthly * 12 - tier.price.annual).toFixed(2)}</span>
                   </div>
                 )}
               </div>
 
               <Separator />
 
-              <div className="flex justify-between font-semibold text-lg">
+              <div className="flex justify-between text-lg font-semibold">
                 <span>Total</span>
                 <span>${price.toFixed(2)}</span>
               </div>
-
               {billingCycle === 'annual' && (
-                <p className="text-xs text-muted-foreground text-center">
-                  That&apos;s just ${monthlyEquivalent}/month
-                </p>
+                <p className="text-center text-xs text-muted-foreground">That&apos;s just ${monthlyEquivalent}/month</p>
               )}
 
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={handleCheckout}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <Spinner className="h-4 w-4 mr-2" />
-                ) : (
-                  <Lock className="h-4 w-4 mr-2" />
-                )}
-                Continue to Secure Checkout
+              <Button className="w-full" size="lg" onClick={handleCheckout} disabled={isSubmitting}>
+                {isSubmitting ? <Spinner className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
+                Continue to secure checkout
               </Button>
 
-              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                <Shield className="h-3 w-3" />
-                <span>Secure payment processing by Stripe</span>
-              </div>
+              <ul className="space-y-1 border-t pt-3">
+                {tier.features.slice(0, 5).map((feature) => (
+                  <li key={feature} className="flex items-start gap-2 text-xs text-muted-foreground">
+                    <Check className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
             </CardContent>
-            <CardFooter className="flex-col items-start gap-3 pt-0">
-              <Separator />
-              <div className="space-y-2 w-full">
-                <p className="text-xs font-medium">What&apos;s included:</p>
-                <ul className="space-y-1">
-                  {tier.features.slice(0, 4).map((feature) => (
-                    <li key={feature} className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Check className="h-3 w-3 text-primary" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </CardFooter>
           </Card>
         </div>
       </div>
