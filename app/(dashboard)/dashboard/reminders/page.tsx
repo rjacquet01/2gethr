@@ -96,6 +96,7 @@ interface FamilyMember {
   id: string
   userId: string | null
   displayName: string
+  role?: string
 }
 
 const RECURRENCE_OPTIONS = [
@@ -208,10 +209,11 @@ function RemindersPageContent() {
         const family = data?.families?.find((f: { id: string }) => f.id === user.primaryFamily?.id)
         if (family?.members) {
           setFamilyMembers(
-            family.members.map((m: { id: string; userId: string | null; displayName: string }) => ({
+            family.members.map((m: { id: string; userId: string | null; displayName: string; role?: string }) => ({
               id: m.id,
               userId: m.userId,
               displayName: m.displayName,
+              role: m.role,
             }))
           )
         }
@@ -369,7 +371,15 @@ function RemindersPageContent() {
     }
   }
 
-  const isMine = useCallback((r: Reminder) => r.user_id === user?.id && !r.child_name, [user?.id])
+  // A reminder set for a child who has no login is owned by the parent (so
+  // user_id is the parent's) but carries the child's name - that one is "for
+  // others". A child who does have a login owns their own reminders, and
+  // those carry their own profile name too, so for a child viewer it's mine.
+  const viewerIsChild = familyMembers.find((m) => m.userId === user?.id)?.role === 'CHILD'
+  const isMine = useCallback(
+    (r: Reminder) => r.user_id === user?.id && (!r.child_name || viewerIsChild),
+    [user?.id, viewerIsChild]
+  )
   const mineCount = reminders.filter(isMine).length
   const familyCount = reminders.length - mineCount
 
@@ -407,8 +417,10 @@ function RemindersPageContent() {
   const next = scoped.find((r) => parseISO(r.remind_at).getTime() >= nowMs)
 
   const ownerName = (r: Reminder) =>
-    r.child_name ||
-    (r.user_id !== user?.id ? `${r.owner_first_name || ''} ${r.owner_last_name || ''}`.trim() : '')
+    isMine(r)
+      ? ''
+      : r.child_name ||
+        (r.user_id !== user?.id ? `${r.owner_first_name || ''} ${r.owner_last_name || ''}`.trim() : '')
 
   const snoozeOptions = (): Array<{ label: string; to: Date }> => {
     const now = new Date()
