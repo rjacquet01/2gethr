@@ -88,7 +88,7 @@ export function FamilyStatusStrip({
   }
 
   return (
-    <Card>
+    <Card className="py-0">
       <CardContent className="p-3 sm:p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-medium">Family right now</p>
@@ -297,6 +297,8 @@ export function TodayTimeline({
       overdue: isPast(d) && !isToday(d),
     })
   }
+  let overdueShown = 0
+  let overdueHidden = 0
   for (const t of tasks) {
     const s = t.status?.toLowerCase()
     if (s === 'completed' || s === 'cancelled') continue
@@ -307,6 +309,15 @@ export function TodayTimeline({
     endOfDay.setHours(23, 59, 59, 999)
     const overdue = endOfDay < now
     if (!isToday(d) && !overdue) continue
+    if (overdue) {
+      // Keep Today focused: only active overdue tasks, capped at three.
+      if (s !== 'pending' && s !== 'in_progress') continue
+      if (overdueShown >= 3) {
+        overdueHidden += 1
+        continue
+      }
+      overdueShown += 1
+    }
     items.push({
       key: `t-${t.id}`,
       kind: 'task',
@@ -315,6 +326,17 @@ export function TodayTimeline({
       when: null,
       sub: overdue ? `Overdue · was due ${format(d, 'MMM d')}` : 'Due today',
       overdue,
+    })
+  }
+  if (overdueHidden > 0) {
+    items.push({
+      key: 't-more-overdue',
+      kind: 'task',
+      title: `${overdueHidden} more overdue task${overdueHidden === 1 ? '' : 's'}`,
+      href: '/tasks',
+      when: null,
+      sub: 'View all tasks',
+      overdue: true,
     })
   }
 
@@ -345,8 +367,8 @@ export function TodayTimeline({
   )
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="gap-3 py-4">
+      <CardHeader className="pb-0">
         <CardTitle className="text-lg">Today</CardTitle>
         <CardDescription>{format(now, 'EEEE, MMMM d')}</CardDescription>
       </CardHeader>
@@ -413,7 +435,7 @@ export function TaskProgress({
     { key: 'overdue', label: 'Overdue', n: overdue, bar: 'bg-red-500', href: '/tasks' },
   ]
   return (
-    <Card>
+    <Card className="py-0">
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-medium">Tasks</p>
@@ -464,8 +486,8 @@ export function DashboardActivityPanel({ familyId }: { familyId: string }) {
   const everyone = data?.scope !== 'self'
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="gap-3 py-4">
+      <CardHeader className="pb-0">
         <div className="flex items-center justify-between gap-2">
           <div>
             <CardTitle className="text-base flex items-center gap-2">
@@ -532,7 +554,7 @@ export function DashboardShortcuts() {
     { href: '/dashboard/reminders', label: 'Reminders', icon: Bell },
   ]
   return (
-    <Card>
+    <Card className="py-0">
       <CardContent className="p-3 grid grid-cols-2 gap-2">
         {links.map((l) => (
           <Link
