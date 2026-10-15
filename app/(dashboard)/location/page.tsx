@@ -17,7 +17,7 @@ import { toast } from 'sonner'
 import {
   MapPin, Navigation, RefreshCw, Clock, Battery,
   User, ExternalLink, Settings, Shield, Bell,
-  Users, ChevronRight, Loader2, AlertCircle, Crown, Crosshair
+  Users, ChevronRight, Loader2, AlertCircle, Crown, Crosshair, Info
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -25,6 +25,8 @@ import { SUBSCRIPTION_TIERS, centsToDisplay } from '@/lib/subscription-tiers'
 import { BackgroundLocationCard } from '@/components/background-location-card'
 import { TrackedMap } from '@/components/tracked-map'
 import { SosButton } from '@/components/sos-button'
+import { MemberAvatar } from '@/components/member-avatar'
+import { cn } from '@/lib/utils'
 
 // High-accuracy GPS often times out on laptops/desktops and indoors. Try it
 // first, then fall back to a coarser (Wi-Fi/cell/IP) fix so sharing still works.
@@ -614,7 +616,7 @@ export default function LocationPage() {
 
   if (isActuallyLoading) {
     return (
-      <div className="container max-w-4xl py-8">
+      <div>
         <div className="space-y-6">
           <Skeleton className="h-10 w-64" />
           <Skeleton className="h-[400px] w-full" />
@@ -625,7 +627,7 @@ export default function LocationPage() {
 
   if (!selectedFamily) {
     return (
-      <div className="container max-w-4xl py-8">
+      <div>
         <Card>
           <CardContent className="py-12 text-center">
             <Users className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -645,7 +647,7 @@ export default function LocationPage() {
 
   if (subscriptionError || (access && !hasLocationAccess)) {
     return (
-      <div className="container max-w-4xl py-8">
+      <div>
         <div className="flex flex-col gap-6">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Family Location</h1>
@@ -704,328 +706,316 @@ export default function LocationPage() {
       </div>
     )
   }
+  const sharingMembers = locations.filter((l) => l.location)
+  const staleCount = locations.filter((l) => getMemberLocationStatus(l).label.includes('Stale')).length
+  const notSharing = pingable.filter((p) => !locations.some((l) => l.memberId === p.memberId))
+  const iAmSharing = mySettings?.mode === 'ACTIVE' && !!mySettings.shareWithFamily
+  const focusName = locations.find((l) => l.memberId === mapFocusId)?.name
 
   return (
-    <div className="container max-w-4xl py-8">
-      <div className="flex flex-col gap-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Family Location</h1>
-            <p className="text-muted-foreground">
-              Track and share locations with your family members
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setShowSettingsDialog(true)}>
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
-            </Button>
-          </div>
+    <div className="space-y-4 pb-20 sm:space-y-5 lg:pb-0">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Family Location</h1>
+          <p className="truncate text-sm text-muted-foreground">
+            {sharingMembers.length} sharing
+            {staleCount > 0 && <> · {staleCount} not updating</>}
+            {notSharing.length > 0 && <> · {notSharing.length} not sharing</>}
+          </p>
         </div>
+        <div className="flex shrink-0 gap-2">
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing} aria-label="Refresh locations">
+            <RefreshCw className={`h-4 w-4 sm:mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowSettingsDialog(true)} aria-label="Location settings">
+            <Settings className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Settings</span>
+          </Button>
+        </div>
+      </div>
 
-        {/* Pings waiting on my approval */}
-        {approvals.map((a) => (
-          <Card key={a.id} className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
-            <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-medium">{a.requesterName} wants to see your current location</p>
-                <p className="text-sm text-muted-foreground">Your location is shared once, only if you approve.</p>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" disabled={answeringApproval === a.id} onClick={() => answerApproval(a.id, 'approve')}>
-                  Approve
-                </Button>
-                <Button size="sm" variant="outline" disabled={answeringApproval === a.id} onClick={() => answerApproval(a.id, 'deny')}>
-                  Deny
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-
-        {/* One-time locations people approved for me */}
-        {snapshots.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Shared with you once</CardTitle>
-              <CardDescription>One-time snapshots people approved. They disappear after an hour.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {snapshots.map((sn) => (
-                <div key={sn.requestId} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-                  <div>
-                    <p className="font-medium">{sn.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Shared at {new Date(sn.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                      {sn.accuracy ? ` (±${Math.round(sn.accuracy)}m)` : ''}
-                    </p>
-                  </div>
-                  <Button size="sm" variant="outline" asChild>
-                    <a href={`https://www.google.com/maps?q=${sn.latitude},${sn.longitude}`} target="_blank" rel="noopener noreferrer">
-                      <ExternalLink className="h-3 w-3 mr-1" />
-                      Open map
-                    </a>
-                  </Button>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Ask someone who isn't sharing for a one-time location */}
-        {pingable.filter((p) => !locations.some((l) => l.memberId === p.memberId)).length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Ask for a one-time location</CardTitle>
-              <CardDescription>They get a request and must approve before anything is shared.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {pingable.filter((p) => !locations.some((l) => l.memberId === p.memberId)).map((p) => (
-                <div key={p.memberId} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-                  <div>
-                    <p className="font-medium">{p.name}</p>
-                    <p className="text-xs text-muted-foreground capitalize">{p.role.toLowerCase()} - not sharing</p>
-                  </div>
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs"
-                    disabled={requestingLocation === p.memberId}
-                    onClick={() => requestLocationNow(p.memberId, p.name)}
-                  >
-                    {requestingLocation === p.memberId ? <Spinner className="h-3 w-3" /> : (<><Crosshair className="h-3 w-3 mr-1" />Ping</>)}
-                  </Button>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* My Location Sharing Status */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">My Location Sharing</CardTitle>
-              <div className="flex items-center gap-2">
-                <SosButton familyId={selectedFamily?.id} />
-                {mySettings && (
-                  <Badge variant="secondary" className={`${getModeColor(mySettings.mode)} text-white`}>
-                    {mySettings.mode === 'OFF' ? 'Off' : mySettings.mode === 'ACTIVE' ? 'Active' : 'Paused'}
-                  </Badge>
-                )}
-              </div>
+      {/* Pings waiting on my approval */}
+      {approvals.map((a) => (
+        <Card key={a.id} className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+          <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-medium">{a.requesterName} wants to see your current location</p>
+              <p className="text-sm text-muted-foreground">Your location is shared once, only if you approve.</p>
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Button onClick={handlePingLocation} className="flex-1">
-                <Navigation className="mr-2 h-4 w-4" />
-                Share My Current Location
+            <div className="flex gap-2">
+              <Button size="sm" disabled={answeringApproval === a.id} onClick={() => answerApproval(a.id, 'approve')}>
+                Approve
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleUpdateSettings({
-                  mode: mySettings?.mode === 'OFF' ? 'ACTIVE' : 'OFF',
-                  shareWithFamily: mySettings?.mode === 'OFF' ? true : false
-                })}
-                disabled={updatingSettings}
-              >
-                {mySettings?.mode === 'OFF' ? 'Enable Location Sharing' : 'Disable Location Sharing'}
+              <Button size="sm" variant="outline" disabled={answeringApproval === a.id} onClick={() => answerApproval(a.id, 'deny')}>
+                Deny
               </Button>
             </div>
           </CardContent>
         </Card>
+      ))}
 
-        {/* Family Members */}
-        <Tabs defaultValue="list" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="list">List View</TabsTrigger>
-            <TabsTrigger value="map">Map View</TabsTrigger>
-          </TabsList>
+      {/* My sharing status */}
+      <Card>
+        <CardContent className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+          <div className="flex items-center gap-3">
+            <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', mySettings ? getModeColor(mySettings.mode) : 'bg-muted')} />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">
+                {iAmSharing
+                  ? "You're sharing your location"
+                  : mySettings?.mode === 'PAUSED'
+                    ? 'Your sharing is paused'
+                    : 'Your sharing is off'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {iAmSharing
+                  ? 'Family can see where you are.'
+                  : 'Turn it on so family can see you, or share just once.'}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SosButton familyId={selectedFamily?.id} />
+            <Button size="sm" onClick={handlePingLocation}>
+              <Navigation className="mr-1.5 h-4 w-4" />
+              Share now
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                handleUpdateSettings({
+                  mode: mySettings?.mode === 'OFF' ? 'ACTIVE' : 'OFF',
+                  shareWithFamily: mySettings?.mode === 'OFF' ? true : false,
+                })
+              }
+              disabled={updatingSettings}
+            >
+              {mySettings?.mode === 'OFF' ? 'Turn on' : 'Turn off'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-          <TabsContent value="list" className="space-y-4">
+      {/* Map + people */}
+      <div className="grid gap-4 lg:grid-cols-5">
+        <div className="lg:col-span-3">
+          <div className="space-y-2 lg:sticky lg:top-4">
+            {sharingMembers.length > 0 ? (
+              <>
+                {mapFocusId && (
+                  <div className="flex items-center justify-between rounded-lg bg-muted px-3 py-1.5 text-sm">
+                    <span>
+                      Following <span className="font-medium">{focusName}</span>
+                    </span>
+                    <Button type="button" size="sm" variant="ghost" className="h-7" onClick={() => setMapFocusId(null)}>
+                      Show everyone
+                    </Button>
+                  </div>
+                )}
+                <TrackedMap
+                  members={locations}
+                  familyId={selectedFamily?.id}
+                  focusMemberId={mapFocusId}
+                  allowTrail={!!mapFocusId}
+                  className="h-72 sm:h-96 lg:h-[32rem]"
+                />
+              </>
+            ) : (
+              <Card>
+                <CardContent className="flex h-64 flex-col items-center justify-center text-center">
+                  <MapPin className="h-12 w-12 text-muted-foreground" />
+                  <p className="mt-4 text-muted-foreground">No locations to display</p>
+                  <p className="text-sm text-muted-foreground">Family members need to share their location first</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4 lg:col-span-2">
+          {/* One-time locations people approved for me */}
+          {snapshots.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold">Shared with you once</h2>
+              {snapshots.map((sn) => (
+                <div key={sn.requestId} className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{sn.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(sn.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                      {sn.accuracy ? ` (±${Math.round(sn.accuracy)}m)` : ''} · gone in an hour
+                    </p>
+                  </div>
+                  <Button size="sm" variant="outline" asChild>
+                    <a href={`https://www.google.com/maps?q=${sn.latitude},${sn.longitude}`} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="mr-1 h-3 w-3" />
+                      Map
+                    </a>
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* People sharing */}
+          <div className="space-y-2">
+            <h2 className="text-sm font-semibold">
+              People <span className="font-normal text-muted-foreground">{locations.length}</span>
+            </h2>
             {locations.length === 0 ? (
               <Card>
-                <CardContent className="py-12 text-center">
-                  <MapPin className="mx-auto h-12 w-12 text-muted-foreground" />
-                  <h3 className="mt-4 text-lg font-medium">No Locations Available</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Family members need to enable location sharing to appear here.
-                  </p>
+                <CardContent className="py-8 text-center">
+                  <MapPin className="mx-auto h-10 w-10 text-muted-foreground" />
+                  <p className="mt-3 font-medium">No locations available</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Family members need to enable location sharing to appear here.</p>
                 </CardContent>
               </Card>
             ) : (
               locations.map((member) => {
                 const status = getMemberLocationStatus(member)
+                const focused = mapFocusId === member.memberId
+                const isMe = member.memberId === mySettings?.memberId
                 return (
-                <Card key={member.memberId} className="overflow-hidden">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                          <User className="h-5 w-5 text-muted-foreground" />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{member.name}</span>
-                            <Badge variant="outline" className="text-xs">{member.role}</Badge>
-                          </div>
-                          {member.location ? (
-                            <>
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Clock className="h-3 w-3" />
+                  <div
+                    key={member.memberId}
+                    className={cn('rounded-lg border bg-card transition-colors', focused && 'border-primary bg-primary/5')}
+                  >
+                    <div className="flex items-center gap-2 p-3">
+                      <button
+                        type="button"
+                        disabled={!member.location}
+                        onClick={() => setMapFocusId(focused ? null : member.memberId)}
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default"
+                        aria-label={member.location ? `Show ${member.name} on the map` : member.name}
+                      >
+                        <MemberAvatar name={member.name} avatarUrl={member.profilePhotoPath} color={member.color} emoji={member.emoji} />
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">
+                            {member.name}
+                            {isMe && <span className="ml-1 text-xs font-normal text-muted-foreground">(you)</span>}
+                          </p>
+                          <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+                            <span className={cn('h-2 w-2 shrink-0 rounded-full', status.colorClass)} />
+                            <span>{status.label}</span>
+                            {member.location && (
+                              <>
+                                <span>·</span>
                                 <span>{formatTimestamp(member.location.timestamp)}</span>
                                 {member.location.batteryLevel !== null && (
                                   <>
-                                    <Battery className="ml-2 h-3 w-3" />
+                                    <span>·</span>
+                                    <Battery className="h-3 w-3" />
                                     <span>{member.location.batteryLevel}%</span>
                                   </>
                                 )}
-                              </div>
-                              <p className="text-xs text-muted-foreground">
-                                {member.location.latitude.toFixed(6)}, {member.location.longitude.toFixed(6)}
-                                {member.location.accuracy && ` (±${Math.round(member.location.accuracy)}m)`}
-                              </p>
-                            </>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">No recent location</p>
-                          )}
+                              </>
+                            )}
+                          </p>
                         </div>
-                      </div>
-
-                      <div className="flex flex-col gap-2 items-end">
-                        <Badge variant="secondary" className={`${status.colorClass} text-white text-xs`}>
-                          {status.label}
-                        </Badge>
-                        <div className="flex gap-1 flex-wrap justify-end">
-                          {/* Ping: anyone can ask anyone for a one-time location; they must approve */}
-                          {member.memberId !== mySettings?.memberId && (
+                      </button>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {/* Ping: anyone can ask anyone for a one-time location; they must approve */}
+                        {!isMe && (
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            className="h-8 w-8"
+                            disabled={requestingLocation === member.memberId}
+                            onClick={() => requestLocationNow(member.memberId, member.name)}
+                            title="Request current location"
+                            aria-label={`Ping ${member.name}`}
+                          >
+                            {requestingLocation === member.memberId ? <Spinner className="h-3 w-3" /> : <Crosshair className="h-4 w-4" />}
+                          </Button>
+                        )}
+                        {member.location && (
+                          <>
                             <Button
-                              size="sm"
-                              variant="default"
-                              className="h-8 text-xs"
-                              disabled={requestingLocation === member.memberId}
-                              onClick={() => requestLocationNow(member.memberId, member.name)}
-                              title="Request current location"
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8"
+                              title="Details"
+                              aria-label={`${member.name} details`}
+                              onClick={() => {
+                                setSelectedMember(member)
+                                setShowMapDialog(true)
+                              }}
                             >
-                              {requestingLocation === member.memberId ? (
-                                <Spinner className="h-3 w-3" />
-                              ) : (
-                                <>
-                                  <Crosshair className="h-3 w-3 mr-1" />
-                                  Ping
-                                </>
-                              )}
+                              <Info className="h-4 w-4" />
                             </Button>
-                          )}
-                          {member.location && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8"
-                                onClick={() => {
-                                  setSelectedMember(member)
-                                  setShowMapDialog(true)
-                                }}
-                              >
-                                <MapPin className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8"
-                                onClick={() => openInMaps(
-                                  member.location!.latitude,
-                                  member.location!.longitude,
-                                  member.name
-                                )}
-                              >
-                                <ExternalLink className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8"
+                              title="Open in Maps"
+                              aria-label={`Open ${member.name} in Maps`}
+                              onClick={() => openInMaps(member.location!.latitude, member.location!.longitude, member.name)}
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
                 )
               })
             )}
-          </TabsContent>
+          </div>
 
-          <TabsContent value="map">
-            <Card>
-              <CardContent className="space-y-3 p-3 sm:p-4">
-                {locations.filter(l => l.location).length > 0 ? (
-                  <>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={mapFocusId === null ? 'default' : 'outline'}
-                        className="h-8"
-                        onClick={() => setMapFocusId(null)}
-                      >
-                        Everyone
-                      </Button>
-                      {locations.filter(l => l.location).map(m => (
-                        <Button
-                          key={m.memberId}
-                          type="button"
-                          size="sm"
-                          variant={mapFocusId === m.memberId ? 'default' : 'outline'}
-                          className="h-8"
-                          onClick={() => setMapFocusId(m.memberId)}
-                        >
-                          {m.emoji ? `${m.emoji} ` : ''}{m.name}
-                        </Button>
-                      ))}
-                    </div>
-                    <TrackedMap
-                      members={locations}
-                      familyId={selectedFamily?.id}
-                      focusMemberId={mapFocusId}
-                      allowTrail={!!mapFocusId}
-                    />
-                  </>
-                ) : (
-                  <div className="flex h-[300px] flex-col items-center justify-center">
-                    <MapPin className="h-12 w-12 text-muted-foreground" />
-                    <p className="mt-4 text-muted-foreground">No locations to display</p>
-                    <p className="text-sm text-muted-foreground">
-                      Family members need to share their location first
-                    </p>
+          {/* Ask someone who isn't sharing for a one-time location */}
+          {notSharing.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold">
+                Not sharing <span className="font-normal text-muted-foreground">{notSharing.length}</span>
+              </h2>
+              {notSharing.map((p) => (
+                <div key={p.memberId} className="flex items-center gap-3 rounded-lg border bg-card p-3">
+                  <MemberAvatar name={p.name} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{p.name}</p>
+                    <p className="text-xs text-muted-foreground">They must approve before anything is shared</p>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-
-        {/* Location Tips */}
-        <Card className="bg-muted/50">
-          <CardContent className="py-4">
-            <div className="flex gap-3">
-              <Shield className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Privacy & Safety Tips</p>
-                <ul className="text-xs text-muted-foreground space-y-1">
-                  <li>Location sharing is only visible to family members with permission</li>
-                  <li>You can pause or disable sharing at any time from settings</li>
-                  <li>Use the &quot;Share Location&quot; button to manually send your current location</li>
-                </ul>
-              </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 shrink-0 text-xs"
+                    disabled={requestingLocation === p.memberId}
+                    onClick={() => requestLocationNow(p.memberId, p.name)}
+                  >
+                    {requestingLocation === p.memberId ? (
+                      <Spinner className="h-3 w-3" />
+                    ) : (
+                      <>
+                        <Crosshair className="mr-1 h-3 w-3" />
+                        Ask
+                      </>
+                    )}
+                  </Button>
+                </div>
+              ))}
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </div>
       </div>
 
+      {/* Privacy tips */}
+      <details className="group rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+        <summary className="flex cursor-pointer list-none items-center gap-2 font-medium">
+          <Shield className="h-4 w-4 text-muted-foreground" />
+          Privacy &amp; safety tips
+        </summary>
+        <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+          <li>Location sharing is only visible to family members with permission</li>
+          <li>You can pause or disable sharing at any time from settings</li>
+          <li>Use the &quot;Share now&quot; button to manually send your current location</li>
+        </ul>
+      </details>
+
+      {/* Map Dialog for Individual Member */}
       {/* Map Dialog for Individual Member */}
       <Dialog open={showMapDialog} onOpenChange={setShowMapDialog}>
         <DialogContent className="max-w-lg">

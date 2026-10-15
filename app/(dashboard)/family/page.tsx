@@ -74,6 +74,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import Link from 'next/link'
+import { cn } from '@/lib/utils'
 import { MemberAvatar, AppearanceButton } from '@/components/member-avatar'
 import { JoinFamilyButton } from '@/components/join-family-dialog'
 
@@ -94,6 +95,8 @@ export default function FamilyPage() {
   const [selectedMemberId, setSelectedMemberId] = useState<string>('')
   const [addMode, setAddMode] = useState<'select' | 'create'>('select')
   const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set())
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [manageOpen, setManageOpen] = useState(false)
 
   const [memberToRemove, setMemberToRemove] = useState<{ id: string; name: string; isSelf: boolean } | null>(null)
   const [isRemovingMember, setIsRemovingMember] = useState(false)
@@ -372,274 +375,326 @@ export default function FamilyPage() {
     )
   }
 
+  const totals = memberActivities.reduce(
+    (a, m) => ({
+      tasks: a.tasks + (m.taskCount || 0),
+      events: a.events + (m.eventCount || 0),
+      reminders: a.reminders + (m.reminderCount || 0),
+    }),
+    { tasks: 0, events: 0, reminders: 0 }
+  )
+  const memberCount = family.members?.length || 0
+  const childCount = family.children?.length || 0
+
   return (
-    <div className="space-y-6 pb-20 lg:pb-0">
+    <div className="space-y-4 pb-20 sm:space-y-5 lg:pb-0">
       {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">{family.name}</h1>
-          <p className="text-muted-foreground">Manage your family members</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="truncate text-xl font-bold text-foreground sm:text-2xl">{family.name}</h1>
+          <p className="text-sm text-muted-foreground">
+            {memberCount} member{memberCount === 1 ? '' : 's'}
+            {childCount > 0 && ` · ${childCount} child${childCount === 1 ? '' : 'ren'}`}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {viewerIsAdult && (
+            <Button size="sm" onClick={() => setInviteOpen((v) => !v)}>
+              <UserPlus className="mr-1.5 h-4 w-4" />
+              Invite
+            </Button>
+          )}
+          {viewerIsAdult && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setManageOpen(true)
+                setAddChildOpen(true)
+              }}
+            >
+              <Baby className="mr-1.5 h-4 w-4" />
+              Add child
+            </Button>
+          )}
           <JoinFamilyButton />
-          <Button variant="outline" asChild>
+          <Button variant="outline" size="sm" asChild>
             <Link href="/family/settings">
-              <Settings className="w-4 h-4 mr-2" />
-              Family Settings
+              <Settings className="mr-1.5 h-4 w-4" />
+              Settings
             </Link>
           </Button>
         </div>
       </div>
 
-      {/* Join requests + role-bound invite codes */}
+      {/* Join requests wait for a decision, so they are always visible */}
       <JoinRequestsCard familyId={family.id} />
-      <InviteCodesCard familyId={family.id} familyName={family.name || 'our family'} />
+      {inviteOpen && <InviteCodesCard familyId={family.id} familyName={family.name || 'our family'} />}
 
-      {/* Member Activities Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <ListTodo className="w-5 h-5" />
-            Family Member Activities
-          </CardTitle>
-          <CardDescription>
-            View tasks and upcoming events for each family member
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {activitiesLoading ? (
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-24 w-full" />
-              ))}
-            </div>
-          ) : memberActivities.length === 0 ? (
+      {/* Family at a glance */}
+      <div className="flex flex-wrap gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm">
+          <ListTodo className="h-3.5 w-3.5 text-blue-500" />
+          {totals.tasks} open task{totals.tasks === 1 ? '' : 's'}
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm">
+          <Calendar className="h-3.5 w-3.5 text-emerald-500" />
+          {totals.events} upcoming event{totals.events === 1 ? '' : 's'}
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm">
+          <Bell className="h-3.5 w-3.5 text-amber-500" />
+          {totals.reminders} reminder{totals.reminders === 1 ? '' : 's'}
+        </span>
+      </div>
+
+      {/* Who is doing what - tap a person to see the details */}
+      {activitiesLoading ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-20 w-full" />
+          ))}
+        </div>
+      ) : memberActivities.length === 0 ? (
+        <Card>
+          <CardContent className="py-6">
             <Empty
               title="No activities yet"
               description="Tasks and events will appear here when assigned to family members"
             />
-          ) : (
-            <div className="space-y-4">
-              {memberActivities.map((member) => {
-                const RoleIcon = getRoleIcon(member.role)
-                const initials = member.displayName
-                  ?.split(' ')
-                  .map(n => n[0])
-                  .join('')
-                  .toUpperCase() || '?'
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {memberActivities.map((member) => {
+            const RoleIcon = getRoleIcon(member.role)
+            const expanded = expandedMembers.has(member.memberId)
+            const firstTab = member.tasks.length > 0 ? 'tasks' : member.events.length > 0 ? 'events' : 'reminders'
+            const nextEvent = member.events[0]
+            const empty = member.tasks.length === 0 && member.events.length === 0 && (member.reminders?.length ?? 0) === 0
 
-                return (
-                  <div
-                    key={member.memberId}
-                    className="border rounded-lg overflow-hidden"
-                  >
-                    {/* Member Header - clickable to expand/collapse */}
-                    <button
-                      onClick={() => toggleMemberExpanded(member.memberId)}
-                      className="flex items-center gap-3 p-3 bg-muted/30 w-full text-left hover:bg-muted/50 transition-colors"
-                    >
-                      <MemberAvatar name={member.displayName} avatarUrl={member.avatarUrl} color={member.color} emoji={member.emoji} />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground truncate">
-                          {member.displayName}
-                        </p>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {member.role !== 'CHILD' && (<Badge variant={getRoleBadgeVariant(member.role) as 'default' | 'secondary' | 'outline'} className="text-xs">
-                            <RoleIcon className="w-3 h-3 mr-1" />
-                            {roleLabel(member.role)}
-                          </Badge>)}
-                          <span className="text-xs text-muted-foreground">
-                            {member.taskCount} tasks, {member.eventCount} events, {member.reminderCount || 0} reminders
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {viewerIsAdult && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            asChild
-                            title="Add reminder"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Link href={`/dashboard/reminders?new=1${member.userId === user?.id ? '' : `&for=${member.memberId}`}`}>
-                              <Bell className="w-4 h-4" />
-                            </Link>
-                          </Button>
-                        )}
-                        {member.childProfileId && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            asChild
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Link href={`/family/child/${member.childProfileId}`}>
-                              <Settings className="w-4 h-4" />
-                            </Link>
-                          </Button>
-                        )}
-                        {expandedMembers.has(member.memberId) ? (
-                          <ChevronUp className="w-5 h-5 text-muted-foreground" />
-                        ) : (
-                          <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                        )}
-                      </div>
-                    </button>
-
-                    {/* Tasks and Events - shown when expanded */}
-                    {expandedMembers.has(member.memberId) && (member.tasks.length > 0 || member.events.length > 0 || (member.reminders?.length ?? 0) > 0) && (
-                      <Tabs defaultValue="tasks" className="w-full">
-                        <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-auto p-0">
-                          <TabsTrigger 
-                            value="tasks" 
-                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
-                          >
-                            Tasks ({member.tasks.length})
-                          </TabsTrigger>
-                          <TabsTrigger 
-                            value="events"
-                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
-                          >
-                            Events ({member.events.length})
-                          </TabsTrigger>
-                          <TabsTrigger 
-                            value="reminders"
-                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
-                          >
-                            Reminders ({member.reminderCount || 0})
-                          </TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="tasks" className="mt-0 p-3">
-                          {member.tasks.length === 0 ? (
-                            <p className="text-sm text-muted-foreground text-center py-4">No pending tasks</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {member.tasks.map((task) => (
-                                <Link
-                                  key={task.id}
-                                  href={`/tasks/${task.id}`}
-                                  className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors"
-                                >
-                                  <div className={`w-2 h-2 rounded-full ${getPriorityColor(task.priority)} bg-current`} />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">{task.title}</p>
-                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                      <Clock className="w-3 h-3" />
-                                      {formatDueDate(task.due_date)}
-                                      {task.category && (
-                                        <Badge variant="outline" className="text-[10px] px-1 py-0">
-                                          {task.category}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <Badge 
-                                    variant={task.status === 'IN_PROGRESS' ? 'default' : 'secondary'}
-                                    className="text-[10px]"
-                                  >
-                                    {task.status.replace('_', ' ')}
-                                  </Badge>
-                                </Link>
-                              ))}
-                              {member.taskCount > 5 && (
-                                <Button variant="ghost" size="sm" className="w-full text-xs" asChild>
-                                  <Link href={`/tasks?assignedTo=${member.userId || member.childProfileId}`}>
-                                    View all {member.taskCount} tasks
-                                  </Link>
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                        </TabsContent>
-                        <TabsContent value="events" className="mt-0 p-3">
-                          {member.events.length === 0 ? (
-                            <p className="text-sm text-muted-foreground text-center py-4">No upcoming events</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {member.events.map((event) => (
-                                <Link
-                                  key={event.id}
-                                  href={`/calendar?event=${event.id}`}
-                                  className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors"
-                                >
-                                  <div 
-                                    className="w-2 h-full min-h-[2rem] rounded-full"
-                                    style={{ backgroundColor: event.color || '#0d9488' }}
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">{event.title}</p>
-                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                      <Calendar className="w-3 h-3" />
-                                      {formatDueDate(event.start_time)} at {formatEventTime(event.start_time, event.is_all_day)}
-                                      {event.location && (
-                                        <span className="flex items-center gap-1">
-                                          <MapPin className="w-3 h-3" />
-                                          {event.location}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </Link>
-                              ))}
-                              {member.eventCount > 5 && (
-                                <Button variant="ghost" size="sm" className="w-full text-xs" asChild>
-                                  <Link href="/calendar">
-                                    View all events
-                                  </Link>
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                        </TabsContent>
-                        <TabsContent value="reminders" className="mt-0 p-3">
-                          {(member.reminders?.length ?? 0) === 0 ? (
-                            <p className="text-sm text-muted-foreground text-center py-4">No pending reminders</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {member.reminders?.map((reminder) => (
-                                <Link
-                                  key={reminder.id}
-                                  href="/dashboard/reminders"
-                                  className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors"
-                                >
-                                  <Bell className="w-4 h-4 text-primary shrink-0" />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">{reminder.title}</p>
-                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                      <Clock className="w-3 h-3" />
-                                      {formatDueDate(reminder.remind_at)} at {formatEventTime(reminder.remind_at, false)}
-                                    </div>
-                                  </div>
-                                </Link>
-                              ))}
-                              {(member.reminderCount ?? 0) > 5 && (
-                                <Button variant="ghost" size="sm" className="w-full text-xs" asChild>
-                                  <Link href="/dashboard/reminders">
-                                    View all {member.reminderCount} reminders
-                                  </Link>
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                        </TabsContent>
-                      </Tabs>
-                    )}
-
-                    {/* No activities message - shown when expanded */}
-                    {expandedMembers.has(member.memberId) && member.tasks.length === 0 && member.events.length === 0 && (member.reminders?.length ?? 0) === 0 && (
-                      <div className="p-4 text-center text-sm text-muted-foreground">
-                        <AlertCircle className="w-5 h-5 mx-auto mb-2 opacity-50" />
-                        Nothing assigned yet
-                      </div>
+            return (
+              <div
+                key={member.memberId}
+                className={cn(
+                  'overflow-hidden rounded-xl border bg-card',
+                  expanded && 'sm:col-span-2 xl:col-span-3'
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleMemberExpanded(member.memberId)}
+                  aria-expanded={expanded}
+                  className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-muted/40"
+                >
+                  <MemberAvatar name={member.displayName} avatarUrl={member.avatarUrl} color={member.color} emoji={member.emoji} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="truncate font-medium text-foreground">{member.displayName}</p>
+                      {member.role !== 'CHILD' && (
+                        <Badge variant={getRoleBadgeVariant(member.role) as 'default' | 'secondary' | 'outline'} className="shrink-0 px-1.5 py-0 text-[10px]">
+                          <RoleIcon className="mr-1 h-3 w-3" />
+                          {roleLabel(member.role)}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <ListTodo className="h-3 w-3" />
+                        {member.taskCount}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {member.eventCount}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Bell className="h-3 w-3" />
+                        {member.reminderCount || 0}
+                      </span>
+                    </div>
+                    {nextEvent && !expanded && (
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                        Next: <span className="text-foreground">{nextEvent.title}</span> · {formatDueDate(nextEvent.start_time)}{' '}
+                        {formatEventTime(nextEvent.start_time, nextEvent.is_all_day)}
+                      </p>
                     )}
                   </div>
-                )
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  {expanded ? (
+                    <ChevronUp className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  )}
+                </button>
+
+                {expanded && (
+                  <div className="border-t">
+                    <div className="flex flex-wrap gap-2 p-3 pb-0">
+                      {viewerIsAdult && (
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href={`/dashboard/reminders?new=1${member.userId === user?.id ? '' : `&for=${member.memberId}`}`}>
+                            <Bell className="mr-1.5 h-4 w-4" />
+                            Add reminder
+                          </Link>
+                        </Button>
+                      )}
+                      {member.childProfileId && (
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href={`/family/child/${member.childProfileId}`}>
+                            <Settings className="mr-1.5 h-4 w-4" />
+                            Profile & settings
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
+                    {empty ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">
+                        <AlertCircle className="mx-auto mb-2 h-5 w-5 opacity-50" />
+                        Nothing assigned yet
+                      </div>
+                    ) : (
+                            <Tabs defaultValue={firstTab} className="w-full">
+                              <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-auto p-0">
+                                <TabsTrigger 
+                                  value="tasks" 
+                                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
+                                >
+                                  Tasks ({member.tasks.length})
+                                </TabsTrigger>
+                                <TabsTrigger 
+                                  value="events"
+                                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
+                                >
+                                  Events ({member.events.length})
+                                </TabsTrigger>
+                                <TabsTrigger 
+                                  value="reminders"
+                                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
+                                >
+                                  Reminders ({member.reminderCount || 0})
+                                </TabsTrigger>
+                              </TabsList>
+                              <TabsContent value="tasks" className="mt-0 p-3">
+                                {member.tasks.length === 0 ? (
+                                  <p className="text-sm text-muted-foreground text-center py-4">No pending tasks</p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {member.tasks.map((task) => (
+                                      <Link
+                                        key={task.id}
+                                        href={`/tasks/${task.id}`}
+                                        className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors"
+                                      >
+                                        <div className={`w-2 h-2 rounded-full ${getPriorityColor(task.priority)} bg-current`} />
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-medium truncate">{task.title}</p>
+                                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                            <Clock className="w-3 h-3" />
+                                            {formatDueDate(task.due_date)}
+                                            {task.category && (
+                                              <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                                {task.category}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <Badge 
+                                          variant={task.status === 'IN_PROGRESS' ? 'default' : 'secondary'}
+                                          className="text-[10px]"
+                                        >
+                                          {task.status.replace('_', ' ')}
+                                        </Badge>
+                                      </Link>
+                                    ))}
+                                    {member.taskCount > 5 && (
+                                      <Button variant="ghost" size="sm" className="w-full text-xs" asChild>
+                                        <Link href={`/tasks?assignedTo=${member.userId || member.childProfileId}`}>
+                                          View all {member.taskCount} tasks
+                                        </Link>
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
+                              </TabsContent>
+                              <TabsContent value="events" className="mt-0 p-3">
+                                {member.events.length === 0 ? (
+                                  <p className="text-sm text-muted-foreground text-center py-4">No upcoming events</p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {member.events.map((event) => (
+                                      <Link
+                                        key={event.id}
+                                        href={`/calendar?event=${event.id}`}
+                                        className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors"
+                                      >
+                                        <div 
+                                          className="w-2 h-full min-h-[2rem] rounded-full"
+                                          style={{ backgroundColor: event.color || '#0d9488' }}
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-medium truncate">{event.title}</p>
+                                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                            <Calendar className="w-3 h-3" />
+                                            {formatDueDate(event.start_time)} at {formatEventTime(event.start_time, event.is_all_day)}
+                                            {event.location && (
+                                              <span className="flex items-center gap-1">
+                                                <MapPin className="w-3 h-3" />
+                                                {event.location}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </Link>
+                                    ))}
+                                    {member.eventCount > 5 && (
+                                      <Button variant="ghost" size="sm" className="w-full text-xs" asChild>
+                                        <Link href="/calendar">
+                                          View all events
+                                        </Link>
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
+                              </TabsContent>
+                              <TabsContent value="reminders" className="mt-0 p-3">
+                                {(member.reminders?.length ?? 0) === 0 ? (
+                                  <p className="text-sm text-muted-foreground text-center py-4">No pending reminders</p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {member.reminders?.map((reminder) => (
+                                      <Link
+                                        key={reminder.id}
+                                        href="/dashboard/reminders"
+                                        className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors"
+                                      >
+                                        <Bell className="w-4 h-4 text-primary shrink-0" />
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-medium truncate">{reminder.title}</p>
+                                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                            <Clock className="w-3 h-3" />
+                                            {formatDueDate(reminder.remind_at)} at {formatEventTime(reminder.remind_at, false)}
+                                          </div>
+                                        </div>
+                                      </Link>
+                                    ))}
+                                    {(member.reminderCount ?? 0) > 5 && (
+                                      <Button variant="ghost" size="sm" className="w-full text-xs" asChild>
+                                        <Link href="/dashboard/reminders">
+                                          View all {member.reminderCount} reminders
+                                        </Link>
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
+                              </TabsContent>
+                            </Tabs>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
 
       <AlertDialog open={!!memberToRemove} onOpenChange={(open) => { if (!open && !isRemovingMember) setMemberToRemove(null) }}>
         <AlertDialogContent>
@@ -667,6 +722,25 @@ export default function FamilyPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Members, children and their settings */}
+      <button
+        type="button"
+        onClick={() => setManageOpen((v) => !v)}
+        aria-expanded={manageOpen}
+        className="flex w-full items-center justify-between rounded-xl border bg-card px-4 py-3 text-left transition-colors hover:bg-muted/40"
+      >
+        <span className="flex items-center gap-2 font-medium">
+          <Users className="h-4 w-4 text-muted-foreground" />
+          Manage members &amp; children
+          <span className="text-xs font-normal text-muted-foreground">
+            {memberCount} · {childCount}
+          </span>
+        </span>
+        {manageOpen ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+      </button>
+
+
+      <div className={cn(!manageOpen && "hidden")}>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 [&>*]:min-w-0">
         {/* Family Members */}
         <Card>
@@ -926,6 +1000,7 @@ export default function FamilyPage() {
             )}
           </CardContent>
         </Card>
+      </div>
       </div>
     </div>
   )

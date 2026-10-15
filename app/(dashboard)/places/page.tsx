@@ -44,6 +44,7 @@ import {
   Mail,
   MessageSquare,
   ImagePlus,
+  Navigation,
 } from 'lucide-react'
 import { useFavorites } from '@/components/favorites-dropdown'
 import useSWR from 'swr'
@@ -193,7 +194,7 @@ function PlaceAddress({ place }: { place: SavedPlace }) {
   return (
     <p className="text-xs text-muted-foreground flex items-start gap-1 mt-0.5 break-words">
       <MapPin className="w-3 h-3 mt-0.5 shrink-0" />
-      <span>{text}</span>
+      <span className="line-clamp-2">{text}</span>
     </p>
   )
 }
@@ -234,12 +235,229 @@ const NOTIFY_CHANNEL_OPTIONS: { value: NotifyChannel; label: string; icon: typeo
 
 const DEFAULT_NOTIFY_CHANNELS: NotifyChannel[] = ['in_app', 'push', 'email']
 
+type PlaceFilter = 'all' | 'geofence' | 'nogeofence' | 'favorites'
+
 const fetcher = async (url: string) => {
   const res = await authFetch(url, { credentials: 'include' })
   if (!res.ok) throw new Error('Failed to fetch')
   const data = await res.json()
   return data.data
 }
+
+interface PlaceDraft {
+  name: string
+  address: string
+  latitude: number | null
+  longitude: number | null
+  locationLabel: string
+  radius: number
+  geofenceEnabled: boolean
+  alertOnArrival: boolean
+  alertOnDeparture: boolean
+  icon: string
+  color: string
+  notifyChannels: NotifyChannel[]
+}
+
+// One form for both "Add place" and "Edit place" (they used to be two copies).
+function PlaceFormFields({
+  idp,
+  mode,
+  draft,
+  setDraft,
+  isLocating,
+  onFind,
+  onUseCurrent,
+  photo,
+  hasPremium,
+  canManageGeofence,
+}: {
+  idp: string
+  mode: 'new' | 'edit'
+  draft: PlaceDraft
+  setDraft: (updater: (d: PlaceDraft) => PlaceDraft) => void
+  isLocating: boolean
+  onFind: () => void
+  onUseCurrent: () => void
+  photo: {
+    currentPath?: string | null
+    file: File | null
+    removed?: boolean
+    onPick: (file: File) => void
+    onRemove: () => void
+  }
+  hasPremium: boolean
+  canManageGeofence: boolean
+}) {
+  const set = (patch: Partial<PlaceDraft>) => setDraft((d) => ({ ...d, ...patch }))
+  const toggleChannel = (channel: NotifyChannel) =>
+    setDraft((d) => ({
+      ...d,
+      notifyChannels: d.notifyChannels.includes(channel)
+        ? d.notifyChannels.filter((c) => c !== channel)
+        : [...d.notifyChannels, channel],
+    }))
+
+  return (
+    <div className="space-y-4 py-4">
+      <div className="space-y-2">
+        <Label htmlFor={`${idp}Name`}>Place Name</Label>
+        <Input
+          id={`${idp}Name`}
+          placeholder="e.g., Home, School, Grandma's House"
+          value={draft.name}
+          onChange={(e) => set({ name: e.target.value })}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${idp}Address`}>Address</Label>
+        <div className="flex gap-2">
+          <Input
+            id={`${idp}Address`}
+            placeholder="123 Main St, City, State"
+            value={draft.address}
+            onChange={(e) => set(mode === 'new' ? { address: e.target.value, locationLabel: '' } : { address: e.target.value })}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            disabled={isLocating}
+            onClick={onFind}
+            title="Find this address"
+            aria-label="Find this address"
+          >
+            <Search className="w-4 h-4" />
+          </Button>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          disabled={isLocating}
+          onClick={onUseCurrent}
+        >
+          <Locate className="w-3.5 h-3.5 mr-1" />
+          Use my current location instead
+        </Button>
+        {draft.locationLabel ? (
+          <p className="text-xs text-green-600 flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            {draft.locationLabel}
+          </p>
+        ) : mode === 'new' ? (
+          <p className="text-xs text-muted-foreground">
+            Type the address (we&apos;ll look it up when you save) or use your current location.
+          </p>
+        ) : null}
+      </div>
+      <PlacePhotoField
+        currentPath={photo.currentPath}
+        file={photo.file}
+        removed={photo.removed}
+        onPick={photo.onPick}
+        onRemove={photo.onRemove}
+      />
+      <div className="space-y-2">
+        <Label>Icon</Label>
+        <IconPicker value={draft.icon} color={draft.color} onChange={(key) => set({ icon: key })} />
+      </div>
+      <div className="space-y-2">
+        <Label>Color</Label>
+        <ColorPicker value={draft.color} onChange={(color) => set({ color })} />
+      </div>
+      {hasPremium && canManageGeofence && (
+        <>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor={`${idp}Geofence`}>Enable Geofence</Label>
+              <p className="text-xs text-muted-foreground">Get alerts when family members arrive or leave</p>
+            </div>
+            <Switch
+              id={`${idp}Geofence`}
+              checked={draft.geofenceEnabled}
+              onCheckedChange={(checked) => set({ geofenceEnabled: checked })}
+            />
+          </div>
+          {draft.geofenceEnabled && (
+            <div className="pl-4 border-l-2 border-muted space-y-3">
+              <div className="flex items-center justify-between">
+                <Label htmlFor={`${idp}Arrival`}>Alert on Arrival</Label>
+                <Switch
+                  id={`${idp}Arrival`}
+                  checked={draft.alertOnArrival}
+                  onCheckedChange={(checked) => set({ alertOnArrival: checked })}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor={`${idp}Departure`}>Alert on Departure</Label>
+                <Switch
+                  id={`${idp}Departure`}
+                  checked={draft.alertOnDeparture}
+                  onCheckedChange={(checked) => set({ alertOnDeparture: checked })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`${idp}Radius`}>Radius: {draft.radius}m</Label>
+                <Input
+                  id={`${idp}Radius`}
+                  type="range"
+                  min={50}
+                  max={500}
+                  step={25}
+                  value={draft.radius}
+                  onChange={(e) => set({ radius: parseInt(e.target.value) })}
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Notify me via</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {NOTIFY_CHANNEL_OPTIONS.map(({ value, label, icon: Icon }) => {
+                    const selected = draft.notifyChannels.includes(value)
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => toggleChannel(value)}
+                        aria-pressed={selected}
+                        className={cn(
+                          'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors',
+                          selected
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border text-muted-foreground hover:border-muted-foreground/40'
+                        )}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+                {draft.notifyChannels.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Pick at least one way to hear about arrivals and departures here, or it won&apos;t notify you at all.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+      {!hasPremium && canManageGeofence && (
+        <div className="p-3 rounded-lg bg-muted">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Crown className="w-4 h-4 text-amber-500" />
+            Geofencing requires Premium
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">Upgrade to get arrival and departure alerts</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 export default function PlacesPage() {
   const { families, isLoading: familiesLoading } = useFamilies()
@@ -258,6 +476,8 @@ export default function PlacesPage() {
   const { isFavorite, toggleFavorite } = useFavorites()
 
   const [addPlaceOpen, setAddPlaceOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState<PlaceFilter>('all')
   const [editPlaceOpen, setEditPlaceOpen] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -563,6 +783,28 @@ export default function PlacesPage() {
     }
   }
 
+  const toggleGeofence = async (place: SavedPlace, enabled: boolean) => {
+    // Optimistic: flip the switch now, roll back if the server says no
+    mutate((prev) => prev?.map((p) => (p.id === place.id ? { ...p, geofenceEnabled: enabled } : p)), {
+      revalidate: false,
+    })
+    try {
+      const res = await authFetch(`/api/places/${place.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ geofenceEnabled: enabled }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data?.success) throw new Error(data?.error || 'Could not update alerts')
+      toast.success(enabled ? `Alerts on for ${place.name}` : `Alerts off for ${place.name}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not update alerts')
+      mutate()
+    }
+  }
+
+
   const isLoading = familiesLoading || placesLoading || subscriptionLoading
 
   if (isLoading) {
@@ -596,564 +838,344 @@ export default function PlacesPage() {
   const maxPlaces = access.limits.maxSavedPlaces
   const currentCount = places?.length || 0
   const canAddMore = currentCount < maxPlaces
+  const geofenceTotal = places?.filter((p) => p.geofenceEnabled).length || 0
+  const favoriteTotal = places?.filter((p) => isFavorite('place', p.id)).length || 0
+
+  const q = search.trim().toLowerCase()
+  const homeRe = /\b(home|house)\b/i
+  const shown = (places || [])
+    .filter((p) => {
+      if (filter === 'geofence' && !p.geofenceEnabled) return false
+      if (filter === 'nogeofence' && p.geofenceEnabled) return false
+      if (filter === 'favorites' && !isFavorite('place', p.id)) return false
+      if (q && !(p.name.toLowerCase().includes(q) || (p.address || '').toLowerCase().includes(q))) return false
+      return true
+    })
+    .sort((a, b) => {
+      const rank = (p: SavedPlace) => (homeRe.test(p.name) ? 0 : isFavorite('place', p.id) ? 1 : 2)
+      return rank(a) - rank(b) || a.name.localeCompare(b.name)
+    })
+
+  const canToggleGeofence = access.hasPremium && canManageGeofence
+
+  const filterDefs: Array<{ key: PlaceFilter; label: string; n: number }> = [
+    { key: 'all', label: 'All', n: currentCount },
+    { key: 'geofence', label: 'Alerts on', n: geofenceTotal },
+    { key: 'nogeofence', label: 'Alerts off', n: currentCount - geofenceTotal },
+    { key: 'favorites', label: 'Favorites', n: favoriteTotal },
+  ]
 
   return (
-    <div className="space-y-6 pb-20 lg:pb-0">
+    <div className="space-y-4 pb-20 sm:space-y-5 lg:pb-0">
       {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Saved Places</h1>
-          <p className="text-muted-foreground">
-            Manage family locations and geofence alerts
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-foreground sm:text-2xl">Saved Places</h1>
+          <p className="truncate text-sm text-muted-foreground">
+            {currentCount} of {maxPlaces === Infinity ? 'unlimited' : maxPlaces} places · {geofenceTotal} with geofence alerts
           </p>
         </div>
-        <Dialog open={addPlaceOpen} onOpenChange={setAddPlaceOpen}>
-          <DialogTrigger asChild>
-            <Button disabled={!canAddMore}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Place
+        <div className="flex shrink-0 items-center gap-2">
+          {!canAddMore && (
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/subscription">
+                <Crown className="mr-1.5 h-4 w-4 text-amber-500" />
+                Upgrade
+              </Link>
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Add New Place</DialogTitle>
-              <DialogDescription>
-                Save a location for quick access and optional geofence alerts
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="placeName">Place Name</Label>
-                <Input
-                  id="placeName"
-                  placeholder="e.g., Home, School, Grandma's House"
-                  value={newPlace.name}
-                  onChange={(e) => setNewPlace({ ...newPlace, name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="placeAddress">Address</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="placeAddress"
-                    placeholder="123 Main St, City, State"
-                    value={newPlace.address}
-                    onChange={(e) => setNewPlace({ ...newPlace, address: e.target.value, locationLabel: '' })}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    disabled={isLocating}
-                    onClick={() => geocodeAddress(newPlace.address, 'new')}
-                    title="Find this address"
-                  >
-                    <Search className="w-4 h-4" />
-                  </Button>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  disabled={isLocating}
-                  onClick={() => useCurrentLocation('new')}
-                >
-                  <Locate className="w-3.5 h-3.5 mr-1" />
-                  Use my current location instead
-                </Button>
-                {newPlace.locationLabel && (
-                  <p className="text-xs text-green-600 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    {newPlace.locationLabel}
-                  </p>
-                )}
-                {!newPlace.locationLabel && (
-                  <p className="text-xs text-muted-foreground">
-                    Type the address (we'll look it up when you save) or use your current location.
-                  </p>
-                )}
-              </div>
-              <PlacePhotoField
-                file={newPhoto}
-                onPick={setNewPhoto}
-                onRemove={() => setNewPhoto(null)}
-              />
-              <div className="space-y-2">
-                <Label>Icon</Label>
-                <IconPicker
-                  value={newPlace.icon}
-                  color={newPlace.color}
-                  onChange={(key) => setNewPlace({ ...newPlace, icon: key })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Color</Label>
-                <ColorPicker
-                  value={newPlace.color}
-                  onChange={(color) => setNewPlace({ ...newPlace, color })}
-                />
-              </div>
-              {access.hasPremium && canManageGeofence && (
-                <>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="geofence">Enable Geofence</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Get alerts when family members arrive or leave
-                      </p>
-                    </div>
-                    <Switch
-                      id="geofence"
-                      checked={newPlace.geofenceEnabled}
-                      onCheckedChange={(checked) =>
-                        setNewPlace({ ...newPlace, geofenceEnabled: checked })
-                      }
-                    />
-                  </div>
-                  {newPlace.geofenceEnabled && (
-                    <div className="pl-4 border-l-2 border-muted space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="arrival">Alert on Arrival</Label>
-                        <Switch
-                          id="arrival"
-                          checked={newPlace.alertOnArrival}
-                          onCheckedChange={(checked) =>
-                            setNewPlace({ ...newPlace, alertOnArrival: checked })
-                          }
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="departure">Alert on Departure</Label>
-                        <Switch
-                          id="departure"
-                          checked={newPlace.alertOnDeparture}
-                          onCheckedChange={(checked) =>
-                            setNewPlace({ ...newPlace, alertOnDeparture: checked })
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="radius">Radius: {newPlace.radius}m</Label>
-                        <Input
-                          id="radius"
-                          type="range"
-                          min={50}
-                          max={500}
-                          step={25}
-                          value={newPlace.radius}
-                          onChange={(e) =>
-                            setNewPlace({ ...newPlace, radius: parseInt(e.target.value) })
-                          }
-                          className="w-full"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Notify me via</Label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {NOTIFY_CHANNEL_OPTIONS.map(({ value, label, icon: Icon }) => {
-                            const selected = newPlace.notifyChannels.includes(value)
-                            return (
-                              <button
-                                key={value}
-                                type="button"
-                                onClick={() => toggleNotifyChannel(value, 'new')}
-                                aria-pressed={selected}
-                                className={cn(
-                                  'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors',
-                                  selected
-                                    ? 'border-primary bg-primary/10 text-primary'
-                                    : 'border-border text-muted-foreground hover:border-muted-foreground/40'
-                                )}
-                              >
-                                <Icon className="w-3.5 h-3.5" />
-                                {label}
-                              </button>
-                            )
-                          })}
-                        </div>
-                        {newPlace.notifyChannels.length === 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            Pick at least one way to hear about arrivals and departures here, or it won&apos;t notify you at all.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-              {!access.hasPremium && canManageGeofence && (
-                <div className="p-3 rounded-lg bg-muted">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Crown className="w-4 h-4 text-amber-500" />
-                    Geofencing requires Premium
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Upgrade to get arrival and departure alerts
-                  </p>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setAddPlaceOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleAddPlace} disabled={isAdding}>
-                {isAdding ? <Spinner className="w-4 h-4 mr-2" /> : null}
-                Save Place
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Edit Place Dialog */}
-        <Dialog open={editPlaceOpen} onOpenChange={setEditPlaceOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Edit Place</DialogTitle>
-              <DialogDescription>
-                Update the details for this saved location
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="editPlaceName">Place Name</Label>
-                <Input
-                  id="editPlaceName"
-                  placeholder="e.g., Home, School, Grandma's House"
-                  value={editPlace.name}
-                  onChange={(e) => setEditPlace({ ...editPlace, name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="editPlaceAddress">Address</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="editPlaceAddress"
-                    placeholder="123 Main St, City, State"
-                    value={editPlace.address}
-                    onChange={(e) => setEditPlace({ ...editPlace, address: e.target.value })}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    disabled={isLocating}
-                    onClick={() => geocodeAddress(editPlace.address, 'edit')}
-                    title="Find this address"
-                  >
-                    <Search className="w-4 h-4" />
-                  </Button>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  disabled={isLocating}
-                  onClick={() => useCurrentLocation('edit')}
-                >
-                  <Locate className="w-3.5 h-3.5 mr-1" />
-                  Use my current location instead
-                </Button>
-                {editPlace.locationLabel && (
-                  <p className="text-xs text-green-600 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    {editPlace.locationLabel}
-                  </p>
-                )}
-              </div>
-              <PlacePhotoField
-                currentPath={editingPlace?.photoPath}
-                file={editPhoto}
-                removed={editRemovePhoto}
-                onPick={(f) => {
-                  setEditPhoto(f)
-                  setEditRemovePhoto(false)
-                }}
-                onRemove={() => {
-                  setEditPhoto(null)
-                  setEditRemovePhoto(true)
-                }}
-              />
-              <div className="space-y-2">
-                <Label>Icon</Label>
-                <IconPicker
-                  value={editPlace.icon}
-                  color={editPlace.color}
-                  onChange={(key) => setEditPlace({ ...editPlace, icon: key })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Color</Label>
-                <ColorPicker
-                  value={editPlace.color}
-                  onChange={(color) => setEditPlace({ ...editPlace, color })}
-                />
-              </div>
-              {access.hasPremium && canManageGeofence && (
-                <>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="editGeofence">Enable Geofence</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Get alerts when family members arrive or leave
-                      </p>
-                    </div>
-                    <Switch
-                      id="editGeofence"
-                      checked={editPlace.geofenceEnabled}
-                      onCheckedChange={(checked) =>
-                        setEditPlace({ ...editPlace, geofenceEnabled: checked })
-                      }
-                    />
-                  </div>
-                  {editPlace.geofenceEnabled && (
-                    <div className="pl-4 border-l-2 border-muted space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="editArrival">Alert on Arrival</Label>
-                        <Switch
-                          id="editArrival"
-                          checked={editPlace.alertOnArrival}
-                          onCheckedChange={(checked) =>
-                            setEditPlace({ ...editPlace, alertOnArrival: checked })
-                          }
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="editDeparture">Alert on Departure</Label>
-                        <Switch
-                          id="editDeparture"
-                          checked={editPlace.alertOnDeparture}
-                          onCheckedChange={(checked) =>
-                            setEditPlace({ ...editPlace, alertOnDeparture: checked })
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="editRadius">Radius: {editPlace.radius}m</Label>
-                        <Input
-                          id="editRadius"
-                          type="range"
-                          min={50}
-                          max={500}
-                          step={25}
-                          value={editPlace.radius}
-                          onChange={(e) =>
-                            setEditPlace({ ...editPlace, radius: parseInt(e.target.value) })
-                          }
-                          className="w-full"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Notify me via</Label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {NOTIFY_CHANNEL_OPTIONS.map(({ value, label, icon: Icon }) => {
-                            const selected = editPlace.notifyChannels.includes(value)
-                            return (
-                              <button
-                                key={value}
-                                type="button"
-                                onClick={() => toggleNotifyChannel(value, 'edit')}
-                                aria-pressed={selected}
-                                className={cn(
-                                  'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors',
-                                  selected
-                                    ? 'border-primary bg-primary/10 text-primary'
-                                    : 'border-border text-muted-foreground hover:border-muted-foreground/40'
-                                )}
-                              >
-                                <Icon className="w-3.5 h-3.5" />
-                                {label}
-                              </button>
-                            )
-                          })}
-                        </div>
-                        {editPlace.notifyChannels.length === 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            Pick at least one way to hear about arrivals and departures here, or it won&apos;t notify you at all.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-              {!access.hasPremium && canManageGeofence && (
-                <div className="p-3 rounded-lg bg-muted">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Crown className="w-4 h-4 text-amber-500" />
-                    Geofencing requires Premium
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Upgrade to get arrival and departure alerts
-                  </p>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setEditPlaceOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleUpdatePlace} disabled={isEditing}>
-                {isEditing ? <Spinner className="w-4 h-4 mr-2" /> : null}
-                Save Changes
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          )}
+          <Button size="sm" disabled={!canAddMore} onClick={() => setAddPlaceOpen(true)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add Place
+          </Button>
+        </div>
       </div>
 
-      {/* Saved places summary + last 24h of geofence arrivals/departures */}
-      <GeofenceActivityCard
-        familyId={primaryFamily.id}
-        placeCount={currentCount}
-        maxPlaces={maxPlaces}
-        geofenceCount={places?.filter((p) => p.geofenceEnabled).length || 0}
-        canAddMore={canAddMore}
-      />
-
-      {/* Places Grid */}
-      {places?.length === 0 ? (
-        <Card>
-          <CardContent className="py-12">
-            <div className="text-center">
-              <MapPin className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-              <h3 className="font-medium text-foreground mb-1">No saved places yet</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Add your frequently visited locations for quick access
-              </p>
-              <Button onClick={() => setAddPlaceOpen(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Add Your First Place
-              </Button>
+      {places && places.length > 0 && (
+        <div className="space-y-3">
+          {places.length >= 5 && (
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search places"
+                className="h-10 pl-9"
+                aria-label="Search places"
+              />
             </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {places?.map((place) => {
-            const IconComponent = getPlaceIcon(place.icon)
-            return (
-              <Card key={place.id} className="overflow-hidden">
-                <div
-                  className="h-2"
-                  style={{ backgroundColor: place.color }}
-                />
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      {place.photoPath ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={`/api/files?pathname=${encodeURIComponent(place.photoPath)}`}
-                          alt={place.name}
-                          className="w-12 h-12 rounded-lg object-cover border-2"
-                          style={{ borderColor: place.color }}
-                        />
-                      ) : (
-                        <div
-                          className="p-2 rounded-lg"
-                          style={{ backgroundColor: `${place.color}20` }}
-                        >
-                          <IconComponent
-                            className="w-5 h-5"
-                            style={{ color: place.color }}
-                          />
-                        </div>
-                      )}
-                      <div>
-                        <CardTitle className="text-base">{place.name}</CardTitle>
-                        <PlaceAddress place={place} />
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => toggleFavorite('place', place.id)}
-                      >
-                        <Star 
-                          className={`w-4 h-4 ${isFavorite('place', place.id) ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`} 
-                        />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8"
-                        onClick={() => openEditDialog(place)}
-                        style={place.canManage === false ? { display: 'none' } : undefined}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => handleDeletePlace(place.id)}
-                        style={place.canManage === false ? { display: 'none' } : undefined}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {place.geofenceEnabled ? (
-                      <Badge variant="outline" className="text-xs">
-                        <Bell className="w-3 h-3 mr-1" />
-                        Geofence On
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-xs">
-                        <BellOff className="w-3 h-3 mr-1" />
-                        Geofence Off
-                      </Badge>
-                    )}
-                    {place.geofenceEnabled && (
-                      <>
-                        {place.alertOnArrival && (
-                          <Badge variant="outline" className="text-xs text-green-600">
-                            Arrival
-                          </Badge>
-                        )}
-                        {place.alertOnDeparture && (
-                          <Badge variant="outline" className="text-xs text-amber-600">
-                            Departure
-                          </Badge>
-                        )}
-                      </>
-                    )}
-                  </div>
-                  {place.geofenceEnabled && (
-                    <div className="flex items-center gap-1.5 mt-2">
-                      {NOTIFY_CHANNEL_OPTIONS.filter((opt) =>
-                        (place.notifyChannels && place.notifyChannels.length > 0
-                          ? place.notifyChannels
-                          : DEFAULT_NOTIFY_CHANNELS
-                        ).includes(opt.value)
-                      ).map(({ value, label, icon: Icon }) => (
-                        <span
-                          key={value}
-                          title={label}
-                          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted text-muted-foreground"
-                        >
-                          <Icon className="w-3 h-3" />
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Radius: {place.radius}m
-                  </p>
-                </CardContent>
-              </Card>
-            )
-          })}
+          )}
+          <div className="flex flex-wrap gap-2">
+            {filterDefs.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFilter(f.key)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors',
+                  filter === f.key ? 'border-primary bg-primary/10 font-medium' : 'hover:bg-muted'
+                )}
+              >
+                {f.n} {f.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          {places?.length === 0 ? (
+            <Card>
+              <CardContent className="py-12">
+                <div className="text-center">
+                  <MapPin className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+                  <h3 className="font-medium text-foreground mb-1">No saved places yet</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Add your frequently visited locations for quick access
+                  </p>
+                  <Button onClick={() => setAddPlaceOpen(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Your First Place
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : shown.length === 0 ? (
+            <Card>
+              <CardContent className="py-10 text-center">
+                <p className="text-muted-foreground">No places match</p>
+                <Button
+                  variant="link"
+                  onClick={() => {
+                    setSearch('')
+                    setFilter('all')
+                  }}
+                >
+                  Clear search and filters
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {shown.map((place) => {
+                const IconComponent = getPlaceIcon(place.icon)
+                const manage = place.canManage !== false
+                const channels =
+                  place.notifyChannels && place.notifyChannels.length > 0 ? place.notifyChannels : DEFAULT_NOTIFY_CHANNELS
+                return (
+                  <Card key={place.id} className="overflow-hidden gap-0 py-0">
+                    <div className="h-1.5" style={{ backgroundColor: place.color }} />
+                    <CardContent className="p-3 sm:p-4">
+                      <div className="flex items-start gap-3">
+                        {place.photoPath ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={`/api/files?pathname=${encodeURIComponent(place.photoPath)}`}
+                            alt={place.name}
+                            className="w-12 h-12 shrink-0 rounded-lg object-cover border-2"
+                            style={{ borderColor: place.color }}
+                          />
+                        ) : (
+                          <div className="shrink-0 p-2.5 rounded-lg" style={{ backgroundColor: `${place.color}20` }}>
+                            <IconComponent className="w-5 h-5" style={{ color: place.color }} />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-semibold">{place.name}</p>
+                          <PlaceAddress place={place} />
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() => toggleFavorite('place', place.id)}
+                          aria-label={isFavorite('place', place.id) ? 'Remove from favorites' : 'Add to favorites'}
+                        >
+                          <Star
+                            className={`w-4 h-4 ${isFavorite('place', place.id) ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`}
+                          />
+                        </Button>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                        {place.geofenceEnabled ? (
+                          <>
+                            <Badge variant="outline" className="text-xs">
+                              <Bell className="w-3 h-3 mr-1" />
+                              Alerts on · {place.radius}m
+                            </Badge>
+                            {place.alertOnArrival && (
+                              <Badge variant="outline" className="text-xs text-green-600">
+                                Arrival
+                              </Badge>
+                            )}
+                            {place.alertOnDeparture && (
+                              <Badge variant="outline" className="text-xs text-amber-600">
+                                Departure
+                              </Badge>
+                            )}
+                            {NOTIFY_CHANNEL_OPTIONS.filter((opt) => channels.includes(opt.value)).map(
+                              ({ value, label, icon: Icon }) => (
+                                <span
+                                  key={value}
+                                  title={label}
+                                  className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted text-muted-foreground"
+                                >
+                                  <Icon className="w-3 h-3" />
+                                </span>
+                              )
+                            )}
+                          </>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs">
+                            <BellOff className="w-3 h-3 mr-1" />
+                            Alerts off
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between gap-2 border-t pt-2">
+                        {canToggleGeofence && manage ? (
+                          <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                            <Switch
+                              checked={place.geofenceEnabled}
+                              onCheckedChange={(checked) => toggleGeofence(place, checked)}
+                              aria-label={`Geofence alerts for ${place.name}`}
+                            />
+                            Alerts
+                          </label>
+                        ) : (
+                          <span />
+                        )}
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" asChild>
+                            <a
+                              href={`https://www.google.com/maps/dir/?api=1&destination=${place.latitude},${place.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <Navigation className="mr-1 h-3.5 w-3.5" />
+                              Directions
+                            </a>
+                          </Button>
+                          {manage && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => openEditDialog(place)}
+                                aria-label={`Edit ${place.name}`}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                onClick={() => handleDeletePlace(place.id)}
+                                aria-label={`Delete ${place.name}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Last 24h of geofence arrivals/departures */}
+        <div className="lg:sticky lg:top-4 lg:self-start">
+          <GeofenceActivityCard
+            familyId={primaryFamily.id}
+            placeCount={currentCount}
+            maxPlaces={maxPlaces}
+            geofenceCount={geofenceTotal}
+            canAddMore={canAddMore}
+          />
+        </div>
+      </div>
+
+      {/* Add Place Dialog */}
+      <Dialog open={addPlaceOpen} onOpenChange={setAddPlaceOpen}>
+        <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add New Place</DialogTitle>
+            <DialogDescription>Save a location for quick access and optional geofence alerts</DialogDescription>
+          </DialogHeader>
+          <PlaceFormFields
+            idp="new"
+            mode="new"
+            draft={newPlace}
+            setDraft={(fn) => setNewPlace((d) => fn(d))}
+            isLocating={isLocating}
+            onFind={() => geocodeAddress(newPlace.address, 'new')}
+            onUseCurrent={() => useCurrentLocation('new')}
+            photo={{ file: newPhoto, onPick: setNewPhoto, onRemove: () => setNewPhoto(null) }}
+            hasPremium={access.hasPremium}
+            canManageGeofence={canManageGeofence}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddPlaceOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddPlace} disabled={isAdding}>
+              {isAdding ? <Spinner className="w-4 h-4 mr-2" /> : null}
+              Save Place
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Place Dialog */}
+      <Dialog open={editPlaceOpen} onOpenChange={setEditPlaceOpen}>
+        <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Place</DialogTitle>
+            <DialogDescription>Update the details for this saved location</DialogDescription>
+          </DialogHeader>
+          <PlaceFormFields
+            idp="edit"
+            mode="edit"
+            draft={editPlace}
+            setDraft={(fn) => setEditPlace((d) => fn(d))}
+            isLocating={isLocating}
+            onFind={() => geocodeAddress(editPlace.address, 'edit')}
+            onUseCurrent={() => useCurrentLocation('edit')}
+            photo={{
+              currentPath: editingPlace?.photoPath,
+              file: editPhoto,
+              removed: editRemovePhoto,
+              onPick: (f) => {
+                setEditPhoto(f)
+                setEditRemovePhoto(false)
+              },
+              onRemove: () => {
+                setEditPhoto(null)
+                setEditRemovePhoto(true)
+              },
+            }}
+            hasPremium={access.hasPremium}
+            canManageGeofence={canManageGeofence}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditPlaceOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdatePlace} disabled={isEditing}>
+              {isEditing ? <Spinner className="w-4 h-4 mr-2" /> : null}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
