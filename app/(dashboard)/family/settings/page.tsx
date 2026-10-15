@@ -15,6 +15,14 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { 
   Settings, Users, Shield, Bell, Copy, RefreshCw, 
@@ -39,6 +47,9 @@ export default function FamilySettingsPage() {
   
   const [saving, setSaving] = useState(false)
   const [regeneratingCode, setRegeneratingCode] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleting, setDeleting] = useState(false)
   
   const [formData, setFormData] = useState({
     name: '',
@@ -87,6 +98,30 @@ export default function FamilySettingsPage() {
       toast.error('Failed to save settings')
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Typing the family name (or DELETE when it has none) is required so a
+  // stray tap can never remove a family.
+  const deletePhrase = family?.name || 'DELETE'
+
+  const handleDeleteFamily = async () => {
+    if (!selectedFamilyId) return
+    setDeleting(true)
+    try {
+      const res = await authFetch(`/api/families/${selectedFamilyId}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => null)
+      if (res.ok && data?.success) {
+        toast.success('Family deleted')
+        // Full reload so every cached family/selection is dropped.
+        window.location.assign('/dashboard')
+        return
+      }
+      toast.error(data?.error || 'Failed to delete family')
+    } catch {
+      toast.error('Failed to delete family')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -283,7 +318,49 @@ export default function FamilySettingsPage() {
                       Permanently delete this family and all associated data
                     </p>
                   </div>
-                  <Button variant="destructive">Delete Family</Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => { setDeleteConfirm(''); setDeleteOpen(true) }}
+                  >
+                    Delete Family
+                  </Button>
+                  <Dialog open={deleteOpen} onOpenChange={(open) => { if (!deleting) setDeleteOpen(open) }}>
+                    <DialogContent className="max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Delete this family?</DialogTitle>
+                        <DialogDescription>
+                          Every member will lose access to this family&apos;s calendar, tasks and
+                          locations. If the family has a paid plan, cancel it first under
+                          Subscription &gt; Manage Billing.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-2">
+                        <Label htmlFor="deleteConfirm">
+                          Type <span className="font-semibold">{deletePhrase}</span> to confirm
+                        </Label>
+                        <Input
+                          id="deleteConfirm"
+                          value={deleteConfirm}
+                          onChange={(e) => setDeleteConfirm(e.target.value)}
+                          autoComplete="off"
+                          disabled={deleting}
+                        />
+                      </div>
+                      <DialogFooter className="gap-2">
+                        <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          onClick={handleDeleteFamily}
+                          disabled={deleting || deleteConfirm.trim() !== deletePhrase}
+                        >
+                          {deleting ? <Spinner className="w-4 h-4 mr-2" /> : null}
+                          Delete family
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </CardContent>
             </Card>
