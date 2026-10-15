@@ -4,7 +4,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, hashPassword, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { ensureAgeColumns } from "@/lib/age-schema"
-import { ageFromDob, dobError, childAgeInfo } from "@/lib/age"
+import { ageFromDob, dobError, childAgeInfo, GUEST_AGE_INFO } from "@/lib/age"
 
 const addChildSchema = z.object({
   displayName: z.string().min(1, "Display name is required").max(100),
@@ -70,6 +70,8 @@ export async function GET(
       ORDER BY cp.display_name ASC
     `
 
+    // Guests never see children's birthdates, ages, school, grade or emergency notes.
+    const viewerIsGuest = membership[0].role === "GUEST"
     return NextResponse.json({
       success: true,
       data: children.map((c) => ({
@@ -79,9 +81,11 @@ export async function GET(
         displayName: c.display_name,
         // dateOfBirth, age (derived from the birthdate when known),
         // canHaveAccount, turns18On, daysUntil18, needsRoleChoice
-        ...childAgeInfo({ dob: c.dob, age: c.age, role: c.role, userId: c.user_id, snoozedUntil: c.adult_prompt_snoozed_until }),
-        school: c.school,
-        grade: c.grade,
+        ...(viewerIsGuest
+          ? GUEST_AGE_INFO
+          : childAgeInfo({ dob: c.dob, age: c.age, role: c.role, userId: c.user_id, snoozedUntil: c.adult_prompt_snoozed_until })),
+        school: viewerIsGuest ? null : c.school,
+        grade: viewerIsGuest ? null : c.grade,
         emergencyNotes: membership[0].role === "PARENT" ? c.emergency_notes : null,
         avatarUrl: c.avatar_url,
         hasAccount: !!c.email,

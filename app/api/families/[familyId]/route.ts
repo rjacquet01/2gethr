@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { ensureMemberAppearanceColumns } from "@/lib/member-appearance"
 import { ensureAgeColumns } from "@/lib/age-schema"
-import { childAgeInfo } from "@/lib/age"
+import { childAgeInfo, GUEST_AGE_INFO } from "@/lib/age"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 
@@ -49,9 +49,10 @@ export async function GET(
     // SECURITY FIX: this endpoint previously returned any family's full
     // member list and children's data (including school/grade) to *any*
     // authenticated user, not just members of that family. Enforce membership.
+    let viewerIsGuest = false
     if (!isOwner) {
       const membership = await sql`
-        SELECT 1 FROM family_members
+        SELECT role FROM family_members
         WHERE family_id = ${familyId} AND user_id = ${user.id} AND is_active = true
       `
       if (membership.length === 0) {
@@ -60,6 +61,8 @@ export async function GET(
           { status: 404 }
         )
       }
+      // Guests never see children's birthdates, ages, school or grade.
+      viewerIsGuest = membership[0].role === "GUEST"
     }
 
     await ensureMemberAppearanceColumns()
@@ -131,15 +134,17 @@ export async function GET(
           id: c.id,
           familyId: familyId,
           displayName: c.display_name,
-          birthDate: c.dob ?? null,
+          birthDate: viewerIsGuest ? null : c.dob ?? null,
           // dateOfBirth, age (derived), canHaveAccount, turns18On, daysUntil18, needsRoleChoice
-          ...childAgeInfo({ dob: c.dob, age: c.age, role: c.role, userId: c.member_user_id, snoozedUntil: c.adult_prompt_snoozed_until }),
+          ...(viewerIsGuest
+            ? GUEST_AGE_INFO
+            : childAgeInfo({ dob: c.dob, age: c.age, role: c.role, userId: c.member_user_id, snoozedUntil: c.adult_prompt_snoozed_until })),
           avatarUrl: c.avatar_url,
           familyMemberId: c.family_member_id,
           hasLogin: !!c.member_user_id,
           color: c.color || null,
           emoji: c.emoji || null,
-          grade: c.grade,
+          grade: viewerIsGuest ? null : c.grade,
           permissions: {
             canCreateEvents: false,
             requiresApproval: true,

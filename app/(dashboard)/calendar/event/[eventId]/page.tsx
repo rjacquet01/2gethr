@@ -30,10 +30,13 @@ import {
   Edit,
   Trash2,
   Repeat,
+  MessageSquare,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { useMyRole } from '@/hooks/use-my-role'
+import { CommentThread } from '@/components/comment-thread'
 
 const CATEGORIES = [
   { value: 'GENERAL', label: 'General', color: 'bg-slate-500' },
@@ -54,6 +57,8 @@ export default function EventDetailPage() {
   const { event, isLoading, deleteEvent } = useEvent(eventId)
   const [isDeleting, setIsDeleting] = useState(false)
   const { user: currentUser } = useAuth()
+  // Parents (the owner is always a parent) can delete anyone's comment.
+  const { isParent } = useMyRole()
   const [responding, setResponding] = useState(false)
 
   const respond = async (url: string, body: Record<string, string>, okMsg: string) => {
@@ -324,6 +329,24 @@ export default function EventDetailPage() {
             <p>Created: {format(parseISO(event.createdAt), 'MMM d, yyyy h:mm a')}</p>
             <p>Visibility: {event.visibility?.replace('_', ' ') || 'Family'}</p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Comments */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <MessageSquare className="w-4 h-4" />
+            Comments
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CommentThread
+            baseUrl={`/api/events/${eventId}/comments`}
+            currentUserId={currentUser?.id}
+            canModerate={isParent}
+            maxLength={500}
+          />
         </CardContent>
       </Card>
     </div>

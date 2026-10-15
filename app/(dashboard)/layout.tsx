@@ -37,7 +37,8 @@ import {
   Navigation,
   ListTodo,
   HelpCircle,
-  Archive
+  Archive,
+  MessagesSquare
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -60,6 +61,8 @@ const navItems = [
   { href: '/tasks', icon: ListTodo, label: 'Tasks' },
   { href: '/dashboard/reminders', icon: Bell, label: 'Reminders' },
   { href: '/family', icon: Users, label: 'Family' },
+  // Sidebar and the mobile menu only; the bottom bar is full.
+  { href: '/board', icon: MessagesSquare, label: 'Board' },
   { href: '/location', icon: Navigation, label: 'Location' },
   { href: '/places', icon: MapPin, label: 'Places' },
   { href: '/dashboard/archive', icon: Archive, label: 'Archive' },
@@ -68,7 +71,7 @@ const navItems = [
 ]
 
 // Family-only areas a guest member can't use (the server refuses them too).
-const GUEST_HIDDEN_HREFS = new Set(['/location', '/places'])
+const GUEST_HIDDEN_HREFS = new Set(['/location', '/places', '/board'])
 
 export default function DashboardLayout({
   children,

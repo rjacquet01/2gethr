@@ -91,13 +91,14 @@ export async function GET(request: NextRequest) {
             isActive: m.is_active,
             joinedAt: m.joined_at,
           })),
+          // Guests never see children's age, school or grade.
           children: children.map((c) => ({
             id: c.id,
             displayName: c.display_name,
             avatarUrl: c.avatar_url,
-            grade: c.grade,
-            age: c.age,
-            school: c.school,
+            grade: f.user_role === 'GUEST' ? null : c.grade,
+            age: f.user_role === 'GUEST' ? null : c.age,
+            school: f.user_role === 'GUEST' ? null : c.school,
             createdAt: c.created_at,
           })),
           subscription: {

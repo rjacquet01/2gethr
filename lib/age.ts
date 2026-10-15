@@ -103,6 +103,16 @@ export interface ChildAgeInfo {
   needsRoleChoice: boolean
 }
 
+/** What a GUEST viewer gets instead: no birthdate or age-derived data. */
+export const GUEST_AGE_INFO: ChildAgeInfo = {
+  dateOfBirth: null,
+  age: null,
+  canHaveAccount: false,
+  turns18On: null,
+  daysUntil18: null,
+  needsRoleChoice: false,
+}
+
 /** Age-derived fields the children APIs return for one child. */
 export function childAgeInfo(row: {
   dob: string | null

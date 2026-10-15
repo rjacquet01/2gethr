@@ -1,4 +1,5 @@
 import { sql } from '@/lib/db'
+import { ensureSocialTables } from '@/lib/social'
 
 /**
  * Account data export ("data portability").
@@ -295,6 +296,33 @@ export async function collectUserExport(userId: Id, format = 'json'): Promise<Us
       WHERE tc.user_id = ${userId} ORDER BY tc.created_at DESC
     `) as ExportRow[]
   )
+
+  await run('Event Comments', 'Comments you wrote on calendar events', async () => {
+    await ensureSocialTables()
+    return (await sql`
+      SELECT ec.id, e.title AS event_title, ec.body, ec.created_at, ec.updated_at, ec.deleted_at
+      FROM event_comments ec LEFT JOIN events e ON e.id = ec.event_id
+      WHERE ec.user_id = ${userId} ORDER BY ec.created_at DESC
+    `) as ExportRow[]
+  })
+
+  await run('Family Board Posts', 'Posts you wrote on the family board', async () => {
+    await ensureSocialTables()
+    return (await sql`
+      SELECT fp.id, f.name AS family_name, fp.body, fp.pinned, fp.created_at, fp.deleted_at
+      FROM family_posts fp LEFT JOIN families f ON f.id = fp.family_id
+      WHERE fp.user_id = ${userId} ORDER BY fp.created_at DESC
+    `) as ExportRow[]
+  })
+
+  await run('Family Board Comments', 'Comments you wrote on family board posts', async () => {
+    await ensureSocialTables()
+    return (await sql`
+      SELECT fpc.id, fpc.post_id, fpc.body, fpc.created_at, fpc.deleted_at
+      FROM family_post_comments fpc
+      WHERE fpc.user_id = ${userId} ORDER BY fpc.created_at DESC
+    `) as ExportRow[]
+  })
 
   await run('Task History', 'Changes you made to tasks', async () =>
     (await sql`

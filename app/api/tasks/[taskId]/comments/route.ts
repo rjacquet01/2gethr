@@ -3,6 +3,67 @@ import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { notifyTaskComment } from '@/lib/notifications'
 import { taskInvolvesUser } from '@/lib/guest-scope'
+import { PAGE_SIZE_COMMENTS, authorInfo, parseCursor } from '@/lib/social'
+
+// GET - latest 50 comments, oldest first, in the shared comment-thread shape.
+// ?before=<created_at> pages back; ?since=<created_at> returns only newer ones.
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ taskId: string }> }
+) {
+  try {
+    const { user } = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const { taskId } = await params
+
+    const task = await sql`SELECT family_id, assigned_to_id, created_by_id FROM tasks WHERE id = ${taskId}`
+    if (task.length === 0) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+    }
+    const membership = await sql`
+      SELECT role FROM family_members
+      WHERE family_id = ${task[0].family_id} AND user_id = ${user.id} AND is_active = true
+    `
+    if (membership.length === 0) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    if (membership[0].role === 'GUEST' && !taskInvolvesUser(task[0], user.id)) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+    }
+
+    const before = parseCursor(request.nextUrl.searchParams.get('before'))
+    const since = parseCursor(request.nextUrl.searchParams.get('since'))
+    const rows = await sql`
+      SELECT id, user_id, message, created_at, updated_at
+      FROM task_comments
+      WHERE task_id = ${taskId}
+        AND (${before}::timestamptz IS NULL OR created_at < ${before}::timestamptz)
+        AND (${since}::timestamptz IS NULL OR created_at > ${since}::timestamptz)
+      ORDER BY created_at DESC
+      LIMIT ${PAGE_SIZE_COMMENTS + 1}
+    `
+    const hasMore = rows.length > PAGE_SIZE_COMMENTS
+    const page = rows.slice(0, PAGE_SIZE_COMMENTS).reverse()
+    const authors = await authorInfo(task[0].family_id, page.map((r) => r.user_id as string))
+    return NextResponse.json({
+      success: true,
+      data: page.map((r) => ({
+        id: r.id,
+        userId: r.user_id,
+        body: r.message,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        ...(authors.get(r.user_id as string) || { authorName: 'Family member', avatarUrl: null, color: null, emoji: null }),
+      })),
+      hasMore,
+    })
+  } catch (error) {
+    console.error('Task comments GET error:', error)
+    return NextResponse.json({ error: 'Failed to load comments' }, { status: 500 })
+  }
+}
 
 // POST - Add a comment to a task
 export async function POST(
@@ -17,7 +78,9 @@ export async function POST(
     }
 
     const { taskId } = await params
-    const { content } = await request.json()
+    // `content` is the original field; `body` is what the shared comment thread sends.
+    const payload = await request.json()
+    const content: string | undefined = payload.content ?? payload.body
 
     if (!content?.trim()) {
       return NextResponse.json({ error: 'Comment content is required' }, { status: 400 })

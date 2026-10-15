@@ -59,6 +59,10 @@
     {
       "path": "/api/cron/age-transitions",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/comments-cleanup",
+      "schedule": "45 4 * * *"
     }
   ]
 }

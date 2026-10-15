@@ -1,7 +1,47 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
-import { getGuestFamilyIds, guestCanSeeEvent, taskInvolvesUser } from "@/lib/guest-scope"
+import { guestCanSeeEvent, taskInvolvesUser } from "@/lib/guest-scope"
+
+type FavoriteScope = { userId: string; memberFamilyIds: string[]; guestFamilyIds: string[] }
+
+async function favoriteScope(userId: string): Promise<FavoriteScope> {
+  const rows = await sql`SELECT family_id, role FROM family_members WHERE user_id = ${userId} AND is_active = true`
+  return {
+    userId,
+    memberFamilyIds: rows.map((r) => r.family_id as string),
+    guestFamilyIds: rows.filter((r) => r.role === "GUEST").map((r) => r.family_id as string),
+  }
+}
+
+/**
+ * The item a favorite points at, or null when it doesn't exist or the caller
+ * may not see it: it must belong to a family they are an active member of,
+ * and a guest only gets tasks/events that involve them and no saved places.
+ */
+async function resolveFavoriteItem(itemType: string, itemId: string, scope: FavoriteScope) {
+  const visibleFamily = (familyId: string) => scope.memberFamilyIds.includes(familyId)
+  const guestIn = (familyId: string) => scope.guestFamilyIds.includes(familyId)
+  if (itemType === "task") {
+    const t = (await sql`SELECT id, title, status, priority, due_date, family_id, created_by_id, assigned_to_id FROM tasks WHERE id = ${itemId}`)[0]
+    if (!t || !visibleFamily(t.family_id) || (guestIn(t.family_id) && !taskInvolvesUser(t, scope.userId))) return null
+    return { id: t.id, title: t.title, status: t.status, priority: t.priority, due_date: t.due_date }
+  }
+  if (itemType === "event") {
+    const e = (await sql`
+      SELECT e.id, e.title, e.start_time, e.end_time, e.event_type, c.family_id
+      FROM events e JOIN calendars c ON c.id = e.calendar_id WHERE e.id = ${itemId}
+    `)[0]
+    if (!e || !visibleFamily(e.family_id) || (guestIn(e.family_id) && !(await guestCanSeeEvent(scope.userId, e.id)))) return null
+    return { id: e.id, title: e.title, start_time: e.start_time, end_time: e.end_time, event_type: e.event_type }
+  }
+  if (itemType === "place") {
+    const p = (await sql`SELECT id, name, address, icon, color, family_id FROM saved_places WHERE id = ${itemId}`)[0]
+    if (!p || !visibleFamily(p.family_id) || guestIn(p.family_id)) return null
+    return { id: p.id, name: p.name, address: p.address, icon: p.icon, color: p.color }
+  }
+  return null
+}
 
 // GET - Get user's favorites
 export async function GET(request: NextRequest) {
@@ -17,53 +57,31 @@ export async function GET(request: NextRequest) {
     let favorites
     if (itemType) {
       favorites = await sql`
-        SELECT * FROM user_favorites 
+        SELECT * FROM user_favorites
         WHERE user_id = ${user.id} AND item_type = ${itemType}
         ORDER BY created_at DESC
+        LIMIT 200
       `
     } else {
       favorites = await sql`
-        SELECT * FROM user_favorites 
+        SELECT * FROM user_favorites
         WHERE user_id = ${user.id}
         ORDER BY created_at DESC
+        LIMIT 200
       `
     }
 
-    // Guests only get favorites for tasks/events that involve them, and no
-    // saved places at all, in the families where they are a guest.
-    const guestFamilyIds = await getGuestFamilyIds(user.id)
+    // Only items from families the caller is an active member of (guests:
+    // only their own tasks/events, no places). Rows that fail this are left
+    // in the table untouched, just not listed.
+    const scope = await favoriteScope(user.id)
 
     // Fetch the actual items for each favorite
     const enrichedFavorites = await Promise.all(
-      favorites.map(async (fav) => {
-        let item = null
-        if (fav.item_type === 'task') {
-          const tasks = await sql`SELECT id, title, status, priority, due_date, family_id, created_by_id, assigned_to_id FROM tasks WHERE id = ${fav.item_id}`
-          const t = tasks[0]
-          if (t && (!guestFamilyIds.includes(t.family_id) || taskInvolvesUser(t, user.id))) {
-            item = { id: t.id, title: t.title, status: t.status, priority: t.priority, due_date: t.due_date }
-          }
-        } else if (fav.item_type === 'event') {
-          const events = await sql`
-            SELECT e.id, e.title, e.start_time, e.end_time, e.event_type, c.family_id
-            FROM events e JOIN calendars c ON c.id = e.calendar_id WHERE e.id = ${fav.item_id}
-          `
-          const e = events[0]
-          if (e && (!guestFamilyIds.includes(e.family_id) || (await guestCanSeeEvent(user.id, e.id)))) {
-            item = { id: e.id, title: e.title, start_time: e.start_time, end_time: e.end_time, event_type: e.event_type }
-          }
-        } else if (fav.item_type === 'place') {
-          const places = await sql`SELECT id, name, address, icon, color, family_id FROM saved_places WHERE id = ${fav.item_id}`
-          const p = places[0]
-          if (p && !guestFamilyIds.includes(p.family_id)) {
-            item = { id: p.id, name: p.name, address: p.address, icon: p.icon, color: p.color }
-          }
-        }
-        return { ...fav, item }
-      })
+      favorites.map(async (fav) => ({ ...fav, item: await resolveFavoriteItem(fav.item_type, fav.item_id, scope) }))
     )
 
-    // Filter out favorites where the item no longer exists
+    // Filter out favorites where the item no longer exists or isn't visible
     const validFavorites = enrichedFavorites.filter(f => f.item !== null)
 
     return NextResponse.json({
@@ -93,6 +111,12 @@ export async function POST(request: NextRequest) {
 
     if (!['task', 'event', 'place'].includes(itemType)) {
       return NextResponse.json({ success: false, error: "Invalid item type" }, { status: 400 })
+    }
+
+    // The item must belong to a family the caller is an active member of
+    // (and be visible to them if they are a guest there).
+    if (!(await resolveFavoriteItem(itemType, itemId, await favoriteScope(user.id)))) {
+      return NextResponse.json({ success: false, error: "Item not found" }, { status: 404 })
     }
 
     // Check if already favorited

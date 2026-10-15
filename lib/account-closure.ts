@@ -1,6 +1,7 @@
 import { sql } from "@/lib/db"
 import { revokeAllUserTokens } from "@/lib/auth"
 import { stripe } from "@/lib/stripe"
+import { ensureSocialTables } from "@/lib/social"
 
 // Shared account-closure logic used by both self-service deletion
 // (/api/account/delete) and admin closure of ToS-violating accounts.
@@ -66,6 +67,16 @@ export async function closeUserAccount(user: { id: string; email: string }): Pro
       WHERE family_member_id IN (SELECT id FROM family_members WHERE user_id = ${user.id})
     `
     await sql`DELETE FROM task_comments WHERE user_id = ${user.id}`
+    // Event comments and family board posts/comments are removed like task
+    // comments. A removed post takes the replies under it with it.
+    await ensureSocialTables()
+    await sql`DELETE FROM event_comments WHERE user_id = ${user.id}`
+    await sql`
+      DELETE FROM family_post_comments
+      WHERE user_id = ${user.id} OR post_id IN (SELECT id FROM family_posts WHERE user_id = ${user.id})
+    `
+    await sql`DELETE FROM family_posts WHERE user_id = ${user.id}`
+    await sql`DELETE FROM social_push_log WHERE user_id = ${user.id}`
     await sql`DELETE FROM task_history WHERE user_id = ${user.id}`
     await sql`UPDATE tasks SET assigned_to_id = NULL WHERE assigned_to_id = ${user.id}`
     await sql`DELETE FROM event_participants WHERE user_id = ${user.id}`
