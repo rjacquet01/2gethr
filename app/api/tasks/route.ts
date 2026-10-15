@@ -1,5 +1,5 @@
 import { createNotification } from '@/lib/notifications'
-import { ensureAssignmentColumns, isAdultRole, getParentUserIds } from '@/lib/assignment'
+import { ensureAssignmentColumns, isSupervisorRole, needsParentToApprove, getParentUserIds } from '@/lib/assignment'
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
@@ -200,11 +200,11 @@ export async function POST(request: NextRequest) {
       targetRole = r[0]?.role || null
     }
 
-    // Kid-created assignments: to a parent => a parent must approve;
+    // Kid-created assignments: to a grown-up or a guest => a parent must approve;
     // to another kid => that kid must accept. Parents/self need neither.
     let assignmentStatus: string | null = null
     if (creatorRole === 'CHILD' && (assignedToUserId || assignedToChildId) && targetUserId !== user.id) {
-      assignmentStatus = (!targetUserId || isAdultRole(targetRole)) ? 'PENDING_APPROVAL' : 'PENDING_ACCEPTANCE'
+      assignmentStatus = (!targetUserId || needsParentToApprove(targetRole)) ? 'PENDING_APPROVAL' : 'PENDING_ACCEPTANCE'
     }
 
     // Create the task
@@ -253,7 +253,7 @@ export async function POST(request: NextRequest) {
     } else {
       // Normal assignment: tell the assignee (including a child profile that has a login).
       if (targetUserId && targetUserId !== user.id) {
-        if (isAdultRole(creatorRole) && targetRole === 'CHILD') {
+        if (isSupervisorRole(creatorRole) && targetRole === 'CHILD') {
           // A parent gave a child a task: push + email + text + in-app, always.
           await createNotification({
             userId: targetUserId, type: 'TASK_ASSIGNED',

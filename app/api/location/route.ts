@@ -13,6 +13,7 @@ import { distanceMeters, evaluateGeofence, suggestedPingIntervalSec } from "@/li
 import { fulfillLocationRequests } from "@/lib/location-schema"
 import { alertFamilyAdults } from "@/lib/family-alerts"
 import { ensureMemberAppearanceColumns } from "@/lib/member-appearance"
+import { guestForbidden, isGuestInFamily, isGuestOnly } from "@/lib/permissions"
 
 const pingFields = {
   latitude: z.number().min(-90).max(90),
@@ -70,6 +71,9 @@ export async function GET(request: NextRequest) {
     }
 
     const userRole = membership[0].role
+    if (userRole === "GUEST") return guestForbidden()
+    // Supervisors see every sharing member (children included). ADULT is a
+    // peer: like a child viewer, they see the grown-ups who share.
     const isParentOrGuardian = userRole === "PARENT" || userRole === "GUARDIAN"
 
     // Check subscription allows location sharing (Premium only)
@@ -124,13 +128,15 @@ export async function GET(request: NextRequest) {
     // - Parents/guardians can see all family members who have share_with_family enabled
     // - Children can only see family members who share their location (parents sharing with them)
     const filteredLocations = locations.filter(l => {
+      // Guests never take part in family location.
+      if (l.role === 'GUEST') return false
       // Must have share_with_family enabled and not be OFF
       if (l.share_with_family !== true || l.location_mode === 'OFF') {
         return false
       }
-      // If user is a child, only show parents/guardians who are sharing
+      // Children and adult members only see the grown-ups who are sharing
       if (!isParentOrGuardian) {
-        return l.role === 'PARENT' || l.role === 'GUARDIAN'
+        return l.role === 'PARENT' || l.role === 'GUARDIAN' || l.role === 'ADULT'
       }
       return true
     })
@@ -220,6 +226,12 @@ export async function POST(request: NextRequest) {
       validatedData.familyId = deviceScope.familyId
     }
 
+    // Guests have no location features in that family (or anywhere, if they
+    // are only ever a guest).
+    if (validatedData.familyId ? await isGuestInFamily(validatedData.familyId, user.id) : await isGuestOnly(user.id)) {
+      return guestForbidden()
+    }
+
     // Build query to find the correct location settings
     // If memberId/familyId provided, use those; otherwise fall back to first match
     let settings
@@ -232,6 +244,7 @@ export async function POST(request: NextRequest) {
           AND fm.family_id = ${validatedData.familyId}
           AND fm.user_id = ${user.id}
           AND fm.is_active = true
+          AND fm.role <> 'GUEST'
         LIMIT 1
       `
     } else {
@@ -239,7 +252,7 @@ export async function POST(request: NextRequest) {
         SELECT ls.mode, ls.share_with_family, fm.family_id, fm.id as member_id
         FROM location_settings ls
         JOIN family_members fm ON ls.family_member_id = fm.id
-        WHERE fm.user_id = ${user.id} AND fm.is_active = true
+        WHERE fm.user_id = ${user.id} AND fm.is_active = true AND fm.role <> 'GUEST'
         LIMIT 1
       `
     }

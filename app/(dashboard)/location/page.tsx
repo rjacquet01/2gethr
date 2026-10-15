@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useFamilies } from '@/hooks/use-family'
+import { useMyRole } from '@/hooks/use-my-role'
+import { GuestAreaNotice } from '@/components/guest-area-notice'
 import { useSubscription } from '@/hooks/use-subscription'
 import { authFetch } from '@/hooks/use-auth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -96,7 +98,22 @@ interface LocationSettings {
   updateIntervalSec: number
 }
 
+// Guests don't get family location: show a notice instead of mounting the
+// page (whose hooks would call the location APIs).
 export default function LocationPage() {
+  const { isGuest, isLoading } = useMyRole()
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Spinner className="w-6 h-6" />
+      </div>
+    )
+  }
+  if (isGuest) return <GuestAreaNotice />
+  return <LocationPageContent />
+}
+
+function LocationPageContent() {
   const { families, isLoading: familiesLoading } = useFamilies()
   // Use the first family as the selected family (primary family)
   const selectedFamily = families[0] || null

@@ -4,11 +4,13 @@ import useSWR from 'swr'
 import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import { authFetch } from './use-auth'
 
+export type FamilyRole = 'PARENT' | 'GUARDIAN' | 'ADULT' | 'CHILD' | 'GUEST'
+
 export interface FamilyMember {
   id: string
   userId: string
   familyId: string
-  role: 'PARENT' | 'GUARDIAN' | 'CHILD'
+  role: FamilyRole
   displayName: string
   avatarUrl: string | null
   color?: string | null
@@ -45,6 +47,9 @@ export interface Family {
   ownerId: string
   inviteCode: string | null
   createdAt: string
+  /** The signed-in user's role in this family (from /api/families). */
+  userRole?: FamilyRole
+  currentUserRole?: FamilyRole
   members: FamilyMember[]
   children: ChildProfile[]
 }
@@ -199,7 +204,7 @@ export function useFamily(familyId: string | null) {
     }
   }, [familyId, mutate])
   
-  const generateInviteCode = useCallback(async (role: 'PARENT' | 'CHILD' = 'CHILD') => {
+  const generateInviteCode = useCallback(async (role: 'PARENT' | 'CHILD' | 'GUEST' = 'CHILD') => {
     if (!familyId) return { success: false, error: 'No family selected' }
     
     try {
@@ -252,7 +257,7 @@ export function useFamily(familyId: string | null) {
   }, [familyId, mutate])
   
   const updateMember = useCallback(async (memberId: string, updates: {
-    role?: 'PARENT' | 'GUARDIAN' | 'CHILD'
+    role?: FamilyRole
     permissions?: Record<string, boolean>
   }) => {
     if (!familyId) return { success: false, error: 'No family selected' }

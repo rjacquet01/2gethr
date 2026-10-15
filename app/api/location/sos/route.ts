@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { verifyDeviceToken } from "@/lib/device-token"
 import { getUserFromRequest, getUserWithFamily } from "@/lib/auth"
 import { dispatchSos, ensureSosSchema } from "@/lib/sos"
+import { guestForbidden } from "@/lib/permissions"
 import { z } from "zod"
 
 export const maxDuration = 30
@@ -40,10 +41,11 @@ export async function POST(request: NextRequest) {
     if (!familyId) return NextResponse.json({ success: false, error: "No family" }, { status: 400 })
 
     const member = await sql`
-      SELECT fm.id FROM family_members fm
+      SELECT fm.id, fm.role FROM family_members fm
       WHERE fm.family_id = ${familyId} AND fm.user_id = ${userId} AND fm.is_active = true
     `
     if (member.length === 0) return NextResponse.json({ success: false, error: "Not a member of this family" }, { status: 403 })
+    if (member[0].role === "GUEST") return guestForbidden()
 
     let lat: number | null = body.latitude ?? null
     let lng: number | null = body.longitude ?? null

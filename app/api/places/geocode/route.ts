@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getUserFromRequest } from "@/lib/auth"
+import { guestForbidden, isGuestOnly } from "@/lib/permissions"
 
 // Turn a free-text address into coordinates, so a saved place's geofence
 // is actually centered on the address the user typed instead of a random
@@ -16,6 +17,8 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       )
     }
+    // Not tied to one family: blocked for someone who is only ever a guest.
+    if (await isGuestOnly(user.id)) return guestForbidden()
 
     const latParam = request.nextUrl.searchParams.get("lat")
     const lngParam = request.nextUrl.searchParams.get("lng")

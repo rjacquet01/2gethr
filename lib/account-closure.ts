@@ -17,15 +17,16 @@ export async function closeUserAccount(user: { id: string; email: string }): Pro
       const otherMembers = await sql`
         SELECT user_id, role FROM family_members
         WHERE family_id = ${family.id} AND user_id != ${user.id} AND is_active = true
+          AND role <> 'GUEST'
         ORDER BY
-          CASE role WHEN 'PARENT' THEN 0 WHEN 'GUARDIAN' THEN 1 ELSE 2 END,
+          CASE role WHEN 'PARENT' THEN 0 WHEN 'GUARDIAN' THEN 1 WHEN 'ADULT' THEN 2 ELSE 3 END,
           joined_at ASC
       `
 
       if (otherMembers.length > 0) {
-        // Transfer ownership to the longest-standing parent/guardian (or
+        // Transfer ownership to the longest-standing parent/guardian/adult (or
         // whoever else is left) so the family and its data keep existing
-        // for the remaining members.
+        // for the remaining members. A guest never inherits ownership.
         await sql`
           UPDATE families SET owner_id = ${otherMembers[0].user_id}, updated_at = NOW()
           WHERE id = ${family.id}

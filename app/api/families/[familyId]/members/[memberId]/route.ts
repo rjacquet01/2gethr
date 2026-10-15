@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
-import { isParentInOtherFamily } from "@/lib/family-invites"
+import { isParentInOtherFamily, getRolePermissions } from "@/lib/family-invites"
 
 const updateMemberSchema = z.object({
-  role: z.enum(["PARENT", "GUARDIAN", "CHILD"]).optional(),
+  role: z.enum(["PARENT", "GUARDIAN", "ADULT", "CHILD", "GUEST"]).optional(),
   nickname: z.string().max(50).optional(),
   canCreateEvents: z.boolean().optional(),
   requiresEventApproval: z.boolean().optional(),
@@ -75,6 +75,18 @@ export async function PATCH(
         { success: false, error: "This person is already a parent in another family, so they can only be a guardian in this one." },
         { status: 403 }
       )
+    }
+
+    // Switching someone to ADULT or GUEST applies that role's permission
+    // defaults (a guest's events always need approval) unless the request
+    // sets a flag explicitly.
+    if (validatedData.role === "ADULT" || validatedData.role === "GUEST") {
+      const p = getRolePermissions(validatedData.role)
+      validatedData.canCreateEvents ??= p.canCreateEvents
+      validatedData.requiresEventApproval ??= p.requiresEventApproval
+      validatedData.canOverrideConflicts ??= p.canOverrideConflicts
+      validatedData.canViewFamilyCalendar ??= p.canViewFamilyCalendar
+      validatedData.canInviteMembers ??= p.canInviteMembers
     }
 
     // Build update

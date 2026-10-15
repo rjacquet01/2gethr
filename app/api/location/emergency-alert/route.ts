@@ -9,6 +9,7 @@ import {
   EMERGENCY_WINDOW_MINUTES,
 } from "@/lib/emergency-alert"
 import { z } from "zod"
+import { guestForbidden } from "@/lib/permissions"
 
 export const maxDuration = 30
 
@@ -17,6 +18,7 @@ const schema = z.object({
   memberId: z.string().min(1, "Member ID is required"),
 })
 
+// Alerting a child is a supervisor action: parents/guardians only (not ADULT).
 const ADULT_ROLES = ["PARENT", "GUARDIAN"]
 
 // Who can this person alert, and are they allowed to? Drives the button.
@@ -31,6 +33,7 @@ export async function GET(request: NextRequest) {
     const me = await sql`
       SELECT role FROM family_members WHERE family_id = ${familyId} AND user_id = ${user.id} AND is_active = true
     `
+    if (me[0]?.role === "GUEST") return guestForbidden()
     if (me.length === 0 || !ADULT_ROLES.includes(me[0].role)) {
       return NextResponse.json({ success: true, data: { eligible: false, reason: "NOT_PARENT", children: [] } })
     }
@@ -75,6 +78,7 @@ export async function POST(request: NextRequest) {
     `
     if (rows.length === 0) return NextResponse.json({ success: false, error: "Member not found in this family" }, { status: 404 })
     const row = rows[0]
+    if (row.my_role === "GUEST") return guestForbidden()
     if (!ADULT_ROLES.includes(row.my_role)) {
       return NextResponse.json({ success: false, error: "Only a parent or guardian can send an emergency alert" }, { status: 403 })
     }

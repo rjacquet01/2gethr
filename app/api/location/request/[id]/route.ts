@@ -4,6 +4,7 @@ import { getUserFromRequest } from "@/lib/auth"
 import { z } from "zod"
 import { ensureLocationRequestsTable } from "@/lib/location-schema"
 import { APPROVED_WINDOW_MINUTES, notifyRequesterOutcome } from "@/lib/location-approval"
+import { guestForbidden, isGuestInFamily } from "@/lib/permissions"
 
 const schema = z.object({
   action: z.enum(["approve", "deny"]),
@@ -25,13 +26,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await ensureLocationRequestsTable()
 
     const rows = await sql`
-      SELECT id, requester_user_id, target_user_id, status, expires_at
+      SELECT id, requester_user_id, target_user_id, family_id, status, expires_at
       FROM location_requests WHERE id = ${id} LIMIT 1
     `
     const r = rows[0]
     if (!r || r.target_user_id !== user.id) {
       return NextResponse.json({ success: false, error: "Request not found" }, { status: 404 })
     }
+    if (await isGuestInFamily(r.family_id, user.id)) return guestForbidden()
     if (r.status !== "AWAITING_APPROVAL") {
       return NextResponse.json({ success: false, error: "This request was already answered or has expired", code: "NOT_PENDING" }, { status: 409 })
     }

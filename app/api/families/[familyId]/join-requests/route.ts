@@ -13,8 +13,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ success: false, error: "Only the family owner or a parent can see join requests" }, { status: 403 })
     }
     await ensureInviteTables()
+    // cross_family: already an active member of another family, so approving
+    // grants Guardian or Guest (chosen by the approver), never Parent.
     const rows = await sql`
-      SELECT r.id, r.role, r.nickname, r.created_at, u.first_name, u.last_name, u.email
+      SELECT r.id, r.role, r.nickname, r.created_at, u.first_name, u.last_name, u.email,
+        EXISTS (
+          SELECT 1 FROM family_members o
+          WHERE o.user_id = r.user_id AND o.family_id <> r.family_id AND o.is_active = true
+        ) AS cross_family
       FROM family_join_requests r JOIN users u ON u.id = r.user_id
       WHERE r.family_id = ${familyId} AND r.status = 'PENDING'
       ORDER BY r.created_at ASC
@@ -26,6 +32,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         role: r.role,
         name: `${r.first_name || ""} ${r.last_name || ""}`.trim() || r.nickname || "New member",
         email: r.email,
+        crossFamily: r.cross_family === true,
         createdAt: r.created_at,
       })),
     })

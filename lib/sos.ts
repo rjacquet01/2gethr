@@ -101,13 +101,15 @@ export async function dispatchSos(input: SosInput): Promise<RecipientResult[]> {
       AND fm.role IN ('PARENT', 'GUARDIAN')
   `
   if (recipients.length === 0) {
-    // No other adult: an emergency should still reach whoever is in the family.
+    // No other parent/guardian: an emergency should still reach whoever is in
+    // the family - but never guests, who get no location data.
     recipients = await sql`
       SELECT fm.user_id, u.email, u.phone, u.first_name, rs.email_enabled, rs.sms_enabled
       FROM family_members fm
       JOIN users u ON u.id = fm.user_id
       LEFT JOIN reminder_settings rs ON rs.user_id = fm.user_id
       WHERE fm.family_id = ${familyId} AND fm.is_active = true AND fm.user_id != ${senderId}
+        AND fm.role <> 'GUEST'
     `
   }
 

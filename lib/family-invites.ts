@@ -1,8 +1,12 @@
 import { sql } from "./db"
 
-// Invite codes are single-use and bound to a role (PARENT or CHILD) on the
-// server. The role is never taken from the person joining. Parent joins wait
-// for approval from an existing parent (family_join_requests).
+// Invite codes are single-use and bound to a role (PARENT, CHILD or GUEST) on
+// the server. The role is never taken from the person joining. Parent joins
+// wait for approval from an existing parent (family_join_requests).
+
+export const INVITE_ROLES = ["PARENT", "CHILD", "GUEST"] as const
+export type InviteRole = (typeof INVITE_ROLES)[number]
+export type MemberRole = "PARENT" | "GUARDIAN" | "ADULT" | "CHILD" | "GUEST"
 
 let ensured = false
 export async function ensureInviteTables() {
@@ -70,21 +74,18 @@ export function getRolePermissions(role: string) {
     case "PARENT":
       return { canCreateEvents: true, requiresEventApproval: false, canOverrideConflicts: true, canViewFamilyCalendar: true, canInviteMembers: true }
     case "GUARDIAN":
+    case "ADULT":
       return { canCreateEvents: true, requiresEventApproval: false, canOverrideConflicts: false, canViewFamilyCalendar: true, canInviteMembers: false }
+    case "GUEST":
+      return { canCreateEvents: true, requiresEventApproval: true, canOverrideConflicts: false, canViewFamilyCalendar: true, canInviteMembers: false }
     default:
       return { canCreateEvents: false, requiresEventApproval: true, canOverrideConflicts: false, canViewFamilyCalendar: true, canInviteMembers: false }
   }
 }
 
 /**
- * Create (or reactivate) the family membership for a user with a fixed role.
- * CHILD memberships also get a child profile and default location settings.
- */
-/**
  * A parent (or owner) of one family must not become a PARENT of a different
- * family just because they were invited. Cross-family parents are capped at
- * GUARDIAN: they can see and add to the calendar but cannot manage members,
- * invites or conflicts.
+ * family just because they were invited. Still used by the member-role editor.
  */
 export async function isParentInOtherFamily(familyId: string, userId: string): Promise<boolean> {
   const rows = await sql`
@@ -97,12 +98,41 @@ export async function isParentInOtherFamily(familyId: string, userId: string): P
   return rows.length > 0
 }
 
-export async function effectiveRole(familyId: string, userId: string, requested: "PARENT" | "GUARDIAN" | "CHILD"): Promise<"PARENT" | "GUARDIAN" | "CHILD"> {
-  if (requested === "PARENT" && (await isParentInOtherFamily(familyId, userId))) return "GUARDIAN"
+/**
+ * Already an active member (any role) of a different family. Someone who
+ * uses a parent code while belonging to another family is not made a PARENT:
+ * the approving parent picks Guardian or Guest for them instead.
+ */
+export async function belongsToOtherFamily(familyId: string, userId: string): Promise<boolean> {
+  const rows = await sql`
+    SELECT 1 FROM family_members fm
+    WHERE fm.family_id <> ${familyId} AND fm.user_id = ${userId} AND fm.is_active = true
+    LIMIT 1
+  `
+  return rows.length > 0
+}
+
+/** Roles the approving parent may choose for a cross-family parent-code join. */
+export const CROSS_FAMILY_ROLES = ["GUARDIAN", "GUEST"] as const
+export type CrossFamilyRole = (typeof CROSS_FAMILY_ROLES)[number]
+
+/**
+ * Last line of defense: a PARENT grant for someone who belongs to another
+ * family becomes GUEST (the default the approver is shown). Callers that let
+ * the approver choose pass GUARDIAN or GUEST explicitly, so this only fires
+ * if something asks for PARENT anyway.
+ */
+export async function effectiveRole(familyId: string, userId: string, requested: MemberRole): Promise<MemberRole> {
+  if (requested === "PARENT" && (await belongsToOtherFamily(familyId, userId))) return "GUEST"
   return requested
 }
 
-export async function activateMember(opts: { familyId: string; userId: string; role: "PARENT" | "GUARDIAN" | "CHILD"; nickname: string }) {
+/**
+ * Create (or reactivate) the family membership for a user with a fixed role.
+ * CHILD memberships also get a child profile and default location settings.
+ * GUEST memberships get neither (guests have no location features).
+ */
+export async function activateMember(opts: { familyId: string; userId: string; role: MemberRole; nickname: string }) {
   const { familyId, userId, nickname } = opts
   const role = await effectiveRole(familyId, userId, opts.role)
   const p = getRolePermissions(role)

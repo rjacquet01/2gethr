@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
-import { ensureInviteTables, activateMember } from "@/lib/family-invites"
+import { ensureInviteTables, activateMember, INVITE_ROLES, type InviteRole } from "@/lib/family-invites"
 import { alertFamilyAdults } from "@/lib/family-alerts"
 
 // The role is decided by the invite code, never by the person joining, so a
@@ -41,7 +41,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "This invite code has expired. Ask for a new one." }, { status: 400 })
     }
 
-    const role = invite.role as "PARENT" | "CHILD"
+    // family_invites.role is TEXT; only accept the roles a code can carry.
+    if (!(INVITE_ROLES as readonly string[]).includes(invite.role)) {
+      return NextResponse.json({ success: false, error: "Invalid invite code. Ask for a new one." }, { status: 400 })
+    }
+    const role = invite.role as InviteRole
     const familyId = invite.family_id as string
     const displayName = (nickname || user.firstName || "Member") as string
 
@@ -99,6 +103,31 @@ export async function POST(request: NextRequest) {
           success: true,
           data: { familyId, familyName: invite.family_name, role, status: "PENDING_APPROVAL", requestId },
           message: "Request sent. A parent in the family needs to approve you.",
+        })
+      }
+
+      if (role === "GUEST") {
+        // Guests join right away: calendar and tasks only, no child profile
+        // and no location settings.
+        const memberId = await activateMember({ familyId, userId: user.id, role: "GUEST", nickname: displayName })
+        const fullName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || displayName
+        try {
+          await alertFamilyAdults(familyId, user.id, {
+            title: "New guest",
+            body: `${fullName} joined ${invite.family_name} as a guest.`,
+            type: "FAMILY_INVITATION",
+            data: { subType: "GUEST_JOINED", familyId },
+            clickAction: "/family",
+            soft: true,
+          })
+        } catch (e) {
+          console.error("guest joined alert failed (non-fatal):", e)
+        }
+        await logAuditEvent(user.id, "CREATE", "family_member", memberId, { newValue: { familyId, role, nickname: displayName }, ipAddress: ip, userAgent: ua })
+        return NextResponse.json({
+          success: true,
+          data: { familyId, familyName: invite.family_name, membershipId: memberId, role, status: "JOINED" },
+          message: "Joined family as a guest",
         })
       }
 

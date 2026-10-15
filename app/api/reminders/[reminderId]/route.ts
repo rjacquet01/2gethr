@@ -8,12 +8,16 @@ const VALID_STATUSES = ['PENDING', 'COMPLETED', 'DISMISSED', 'ARCHIVED']
 
 async function loadReminder(reminderId: string, userId: string) {
   const rows = await sql`
-    SELECT r.*, fm.user_id as membership_user_id
+    SELECT r.*, fm.user_id as membership_user_id, fm.role as membership_role
     FROM reminders r
     JOIN family_members fm ON fm.family_id = r.family_id AND fm.user_id = ${userId} AND fm.is_active = true
     WHERE r.id = ${reminderId}
   `
-  return rows[0] || null
+  const r = rows[0]
+  if (!r) return null
+  // Guests only reach reminders they own or created.
+  if (r.membership_role === 'GUEST' && r.user_id !== userId && r.created_by_id !== userId) return null
+  return r
 }
 
 // PATCH - edit a reminder, or change its status (complete/dismiss/restore/archive)

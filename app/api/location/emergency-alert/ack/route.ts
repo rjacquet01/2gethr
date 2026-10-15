@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { ensureEmergencyAlertSchema, notifyParentAcked } from "@/lib/emergency-alert"
 import { z } from "zod"
+import { guestForbidden, isGuestInFamily, isGuestOnly } from "@/lib/permissions"
 
 const schema = z.object({ alertId: z.string().min(1) })
 
@@ -14,6 +15,9 @@ export async function POST(request: NextRequest) {
 
     const { alertId } = schema.parse(await request.json().catch(() => ({})))
     await ensureEmergencyAlertSchema()
+    // Alerts only ever go to a CHILD member, but block guests explicitly too.
+    const fam = await sql`SELECT family_id FROM emergency_alerts WHERE id = ${alertId} AND child_user_id = ${user.id} LIMIT 1`
+    if (fam[0] ? await isGuestInFamily(fam[0].family_id, user.id) : await isGuestOnly(user.id)) return guestForbidden()
     const updated = await sql`
       UPDATE emergency_alerts SET acked_at = NOW()
       WHERE id = ${alertId} AND child_user_id = ${user.id} AND acked_at IS NULL

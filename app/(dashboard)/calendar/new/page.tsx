@@ -29,6 +29,7 @@ import {
 } from '@/components/notification-channels-picker'
 import { useAuth, authFetch } from '@/hooks/use-auth'
 import { useFamilies, useFamily, FamilyMember, ChildProfile } from '@/hooks/use-family'
+import { useMyRole } from '@/hooks/use-my-role'
 
 const EVENT_CATEGORIES = [
   { value: 'GENERAL', label: 'General', color: 'bg-gray-500' },
@@ -80,6 +81,7 @@ function NewEventForm() {
   const dateParam = searchParams.get('date')
   const { user, isLoading: authLoading } = useAuth()
   const { families, isLoading: familiesLoading } = useFamilies()
+  const { isGuest } = useMyRole()
   
   // Use date from URL param if provided and valid, otherwise use today
   const getInitialDate = (): Date => {
@@ -160,8 +162,9 @@ function NewEventForm() {
     return data.data || []
   }
   
+  // Guests can't use saved places, so don't offer them.
   const { data: savedPlaces = [] } = useSWR<SavedPlace[]>(
-    formData.familyId ? `/api/places?familyId=${formData.familyId}` : null,
+    formData.familyId && !isGuest ? `/api/places?familyId=${formData.familyId}` : null,
     placesFetcher
   )
 

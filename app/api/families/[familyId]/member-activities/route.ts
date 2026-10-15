@@ -2,6 +2,7 @@ import { ensureEventParticipantChildColumns } from '@/lib/assignment'
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
+import { guestForbidden } from '@/lib/permissions'
 import { ensureMemberAppearanceColumns } from '@/lib/member-appearance'
 import { ensureReminderChildColumn } from '@/lib/reminder-schema'
 
@@ -28,6 +29,7 @@ export async function GET(
     if (membership.length === 0) {
       return NextResponse.json({ error: 'Not a member of this family' }, { status: 403 })
     }
+    if (membership[0].role === 'GUEST') return guestForbidden()
 
     await ensureMemberAppearanceColumns()
     await ensureReminderChildColumn()
@@ -49,9 +51,10 @@ export async function GET(
       ORDER BY 
         CASE fm.role 
           WHEN 'PARENT' THEN 1 
-          WHEN 'GUARDIAN' THEN 2 
-          WHEN 'CHILD' THEN 3 
-          ELSE 4 
+          WHEN 'GUARDIAN' THEN 2
+          WHEN 'ADULT' THEN 3
+          WHEN 'CHILD' THEN 4
+          ELSE 5
         END,
         fm.created_at
     `

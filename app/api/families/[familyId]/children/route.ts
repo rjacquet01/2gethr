@@ -83,10 +83,13 @@ export async function GET(
           requiresEventApproval: c.requires_event_approval,
           canOverrideConflicts: c.can_override_conflicts,
         },
-        location: {
-          mode: c.location_mode || "OFF",
-          sharingEnabled: c.location_sharing || false,
-        },
+        // Guests never receive family location data.
+        location: membership[0].role === "GUEST"
+          ? { mode: "OFF", sharingEnabled: false }
+          : {
+              mode: c.location_mode || "OFF",
+              sharingEnabled: c.location_sharing || false,
+            },
         createdAt: c.created_at,
       })),
     })

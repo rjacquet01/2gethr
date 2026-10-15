@@ -4,6 +4,7 @@ import { getUserFromRequest, checkFamilySubscription } from "@/lib/auth"
 import { z } from "zod"
 import { ensureLocationRequestsTable } from "@/lib/location-schema"
 import { APPROVAL_WINDOW_MINUTES, PING_WINDOW_MINUTES, PING_LIMIT_ADULT, PING_LIMIT_CHILD, APPROVED_WINDOW_MINUTES, insertNotification, sendApprovalRequest } from "@/lib/location-approval"
+import { guestForbidden, isGuestOnly } from "@/lib/permissions"
 
 const requestLocationSchema = z.object({
   memberId: z.string().min(1, "Member ID is required"),
@@ -51,7 +52,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Any active family member may ask any other member for a one-time location;
-    // the recipient must approve before anything is shared.
+    // the recipient must approve before anything is shared. Guests can neither
+    // ask nor be asked.
+    if (membership[0].role === "GUEST" || membership[0].target_role === "GUEST") return guestForbidden()
 
     // Prevent pinging yourself
     if (membership[0].target_user_id === user.id) {
@@ -78,9 +81,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Limit pings per person per hour: parents/guardians 5, children 2.
+    // Limit pings per person per hour: parents/guardians/adults 5, children 2.
     const requesterRole = membership[0].role as string
-    const limit = ["PARENT", "GUARDIAN", "ADMIN"].includes(requesterRole) ? PING_LIMIT_ADULT : PING_LIMIT_CHILD
+    const limit = ["PARENT", "GUARDIAN", "ADULT", "ADMIN"].includes(requesterRole) ? PING_LIMIT_ADULT : PING_LIMIT_CHILD
     const recent = await sql`
       SELECT created_at FROM location_requests
       WHERE requester_user_id = ${user.id} AND target_user_id = ${membership[0].target_user_id}
@@ -107,7 +110,7 @@ export async function POST(request: NextRequest) {
         AND status = 'AWAITING_APPROVAL'
     `
 
-    // A parent/guardian pinging a CHILD who is already sharing needs no
+    // A parent/guardian (not ADULT) pinging a CHILD who is already sharing needs no
     // approval - the family can see that child's location anyway, so this just
     // asks their phone for a fresh fix right now (status PENDING is what the
     // device poll looks for). Every other ping needs the recipient's approval.
@@ -210,6 +213,8 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       )
     }
+
+    if (await isGuestOnly(user.id)) return guestForbidden()
 
     await ensureLocationRequestsTable()
     // ?awaiting=1 -> requests this user still has to approve or deny.

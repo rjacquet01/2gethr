@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
-import { ensureInviteTables, canManageInvites, activateMember, effectiveRole } from "@/lib/family-invites"
+import { ensureInviteTables, canManageInvites, activateMember, belongsToOtherFamily, CROSS_FAMILY_ROLES, type MemberRole } from "@/lib/family-invites"
 import { createNotification } from "@/lib/notifications"
 
-const schema = z.object({ action: z.enum(["approve", "deny"]) })
+// grantRole only matters for someone who already belongs to another family:
+// they are approved as a Guardian or a Guest (default Guest), never a Parent.
+const schema = z.object({ action: z.enum(["approve", "deny"]), grantRole: z.enum(CROSS_FAMILY_ROLES).optional() })
+
+const ROLE_WORD: Record<string, string> = { PARENT: "parent", GUARDIAN: "guardian", GUEST: "guest" }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ familyId: string; requestId: string }> }) {
   try {
@@ -15,7 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!(await canManageInvites(familyId, user.id))) {
       return NextResponse.json({ success: false, error: "Only the family owner or a parent can answer join requests" }, { status: 403 })
     }
-    const { action } = schema.parse(await request.json())
+    const { action, grantRole } = schema.parse(await request.json())
     await ensureInviteTables()
 
     const rows = await sql`
@@ -42,23 +46,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     `
     if (upd.length === 0) return NextResponse.json({ success: false, error: "This request was already answered" }, { status: 409 })
 
-    // Parents of another family are capped at GUARDIAN (enforced in activateMember too).
-    const grantedRole = action === "approve" ? await effectiveRole(familyId, r.user_id, "PARENT") : "PARENT"
+    // Someone who already belongs to another family is approved as the
+    // Guardian or Guest the approver picked (default Guest). activateMember
+    // also refuses PARENT for them, so this path can never grant PARENT.
+    let grantedRole: MemberRole = "PARENT"
     if (action === "approve") {
-      await activateMember({ familyId, userId: r.user_id, role: "PARENT", nickname: r.nickname || "Member" })
+      if (await belongsToOtherFamily(familyId, r.user_id)) grantedRole = grantRole ?? "GUEST"
+      await activateMember({ familyId, userId: r.user_id, role: grantedRole, nickname: r.nickname || "Member" })
     }
 
     await createNotification({
       userId: r.user_id,
       type: "FAMILY_INVITATION",
       title: action === "approve" ? `Welcome to ${r.family_name}` : "Join request declined",
-      body: action === "approve" ? `You were approved to join ${r.family_name} as a ${grantedRole === "GUARDIAN" ? "guardian" : "parent"}. Open Togethr to get started.` : `Your request to join ${r.family_name} was declined.`,
+      body: action === "approve" ? `You were approved to join ${r.family_name} as a ${ROLE_WORD[grantedRole] || "member"}. Open Togethr to get started.` : `Your request to join ${r.family_name} was declined.`,
       data: { subType: "JOIN_REQUEST_RESULT", outcome: action === "approve" ? "APPROVED" : "DENIED", familyId },
       channels: ["in_app", "push"],
     }).catch((e) => console.error("join result notify failed:", e))
 
     await logAuditEvent(user.id, "UPDATE", "family_join_request", requestId, {
-      newValue: { action, familyId, userId: r.user_id },
+      newValue: { action, familyId, userId: r.user_id, ...(action === "approve" ? { role: grantedRole } : {}) },
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
     })

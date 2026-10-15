@@ -4,11 +4,12 @@ import { getUserFromRequest, checkFamilySubscription } from "@/lib/auth"
 import { notifyChildStoppedSharing } from "@/lib/family-alerts"
 import { verifyDeviceToken } from "@/lib/device-token"
 import { issueDeviceToken, revokeDeviceTokens, getDeviceTokenStatus, revokeByToken } from "@/lib/device-token"
+import { guestForbidden } from "@/lib/permissions"
 
 async function resolveMember(userId: string, memberId: string | null, familyId: string | null) {
   if (!memberId || !familyId) return null
   const rows = await sql`
-    SELECT id, family_id FROM family_members
+    SELECT id, family_id, role FROM family_members
     WHERE id = ${memberId} AND family_id = ${familyId} AND user_id = ${userId} AND is_active = true
     LIMIT 1
   `
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const member = await resolveMember(user.id, searchParams.get("memberId"), searchParams.get("familyId"))
   if (!member) return NextResponse.json({ error: "Member not found" }, { status: 404 })
+  if (member.role === "GUEST") return guestForbidden()
   return NextResponse.json({ success: true, ...(await getDeviceTokenStatus(user.id, member.id)) })
 }
 
@@ -32,6 +34,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}))
   const member = await resolveMember(user.id, body.memberId ?? null, body.familyId ?? null)
   if (!member) return NextResponse.json({ error: "Member not found" }, { status: 404 })
+  if (member.role === "GUEST") return guestForbidden()
 
   const subscription = await checkFamilySubscription(member.family_id)
   if (!subscription.features.locationSharing) {

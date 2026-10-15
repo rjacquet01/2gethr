@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { ensurePlaceNotifyChannelsColumn } from "@/lib/place-schema"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
+import { guestForbidden } from "@/lib/permissions"
 import { z } from "zod"
 
 const createPlaceSchema = z.object({
@@ -57,6 +58,7 @@ export async function GET(request: NextRequest) {
         { status: 403 }
       )
     }
+    if (membership[0].role === "GUEST") return guestForbidden()
 
     const places = await sql`
       SELECT * FROM saved_places 
@@ -82,9 +84,9 @@ export async function GET(request: NextRequest) {
         notifyChannels: p.notify_channels,
         photoPath: p.photo_path ?? null,
         createdById: p.created_by_id ?? null,
-        // Parents/guardians manage every place; other members manage the ones they added
+        // Parents/guardians/adults manage every place; other members manage the ones they added
         canManage:
-          ["PARENT", "GUARDIAN", "ADMIN"].includes(membership[0].role) ||
+          ["PARENT", "GUARDIAN", "ADULT", "ADMIN"].includes(membership[0].role) ||
           (p.created_by_id != null && String(p.created_by_id) === String(user.id)),
         createdAt: p.created_at,
       })),
@@ -127,7 +129,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const isManager = ["PARENT", "GUARDIAN", "ADMIN"].includes(membership[0].role)
+    if (membership[0].role === "GUEST") return guestForbidden()
+
+    const isManager = ["PARENT", "GUARDIAN", "ADULT", "ADMIN"].includes(membership[0].role)
 
     // Check subscription limits
     const subscription = await checkFamilySubscription(validatedData.familyId)

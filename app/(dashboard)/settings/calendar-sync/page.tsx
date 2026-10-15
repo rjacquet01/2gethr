@@ -603,7 +603,8 @@ function ImportIcsCard() {
   const { user } = useAuth()
   const { family } = useFamily(user?.primaryFamily?.id ?? null)
   const myRole = (family?.members || []).find((m) => m.userId === user?.id)?.role
-  const canAssign = myRole === 'PARENT' || myRole === 'GUARDIAN'
+  // Matches the import route: grown-up members (parent/guardian/adult) can assign.
+  const canAssign = myRole === 'PARENT' || myRole === 'GUARDIAN' || myRole === 'ADULT'
   const toggleId = (list: string[], id: string, on: boolean) => (on ? Array.from(new Set([...list, id])) : list.filter((x) => x !== id))
 
   const runImport = async (body: FormData | { url: string }) => {

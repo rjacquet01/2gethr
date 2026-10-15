@@ -3,6 +3,7 @@ import { put, del } from "@vercel/blob"
 import sharp from "sharp"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
+import { guestForbidden } from "@/lib/permissions"
 import { ensurePlaceNotifyChannelsColumn } from "@/lib/place-schema"
 
 export const runtime = "nodejs"
@@ -24,8 +25,9 @@ async function loadEditablePlace(request: NextRequest, placeId: string) {
   if (rows.length === 0) {
     return { response: NextResponse.json({ success: false, error: "Place not found" }, { status: 404 }) }
   }
+  if (rows[0].role === "GUEST") return { response: guestForbidden() }
   const isCreator = rows[0].created_by_id != null && String(rows[0].created_by_id) === String(user.id)
-  if (!["PARENT", "GUARDIAN", "ADMIN"].includes(rows[0].role) && !isCreator) {
+  if (!["PARENT", "GUARDIAN", "ADULT", "ADMIN"].includes(rows[0].role) && !isCreator) {
     return {
       response: NextResponse.json(
         { success: false, error: "You can only change photos on places you added" },

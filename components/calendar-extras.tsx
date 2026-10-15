@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { format, isSameDay, parseISO } from 'date-fns'
 import { Umbrella } from 'lucide-react'
 import { authFetch } from '@/hooks/use-auth'
+import { useMyRole } from '@/hooks/use-my-role'
 import { cn } from '@/lib/utils'
 
 /* ------------------------------- Weather ------------------------------- */
@@ -24,10 +25,13 @@ const jsonFetcher = async (url: string) => {
   return j.data
 }
 
-// Uses the family's "Home" saved place, else the first saved place.
+// Uses the family's "Home" saved place, else the first saved place. Guests
+// can't read saved places (that would reveal the family's home), so they get
+// no weather.
 export function useCalendarWeather(familyId: string | undefined): Record<string, DayWeather> {
+  const { isGuest } = useMyRole()
   const { data: places } = useSWR<any[]>(
-    familyId ? `/api/places?familyId=${encodeURIComponent(familyId)}` : null,
+    familyId && !isGuest ? `/api/places?familyId=${encodeURIComponent(familyId)}` : null,
     jsonFetcher
   )
   const list = (places || []).filter((p) => p.latitude != null && p.longitude != null)

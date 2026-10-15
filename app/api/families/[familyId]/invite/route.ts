@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
-import { ensureInviteTables, generateInviteCode, canManageInvites } from "@/lib/family-invites"
+import { ensureInviteTables, generateInviteCode, canManageInvites, INVITE_ROLES } from "@/lib/family-invites"
 
 const INVITE_DAYS = 7
 const MAX_ACTIVE = 20
 
-const createSchema = z.object({ role: z.enum(["PARENT", "CHILD"]) })
+const createSchema = z.object({ role: z.enum(INVITE_ROLES) })
 
 async function guard(request: NextRequest, familyId: string) {
   const { user, error } = await getUserFromRequest(request)

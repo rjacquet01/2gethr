@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { verifyAccessToken } from "@/lib/auth"
+import { isAdultMemberRole } from "@/lib/permissions"
 import { cookies } from "next/headers"
 
 export async function POST(request: Request) {
@@ -36,12 +37,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Not a member of this family" }, { status: 403 })
     }
     
-    // family_role enum is PARENT / GUARDIAN / CHILD; the owner is families.owner_id
+    // family_role enum is PARENT / GUARDIAN / ADULT / CHILD / GUEST; the owner is families.owner_id
     const role = memberCheck[0].role
     const ownerRow = await sql`SELECT 1 FROM families WHERE id = ${familyId} AND owner_id = ${payload.userId}`
-    const isAdult = role === 'PARENT' || role === 'GUARDIAN'
+    const isAdult = isAdultMemberRole(role)
     if (!isAdult && ownerRow.length === 0) {
-      return NextResponse.json({ error: "Only parents and guardians can archive events" }, { status: 403 })
+      return NextResponse.json({ error: "Only parents, guardians and adult members can archive events" }, { status: 403 })
     }
     
     if (action === 'archive_past') {

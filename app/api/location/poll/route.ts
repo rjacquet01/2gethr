@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { verifyDeviceToken } from "@/lib/device-token"
 import { hasPendingLocationRequest } from "@/lib/location-schema"
+import { guestForbidden } from "@/lib/permissions"
 
 // Cheap check the Android background service makes every minute or so:
 // "should I be sharing, and has a parent asked for my location right now?"
@@ -11,6 +12,9 @@ export async function GET(request: NextRequest) {
   if (!token) return NextResponse.json({ success: false, error: "Missing device token" }, { status: 401 })
   const info = await verifyDeviceToken(token)
   if (!info) return NextResponse.json({ success: false, error: "Invalid or revoked device token" }, { status: 401 })
+
+  const member = await sql`SELECT role FROM family_members WHERE id = ${info.memberId} AND is_active = true LIMIT 1`
+  if (member[0]?.role === "GUEST") return guestForbidden()
 
   const rows = await sql`
     SELECT mode, share_with_family, update_interval_sec FROM location_settings

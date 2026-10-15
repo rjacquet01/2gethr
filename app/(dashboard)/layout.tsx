@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/use-auth'
 import { useNotifications } from '@/hooks/use-notifications'
+import { useMyRole } from '@/hooks/use-my-role'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -66,6 +67,9 @@ const navItems = [
   { href: '/support', icon: HelpCircle, label: 'Support' },
 ]
 
+// Family-only areas a guest member can't use (the server refuses them too).
+const GUEST_HIDDEN_HREFS = new Set(['/location', '/places'])
+
 export default function DashboardLayout({
   children,
 }: {
@@ -76,6 +80,8 @@ export default function DashboardLayout({
   const { user, isLoading, isAuthenticated, logout } = useAuth()
   const { unreadCount } = useNotifications()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const { isGuest } = useMyRole()
+  const visibleNavItems = isGuest ? navItems.filter((item) => !GUEST_HIDDEN_HREFS.has(item.href)) : navItems
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -123,7 +129,7 @@ export default function DashboardLayout({
 
           {/* Navigation */}
           <nav className="flex-1 space-y-1 p-4">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const isActive = isNavItemActive(pathname, item.href)
               return (
                 <Link
@@ -240,7 +246,7 @@ export default function DashboardLayout({
         <div className="fixed inset-0 z-30 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileMenuOpen(false)} />
           <nav className="absolute left-0 top-16 bottom-0 w-64 bg-background border-r border-border p-4 space-y-1">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const isActive = isNavItemActive(pathname, item.href)
               return (
                 <Link
@@ -299,7 +305,7 @@ export default function DashboardLayout({
             { href: '/tasks', icon: ListTodo, label: 'Tasks' },
             { href: '/family', icon: Users, label: 'Family' },
             { href: '/location', icon: Navigation, label: 'Location' },
-          ].map((item) => {
+          ].filter((item) => !isGuest || !GUEST_HIDDEN_HREFS.has(item.href)).map((item) => {
             const isActive = isNavItemActive(pathname, item.href)
             return (
               <Link

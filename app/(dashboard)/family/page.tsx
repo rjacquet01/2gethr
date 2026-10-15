@@ -3,6 +3,7 @@
 import { InviteCodesCard, JoinRequestsCard } from '@/components/invite-codes'
 import { useState } from 'react'
 import { useFamilies, useFamily } from '@/hooks/use-family'
+import { useMyRole } from '@/hooks/use-my-role'
 import { useSubscription } from '@/hooks/use-subscription'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -64,7 +65,9 @@ import {
   AlertCircle,
   UserMinus,
   LogOut,
-  Bell
+  Bell,
+  UserCheck,
+  UserRound
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -85,7 +88,9 @@ export default function FamilyPage() {
   const { family, generateInviteCode, addChild, removeMember, isLoading: familyLoading } = useFamily(primaryFamily?.id || null)
   const { access } = useSubscription(primaryFamily?.id || null)
   const viewerRole = (primaryFamily as unknown as { currentUserRole?: string; userRole?: string } | undefined)
+  // Parents/guardians only (ADULT members are peers, not supervisors).
   const viewerIsAdult = ['PARENT', 'GUARDIAN'].includes(viewerRole?.currentUserRole || viewerRole?.userRole || '')
+  const { isGuest } = useMyRole()
   
   const [copiedCode, setCopiedCode] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -191,8 +196,9 @@ export default function FamilyPage() {
     reminderCount?: number
   }
 
+  // Guests don't get the per-member activity overview (the server refuses it).
   const { data: memberActivities = [], isLoading: activitiesLoading } = useSWR<MemberActivity[]>(
-    primaryFamily?.id ? `/api/families/${primaryFamily.id}/member-activities` : null,
+    primaryFamily?.id && !isGuest ? `/api/families/${primaryFamily.id}/member-activities` : null,
     fetcher
   )
 
@@ -303,13 +309,20 @@ export default function FamilyPage() {
     setIsAddingChild(false)
   }
 
-  // Only Parent/Guardian get a role badge; kids and other members are not labeled
-  const roleLabel = (role: string) => role === 'PARENT' ? 'Parent' : role === 'GUARDIAN' ? 'Guardian' : 'Member'
+  // Parent/Guardian/Adult/Guest get a role badge; kids are not labeled
+  const roleLabel = (role: string) =>
+    role === 'PARENT' ? 'Parent'
+      : role === 'GUARDIAN' ? 'Guardian'
+      : role === 'ADULT' ? 'Adult'
+      : role === 'GUEST' ? 'Guest'
+      : 'Member'
 
   const getRoleIcon = (role: string) => {
     switch (role) {
       case 'PARENT': return Crown
       case 'GUARDIAN': return Shield
+      case 'ADULT': return UserCheck
+      case 'GUEST': return UserRound
       case 'CHILD': return Baby
       default: return Users
     }
@@ -319,6 +332,8 @@ export default function FamilyPage() {
     switch (role) {
       case 'PARENT': return 'default'
       case 'GUARDIAN': return 'secondary'
+      case 'ADULT': return 'secondary'
+      case 'GUEST': return 'outline'
       case 'CHILD': return 'outline'
       default: return 'outline'
     }
@@ -458,8 +473,12 @@ export default function FamilyPage() {
         <Card>
           <CardContent className="py-6">
             <Empty
-              title="No activities yet"
-              description="Tasks and events will appear here when assigned to family members"
+              title={isGuest ? 'You are a guest in this family' : 'No activities yet'}
+              description={
+                isGuest
+                  ? 'Guests can use the family calendar and tasks.'
+                  : 'Tasks and events will appear here when assigned to family members'
+              }
             />
           </CardContent>
         </Card>

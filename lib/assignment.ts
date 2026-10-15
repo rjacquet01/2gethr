@@ -1,4 +1,5 @@
 import { sql } from "./db"
+import { isAdultMemberRole, isSupervisorRole } from "./permissions"
 import { createNotification, notifyFamilyAboutEvent } from "./notifications"
 import type { NotificationChannel } from "./notifications"
 
@@ -20,8 +21,14 @@ export function ensureAssignmentColumns(): Promise<void> {
   return ensured
 }
 
-export const isAdultRole = (role?: string | null) => role === "PARENT" || role === "GUARDIAN"
+// isAdultRole: the person is a grown-up member (PARENT / GUARDIAN / ADULT).
+// isSupervisorRole: may approve or act for children (PARENT / GUARDIAN only).
+export const isAdultRole = isAdultMemberRole
+export { isSupervisorRole }
+// A child pulling in a grown-up or a guest needs a parent's approval.
+export const needsParentToApprove = (role?: string | null) => isAdultMemberRole(role) || role === "GUEST"
 
+// Parents and guardians: the people who approve things for children.
 export async function getParentUserIds(familyId: string, excludeUserId?: string): Promise<string[]> {
   const rows = await sql`
     SELECT DISTINCT user_id FROM family_members
@@ -183,7 +190,7 @@ export async function notifyParticipantsAdded(args: {
   const roleOf = new Map<string, string>(roles.map((r) => [r.user_id as string, r.role as string]))
 
   if (actorRole === "CHILD") {
-    const needsApproval = addedChildIds.length > 0 || others.some((id) => isAdultRole(roleOf.get(id)))
+    const needsApproval = addedChildIds.length > 0 || others.some((id) => needsParentToApprove(roleOf.get(id)))
     if (needsApproval) {
       await sql`UPDATE events SET status = 'PENDING', updated_at = NOW() WHERE id = ${eventId}`
       await sql`
@@ -200,7 +207,7 @@ export async function notifyParticipantsAdded(args: {
 
   for (const uid of others) {
     const isKid = roleOf.get(uid) === "CHILD"
-    const parentInvitesKid = isKid && isAdultRole(actorRole)
+    const parentInvitesKid = isKid && isSupervisorRole(actorRole)
     await createNotification({
       userId: uid,
       type: "EVENT_INVITATION",

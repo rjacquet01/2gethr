@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
+import { guestForbidden } from "@/lib/permissions"
 
 // Last 24 hours of geofence arrivals/departures for a family's saved places.
 // Parents/guardians see everyone's; any other member sees only their own.
@@ -23,7 +24,10 @@ export async function GET(request: NextRequest) {
     if (membership.length === 0) {
       return NextResponse.json({ success: false, error: "Not a member of this family" }, { status: 403 })
     }
+    if (membership[0].role === "GUEST") return guestForbidden()
 
+    // Everyone's arrivals/departures (children included) is a supervisor view;
+    // ADULT members see their own, like children.
     const seesEveryone = ["PARENT", "GUARDIAN", "ADMIN"].includes(membership[0].role)
 
     const rows = seesEveryone

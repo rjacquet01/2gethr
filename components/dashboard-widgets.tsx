@@ -547,10 +547,14 @@ export function DashboardActivityPanel({ familyId }: { familyId: string }) {
   )
 }
 
-export function DashboardShortcuts() {
+export function DashboardShortcuts({ hideFamilyOnly = false }: { hideFamilyOnly?: boolean }) {
   const links = [
-    { href: '/location', label: 'Live location', icon: Navigation },
-    { href: '/places', label: 'Saved places', icon: MapPin },
+    ...(hideFamilyOnly
+      ? [{ href: '/tasks', label: 'Tasks', icon: ListTodo }]
+      : [
+          { href: '/location', label: 'Live location', icon: Navigation },
+          { href: '/places', label: 'Saved places', icon: MapPin },
+        ]),
     { href: '/calendar', label: 'Calendar', icon: Calendar },
     { href: '/dashboard/reminders', label: 'Reminders', icon: Bell },
   ]

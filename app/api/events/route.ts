@@ -551,7 +551,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine initial status
-    // A child inviting a parent/guardian needs that parent's approval.
+    // A child inviting a grown-up (parent/guardian/adult) or a guest needs a parent's approval.
     let needsParentApproval = false
     if (calendar.role === "CHILD" && participantChildIds.length > 0) {
       // A child with no login can't accept anything - a parent has to approve.
@@ -561,7 +561,7 @@ export async function POST(request: NextRequest) {
       const adults = await sql`
         SELECT 1 FROM family_members
         WHERE family_id = ${calendar.family_id} AND is_active = true
-        AND role IN ('PARENT', 'GUARDIAN')
+        AND role IN ('PARENT', 'GUARDIAN', 'ADULT', 'GUEST')
         AND user_id = ANY(${participantUserIds}::text[]) AND user_id <> ${user.id}
       `
       if (adults.length > 0) needsParentApproval = true

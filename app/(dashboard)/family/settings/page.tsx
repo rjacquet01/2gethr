@@ -71,7 +71,7 @@ export default function FamilySettingsPage() {
   }, [family])
 
   // Ownership is tracked on the family itself (owner_id), not as a member role
-  // (member roles are PARENT / CHILD / GUARDIAN).
+  // (member roles are PARENT / GUARDIAN / ADULT / CHILD / GUEST).
   const isOwner = !!family && !!user && family.ownerId === user.id
 
   const handleSave = async () => {

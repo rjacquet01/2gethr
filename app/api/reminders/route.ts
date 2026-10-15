@@ -165,10 +165,15 @@ export async function POST(request: NextRequest) {
     // A reminder can be set for someone else in the family (e.g. a parent
     // reminding a child), defaulting to the creator themselves.
     await ensureReminderChildColumn()
+    // Setting reminders for children stays with parents/guardians (not ADULT).
     const creatorIsAdult = membership[0].role === 'PARENT' || membership[0].role === 'GUARDIAN'
     let ownerId: string = user.id
     let childProfileId: string | null = null
     const wantsOther = !!forMemberId || (!!forUserId && forUserId !== user.id)
+    // Guests only see and create their own reminders.
+    if (wantsOther && membership[0].role === 'GUEST') {
+      return NextResponse.json({ error: 'Guests can only set reminders for themselves' }, { status: 403 })
+    }
     if (wantsOther) {
       const targetRows = forMemberId
         ? await sql`

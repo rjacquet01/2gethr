@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription } from "@/lib/auth"
+import { guestForbidden } from "@/lib/permissions"
 
 // Trail of where a family member has been (for the route-history view).
 // Parents/guardians may read any member who is sharing; everyone may read
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
       SELECT role FROM family_members WHERE family_id = ${familyId} AND user_id = ${user.id} AND is_active = true
     `
     if (me.length === 0) return NextResponse.json({ success: false, error: "Not a member of this family" }, { status: 403 })
+    if (me[0].role === "GUEST") return guestForbidden()
 
     const target = await sql`
       SELECT fm.user_id, COALESCE(ls.share_with_family, false) AS share, COALESCE(ls.mode, 'OFF') AS mode
@@ -33,6 +35,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Member not found" }, { status: 404 })
     }
     const isSelf = target[0].user_id === user.id
+    // Reading someone else's trail is a supervisor power (not ADULT).
     const isAdult = me[0].role === "PARENT" || me[0].role === "GUARDIAN"
     if (!isSelf) {
       if (!isAdult) return NextResponse.json({ success: false, error: "Not allowed" }, { status: 403 })

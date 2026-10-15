@@ -6,22 +6,23 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { authFetch } from '@/hooks/use-auth'
-import { UserPlus, Copy, Share2, Mail, MessageSquare, X, Check, ShieldCheck, Baby } from 'lucide-react'
+import { UserPlus, Copy, Share2, Mail, MessageSquare, X, Check, ShieldCheck, Baby, UserRound } from 'lucide-react'
 
-type Role = 'PARENT' | 'CHILD'
+type Role = 'PARENT' | 'CHILD' | 'GUEST'
+type CrossFamilyRole = 'GUARDIAN' | 'GUEST'
 interface Invite { code: string; role: Role; expiresAt: string }
-interface JoinRequest { id: string; name: string; email?: string; createdAt: string }
+interface JoinRequest { id: string; name: string; email?: string; crossFamily?: boolean; createdAt: string }
 
-const roleLabel = (r: Role) => (r === 'PARENT' ? 'Parent' : 'Child')
+const roleLabel = (r: Role) => (r === 'PARENT' ? 'Parent' : r === 'GUEST' ? 'Guest' : 'Child')
 
 function inviteMessage(familyName: string, invite: Invite) {
   const link = typeof window !== 'undefined' ? `${window.location.origin}/onboarding?code=${invite.code}` : ''
-  const as = invite.role === 'PARENT' ? 'as a parent' : 'as a child'
+  const as = invite.role === 'PARENT' ? 'as a parent' : invite.role === 'GUEST' ? 'as a guest (calendar & tasks only)' : 'as a child'
   return `Join ${familyName} on Togethr ${as}! Tap this link: ${link}\n\nOr open the app and enter invite code: ${invite.code}\n\nThe code works once and expires in 7 days.`
 }
 
 // Create, share and cancel single-use invite codes. Each code carries a role
-// (parent or child) that is enforced on the server when it is used.
+// (parent, child or guest) that is enforced on the server when it is used.
 export function InviteCodesCard({ familyId, familyName }: { familyId: string; familyName: string }) {
   const [invites, setInvites] = useState<Invite[]>([])
   const [loading, setLoading] = useState(true)
@@ -112,6 +113,13 @@ export function InviteCodesCard({ familyId, familyName }: { familyId: string; fa
               <span className="block text-xs text-muted-foreground font-normal">Joins right away with child permissions</span>
             </span>
           </Button>
+          <Button variant="outline" className="h-auto justify-start py-3 text-left" onClick={() => create('GUEST')} disabled={creating !== null}>
+            {creating === 'GUEST' ? <Spinner className="w-4 h-4 mr-2" /> : <UserRound className="w-4 h-4 mr-2 shrink-0" />}
+            <span>
+              <span className="block font-medium">Guest (calendar &amp; tasks only)</span>
+              <span className="block text-xs text-muted-foreground font-normal">Joins right away, no location or places</span>
+            </span>
+          </Button>
         </div>
 
         {loading ? (
@@ -142,10 +150,13 @@ export function InviteCodesCard({ familyId, familyName }: { familyId: string; fa
   )
 }
 
-// Parents approve or decline people who joined with a parent code.
+// Parents approve or decline people who joined with a parent code. Someone
+// who already belongs to another family is approved as a Guardian or a Guest
+// (default Guest), never as a Parent.
 export function JoinRequestsCard({ familyId }: { familyId: string }) {
   const [requests, setRequests] = useState<JoinRequest[]>([])
   const [busy, setBusy] = useState<string | null>(null)
+  const [grantRoles, setGrantRoles] = useState<Record<string, CrossFamilyRole>>({})
 
   const load = useCallback(async () => {
     try {
@@ -160,17 +171,20 @@ export function JoinRequestsCard({ familyId }: { familyId: string }) {
 
   useEffect(() => { load() }, [load])
 
-  const answer = async (id: string, action: 'approve' | 'deny') => {
+  const answer = async (r: JoinRequest, action: 'approve' | 'deny') => {
+    const id = r.id
+    const grantRole: CrossFamilyRole | undefined = r.crossFamily ? grantRoles[id] || 'GUEST' : undefined
     setBusy(id)
     try {
       const res = await authFetch(`/api/families/${familyId}/join-requests/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, ...(grantRole ? { grantRole } : {}) }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) toast.error(data.error || 'Could not save your answer')
-      else toast.success(action === 'approve' ? 'Parent approved' : 'Request declined')
+      else if (action === 'deny') toast.success('Request declined')
+      else toast.success(grantRole === 'GUARDIAN' ? 'Guardian approved' : grantRole === 'GUEST' ? 'Guest approved' : 'Parent approved')
       await load()
     } finally {
       setBusy(null)
@@ -190,13 +204,35 @@ export function JoinRequestsCard({ familyId }: { familyId: string }) {
       </CardHeader>
       <CardContent className="space-y-2">
         {requests.map((r) => (
-          <div key={r.id} className="flex items-center gap-3 rounded-lg border p-3">
+          <div key={r.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
             <div className="flex-1 min-w-0">
               <div className="font-medium truncate">{r.name}</div>
               {r.email && <div className="text-xs text-muted-foreground truncate">{r.email}</div>}
+              {r.crossFamily && (
+                <div className="mt-2">
+                  <div className="text-xs text-muted-foreground">Already in another family. Approve as:</div>
+                  <div className="mt-1 inline-flex rounded-md border p-0.5" role="radiogroup" aria-label="Approve as">
+                    {(['GUEST', 'GUARDIAN'] as const).map((opt) => {
+                      const selected = (grantRoles[r.id] || 'GUEST') === opt
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          onClick={() => setGrantRoles((g) => ({ ...g, [r.id]: opt }))}
+                          className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${selected ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+                        >
+                          {opt === 'GUEST' ? 'Guest' : 'Guardian'}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
-            <Button size="sm" variant="outline" disabled={busy === r.id} onClick={() => answer(r.id, 'deny')}>Decline</Button>
-            <Button size="sm" disabled={busy === r.id} onClick={() => answer(r.id, 'approve')}>
+            <Button size="sm" variant="outline" disabled={busy === r.id} onClick={() => answer(r, 'deny')}>Decline</Button>
+            <Button size="sm" disabled={busy === r.id} onClick={() => answer(r, 'approve')}>
               {busy === r.id ? <Spinner className="w-4 h-4" /> : <Check className="w-4 h-4 mr-1" />}
               Approve
             </Button>

@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useFamilies } from '@/hooks/use-family'
+import { useMyRole } from '@/hooks/use-my-role'
+import { GuestAreaNotice } from '@/components/guest-area-notice'
 import { useSubscription } from '@/hooks/use-subscription'
 import { authFetch, useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -459,13 +461,29 @@ function PlaceFormFields({
 }
 
 
+// Guests don't get saved places: show a notice instead of mounting the page
+// (whose hooks would call the places APIs).
 export default function PlacesPage() {
+  const { isGuest, isLoading } = useMyRole()
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Spinner className="w-6 h-6" />
+      </div>
+    )
+  }
+  if (isGuest) return <GuestAreaNotice />
+  return <PlacesPageContent />
+}
+
+function PlacesPageContent() {
   const { families, isLoading: familiesLoading } = useFamilies()
   const primaryFamily = families[0]
   const { user } = useAuth()
-  // Geofence alerts watch every family member, so only parents/guardians set them up
+  // Geofence alerts watch every family member, so only parents/guardians/adults set them up
+  // (matches the server's place managers).
   const canManageGeofence = !!primaryFamily?.members?.some(
-    (m) => m.userId === user?.id && (m.role === 'PARENT' || m.role === 'GUARDIAN')
+    (m) => m.userId === user?.id && (m.role === 'PARENT' || m.role === 'GUARDIAN' || m.role === 'ADULT')
   )
   const { access, isLoading: subscriptionLoading } = useSubscription(primaryFamily?.id || null)
   

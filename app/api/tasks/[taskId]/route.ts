@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { notifyTaskCompleted, createNotification } from '@/lib/notifications'
-import { ensureAssignmentColumns, isAdultRole } from '@/lib/assignment'
+import { ensureAssignmentColumns, isSupervisorRole } from '@/lib/assignment'
 import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
 
 // Helper to sync task status updates across all related tables
@@ -220,7 +220,7 @@ export async function PATCH(
         assigneeUserId = cp[0]?.user_id || null
       }
       const allowed = st === 'PENDING_APPROVAL'
-        ? isAdultRole(membership[0].role)
+        ? isSupervisorRole(membership[0].role)
         : assigneeUserId === user.id
       if (!allowed) {
         return NextResponse.json({ error: st === 'PENDING_APPROVAL' ? 'Only a parent or guardian can approve this' : 'Only the assignee can accept this' }, { status: 403 })

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { ensurePlaceNotifyChannelsColumn } from "@/lib/place-schema"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
+import { guestForbidden } from "@/lib/permissions"
 import { z } from "zod"
 import { del } from "@vercel/blob"
 
@@ -37,7 +38,7 @@ export async function GET(
     }
 
     const places = await sql`
-      SELECT sp.*, f.id as family_id
+      SELECT sp.*, f.id as family_id, fm.role as member_role
       FROM saved_places sp
       JOIN families f ON sp.family_id = f.id
       JOIN family_members fm ON f.id = fm.family_id
@@ -50,6 +51,7 @@ export async function GET(
         { status: 404 }
       )
     }
+    if (places[0].member_role === "GUEST") return guestForbidden()
 
     const p = places[0]
     return NextResponse.json({
@@ -113,7 +115,9 @@ export async function PATCH(
       )
     }
 
-    const isManager = ["PARENT", "GUARDIAN", "ADMIN"].includes(places[0].role)
+    if (places[0].role === "GUEST") return guestForbidden()
+
+    const isManager = ["PARENT", "GUARDIAN", "ADULT", "ADMIN"].includes(places[0].role)
     const isCreator = places[0].created_by_id != null && String(places[0].created_by_id) === String(user.id)
     if (!isManager && !isCreator) {
       return NextResponse.json(
@@ -284,8 +288,10 @@ export async function DELETE(
       )
     }
 
+    if (places[0].role === "GUEST") return guestForbidden()
+
     if (
-      !["PARENT", "GUARDIAN", "ADMIN"].includes(places[0].role) &&
+      !["PARENT", "GUARDIAN", "ADULT", "ADMIN"].includes(places[0].role) &&
       !(places[0].created_by_id != null && String(places[0].created_by_id) === String(user.id))
     ) {
       return NextResponse.json(

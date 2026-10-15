@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { notifyChildStoppedSharing } from "@/lib/family-alerts"
+import { guestForbidden, isGuestOnly } from "@/lib/permissions"
 
 const updateSettingsSchema = z.object({
   memberId: z.string().min(1, "Member ID is required"),
@@ -34,8 +35,12 @@ export async function GET(request: NextRequest) {
           ls.update_interval_sec, ls.last_mode_change
         FROM family_members fm
         LEFT JOIN location_settings ls ON ls.family_member_id = fm.id
-        WHERE fm.user_id = ${user.id} AND fm.is_active = true
+        WHERE fm.user_id = ${user.id} AND fm.is_active = true AND fm.role <> 'GUEST'
       `
+
+      // Guest memberships have no location settings; someone who is only
+      // ever a guest gets nothing here.
+      if (memberSettings.length === 0 && (await isGuestOnly(user.id))) return guestForbidden()
 
       if (memberSettings.length === 0) {
         return NextResponse.json({
@@ -95,7 +100,7 @@ export async function GET(request: NextRequest) {
 
     // Get settings for specific member (must be parent)
     const membership = await sql`
-      SELECT fm.role, fm.family_id, target.user_id as target_user_id
+      SELECT fm.role, fm.family_id, target.user_id as target_user_id, target.role as target_role
       FROM family_members fm
       JOIN family_members target ON fm.family_id = target.family_id AND target.id = ${memberId}
       WHERE fm.user_id = ${user.id} AND fm.is_active = true
@@ -107,8 +112,9 @@ export async function GET(request: NextRequest) {
         { status: 404 }
       )
     }
+    if (membership[0].role === "GUEST" || membership[0].target_role === "GUEST") return guestForbidden()
 
-    // Parents/guardians/admins can view others' settings, or user can view their own
+    // Parents/guardians/admins (not ADULT) can view others' settings, or user can view their own
     const isOwnSettings = membership[0].target_user_id === user.id
     const canManageOthers = ["PARENT", "GUARDIAN", "ADMIN"].includes(membership[0].role)
     if (!isOwnSettings && !canManageOthers) {
@@ -178,6 +184,8 @@ export async function PATCH(request: NextRequest) {
         { status: 404 }
       )
     }
+
+    if (membership[0].role === "GUEST" || membership[0].target_role === "GUEST") return guestForbidden()
 
     const isOwnSettings = membership[0].target_user_id === user.id
     const isParentOrGuardian = ["PARENT", "GUARDIAN", "ADMIN"].includes(membership[0].role)
