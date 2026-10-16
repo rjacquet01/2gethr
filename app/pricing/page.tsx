@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge'
 import { Check, Sparkles } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import { cn } from '@/lib/utils'
-import { usePurchaseUi } from '@/hooks/use-purchase-ui'
 import { listTierDefinitions } from '@/lib/subscription-tiers'
 
 // Pulled from lib/subscription-tiers.ts (the same data the in-app
@@ -27,18 +26,6 @@ const tiers = listTierDefinitions().map((def) => ({
 
 export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual')
-  const { isAndroidApp, canPurchase } = usePurchaseUi()
-  if (isAndroidApp && !canPurchase) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6 text-center">
-        <div className="space-y-4">
-          <Logo size="xs" />
-          <p className="text-muted-foreground">Open the Togethr app to see your plan.</p>
-          <Button asChild><Link href="/dashboard">Back to app</Link></Button>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -94,7 +81,7 @@ export default function PricingPage() {
               onClick={() => setBillingCycle('annual')}
             >
               Annual
-              <Badge variant="secondary" className="ml-2 text-xs">Save up to 33%</Badge>
+              <Badge variant="secondary" className="ml-2 text-xs">Save 17%</Badge>
             </button>
           </div>
         </div>
@@ -188,13 +175,13 @@ export default function PricingPage() {
             <div>
               <h3 className="font-semibold mb-2">Is location sharing required?</h3>
               <p className="text-muted-foreground">
-                No, location sharing is always optional. Every plan includes basic live location with 2 saved places; geofence arrival and departure alerts are on Premium. Each family member controls their own sharing settings.
+                No, location sharing is always optional and only available on Premium plans. Each family member controls their own sharing settings.
               </p>
             </div>
             <div>
               <h3 className="font-semibold mb-2">How do I contact support?</h3>
               <p className="text-muted-foreground">
-                You can reach our support team at <a href="mailto:admin@mytogethr.com" className="text-primary hover:underline">admin@mytogethr.com</a>. Basic and Premium members get priority support.
+                You can reach our support team at <a href="mailto:admin@mytogethr.com" className="text-primary hover:underline">admin@mytogethr.com</a>. Premium members get 24/7 priority support.
               </p>
             </div>
           </div>
@@ -212,7 +199,7 @@ export default function PricingPage() {
               <a href="mailto:admin@mytogethr.com" className="hover:text-foreground transition-colors">Contact</a>
             </div>
             <p className="text-xs sm:text-sm text-muted-foreground">
-              &copy; {new Date().getFullYear()} Togethr
+              &copy; {new Date().getFullYear()} Togethr, LLC. All rights reserved.
             </p>
           </div>
         </div>

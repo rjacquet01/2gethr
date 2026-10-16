@@ -38,11 +38,9 @@ export async function sendEmail(payload: EmailPayload): Promise<EmailResult> {
   }
 
   const apiKey = process.env.RESEND_API_KEY!
-  // Sender domain must be verified in Resend before emails will actually
-  // send. Reads EMAIL_FROM if set (see docstring above), otherwise falls
-  // back to the verified domain, mytogethr.com (this used to be hardcoded
-  // to nexusifm.com, a domain that was never verified in Resend at all).
-  const verifiedFrom = process.env.EMAIL_FROM || 'Togethr <admin@mytogethr.com>'
+  // The sender domain must be verified in Resend. Set EMAIL_FROM in the
+  // environment (e.g. 'Togethr <noreply@mytogethr.com>'); this is the fallback.
+  const verifiedFrom = process.env.EMAIL_FROM || 'Togethr <noreply@mytogethr.com>'
 
   try {
     const response = await fetch('https://api.resend.com/emails', {
@@ -89,7 +87,7 @@ export async function sendEmail(payload: EmailPayload): Promise<EmailResult> {
  * (new signups, support tickets, cancellations, tier changes) — distinct
  * from any user-facing email, which always goes to that user's own address.
  */
-export const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@mytogethr.com'
+export const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'rjacquet01@gmail.com'
 
 /**
  * Send an operational alert to the admin address. Failures are logged but

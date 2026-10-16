@@ -29,12 +29,12 @@ export default function TermsPage() {
         <h1 className="text-3xl font-bold mb-8">Terms of Service</h1>
         
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: October 2026</p>
+          <p className="text-muted-foreground">Last updated: October 16, 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Acceptance of Terms</h2>
             <p>
-              By accessing or using Togethr ("the Service"), you agree to be bound by these Terms of Service. 
+              By accessing or using Togethr ("the Service"), operated by Togethr, LLC ("Togethr", "we", "us"), you agree to be bound by these Terms of Service. 
               If you do not agree to these terms, please do not use our Service.
             </p>
           </section>
@@ -54,7 +54,7 @@ export default function TermsPage() {
               confidentiality of your account credentials and for all activities under your account.
             </p>
             <ul className="list-disc pl-6 space-y-2">
-              <li>You must be at least 18 years old to create an account</li>
+              <li>You must be at least 18 years old to create an account, except that a parent or legal guardian may create a supervised account for a child aged 8 or older and consents to that child's use of the Service</li>
               <li>You must provide accurate and complete information</li>
               <li>You are responsible for all activity on your account</li>
               <li>You must notify us immediately of any unauthorized access</li>
@@ -87,9 +87,7 @@ export default function TermsPage() {
             <p>
               Some features require a paid subscription. Subscription terms, pricing, and cancellation 
               policies are outlined at the time of purchase. Refunds are handled according to the 
-              policies of your app store or payment provider. Paid subscriptions, including the Premium
-              tier, renew automatically at the end of each billing period until you cancel. You can cancel at
-              any time, and your access continues through the end of the period you have paid for.
+              policies of your app store or payment provider.
             </p>
           </section>
 
@@ -108,12 +106,9 @@ export default function TermsPage() {
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">8. Limitation of Liability</h2>
             <p>
-              Togethr is provided "as is" without warranties of any kind. We are not liable for any 
+              The Service is provided by Togethr, LLC "as is" without warranties of any kind. We are not liable for any 
               damages arising from your use of the Service, including but not limited to direct, indirect, 
-              incidental, or consequential damages. In particular, we are not liable for any alert,
-              notification or location update that is delayed, missed or not delivered, including because of
-              loss of connectivity, device or operating-system settings, battery or permission limits, or
-              failures of third-party push or messaging providers.
+              incidental, or consequential damages.
             </p>
           </section>
 
@@ -125,45 +120,8 @@ export default function TermsPage() {
             </p>
           </section>
 
-          <section className="space-y-4" id="sms">
-            <h2 className="text-xl font-semibold">10. Text Messaging (SMS) Terms</h2>
-            <p>
-              By turning on SMS notifications in Settings and providing your mobile number, you agree to
-              receive text messages from Togethr, operated by Nexus Calibration Maintenance Management, LLC, such as event and task reminders, schedule changes and
-              family alerts. Consent to receive text messages is not a condition of using the Service.
-            </p>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>Message frequency varies based on your reminders and family activity.</li>
-              <li>Message and data rates may apply, according to your mobile plan.</li>
-              <li>
-                Reply STOP at any time to cancel text messages. Reply HELP for help, or contact us at
-                admin@mytogethr.com.
-              </li>
-              <li>Carriers are not liable for delayed or undelivered messages.</li>
-              <li>
-                See our <a href="/privacy#sms" className="text-primary hover:underline">Privacy Policy</a> for
-                how we handle your phone number. We do not share mobile information with third parties
-                for marketing or promotional purposes.
-              </li>
-            </ul>
-          </section>
-
-          <section className="space-y-4" id="safety">
-            <h2 className="text-xl font-semibold">11. Safety and Emergency Features</h2>
-            <p>
-              Togethr includes safety features such as SOS alerts and parent-initiated emergency alerts to a
-              child's device. Some of these features may require a Premium subscription.
-            </p>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>These features are a convenience and are not a substitute for calling 911 or local emergency services.</li>
-              <li>Delivery is not guaranteed and depends on connectivity, device settings, permissions and third-party services.</li>
-              <li>Emergency alerts may be rate-limited to prevent abuse.</li>
-              <li>You agree to use these features only for genuine safety purposes and not to harass, frighten or mislead anyone.</li>
-            </ul>
-          </section>
-
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">12. Contact Us</h2>
+            <h2 className="text-xl font-semibold">10. Contact Us</h2>
             <p>
               If you have questions about these Terms, please contact us at{' '}
               <a href="mailto:admin@mytogethr.com" className="text-primary hover:underline">
