@@ -37,7 +37,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePurchaseUi } from '@/hooks/use-purchase-ui'
-import { getTierDefinition } from '@/lib/subscription-tiers'
+import { getTierDefinition, SUBSCRIPTION_TIERS, annualSavingsPercent } from '@/lib/subscription-tiers'
 
 export default function SubscriptionPage() {
   const router = useRouter()
@@ -67,9 +67,9 @@ export default function SubscriptionPage() {
 
   // Map tier names to API tier keys
   const tierNameToKey: Record<string, string> = {
-    'Free': 'FREE',
-    'Basic': 'PREMIUM',
-    'Premium': 'PREMIUM_PLUS',
+    [SUBSCRIPTION_TIERS.FREE.name]: 'FREE',
+    [SUBSCRIPTION_TIERS.PREMIUM.name]: 'PREMIUM', // "Plus"
+    [SUBSCRIPTION_TIERS.PREMIUM_PLUS.name]: 'PREMIUM_PLUS', // "Premium"
   }
 
   // Format tier key to display name. This used to hardcode its own
@@ -304,7 +304,7 @@ export default function SubscriptionPage() {
                   )}
                 >
                   {label}
-                  {k === 'annual' && <span className="ml-1.5 text-xs text-green-600">Save up to 33%</span>}
+                  {k === 'annual' && <span className="ml-1.5 text-xs text-green-600">Save {annualSavingsPercent(SUBSCRIPTION_TIERS.PREMIUM)}%</span>}
                 </button>
               ))}
             </div>
@@ -349,11 +349,11 @@ export default function SubscriptionPage() {
                     </div>
                     <div>
                       <p className="flex items-baseline gap-1">
-                        <span className="text-3xl font-bold">${selectedBilling === 'monthly' ? price : (price / 12).toFixed(2)}</span>
+                        <span className="text-3xl font-bold">${selectedBilling === 'monthly' ? (price > 0 ? price.toFixed(2) : price) : (price / 12).toFixed(2)}</span>
                         <span className="text-sm text-muted-foreground">/month</span>
                       </p>
                       <p className="h-4 text-xs text-muted-foreground">
-                        {selectedBilling === 'annual' && price > 0 ? `$${price}/year billed annually` : ''}
+                        {selectedBilling === 'annual' && price > 0 ? `$${price.toFixed(2)}/year billed annually · about 2 months free` : ''}
                       </p>
                     </div>
                     <ul className="space-y-1.5">

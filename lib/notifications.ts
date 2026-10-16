@@ -1,52 +1,23 @@
 import { sql } from "@/lib/db"
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
 import { sendEmail, isResendConfigured, EMAIL_TEMPLATES } from "@/lib/services/email"
+import { sendSMSMetered, isTwilioConfigured } from "@/lib/services/sms"
 
-// SMS notification function using Twilio (or similar service)
-// Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in environment variables
+// SMS for in-app notifications. Goes through the metered sender so every text
+// counts against the family's monthly SMS quota (over quota it is skipped and
+// push/email carry the notification). Never throws.
 export async function sendSmsNotification(
   phoneNumber: string,
-  message: string
+  message: string,
+  meter: { familyId?: string | null; userId?: string | null } = {}
 ): Promise<{ success: boolean; error?: string }> {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID
-  const authToken = process.env.TWILIO_AUTH_TOKEN
-  const fromNumber = process.env.TWILIO_PHONE_NUMBER
-
-  // If Twilio is not configured, skip SMS
-  if (!accountSid || !authToken || !fromNumber) {
+  // If Twilio is not configured, skip SMS without blocking the flow.
+  if (!isTwilioConfigured()) {
     console.log('[SMS] Twilio not configured, skipping SMS notification')
-    return { success: true } // Return success to not block the flow
-  }
-
-  try {
-    const response = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          From: fromNumber,
-          To: phoneNumber,
-          Body: message,
-        }),
-      }
-    )
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      console.error('[SMS] Failed to send SMS:', errorData)
-      return { success: false, error: errorData.message || 'Failed to send SMS' }
-    }
-
-    console.log('[SMS] SMS sent successfully to:', phoneNumber.slice(-4))
     return { success: true }
-  } catch (error) {
-    console.error('[SMS] Error sending SMS:', error)
-    return { success: false, error: 'Failed to send SMS' }
   }
+  const result = await sendSMSMetered({ to: phoneNumber, body: message, familyId: meter.familyId, userId: meter.userId })
+  return { success: result.success, error: result.error }
 }
 
 export type NotificationType =
@@ -189,7 +160,10 @@ export async function createNotification({
         WHERE u.id = ${userId}
       `
       if (userSmsPrefs.length > 0 && userSmsPrefs[0].phone && (force || userSmsPrefs[0].sms_enabled)) {
-        await sendSmsNotification(userSmsPrefs[0].phone, `FamilyApp: ${title} - ${body}`)
+        await sendSmsNotification(userSmsPrefs[0].phone, `FamilyApp: ${title} - ${body}`, {
+          familyId: typeof data.familyId === 'string' ? data.familyId : null,
+          userId,
+        })
       }
     }
 
@@ -397,7 +371,8 @@ export async function notifyFamilyAboutEvent(
     if (member.phone && (!channels || channels.includes('sms'))) {
       await sendSmsNotification(
         member.phone,
-        `FamilyApp: ${creatorName} created a new event: "${eventTitle}". Open the app to view details.`
+        `FamilyApp: ${creatorName} created a new event: "${eventTitle}". Open the app to view details.`,
+        { familyId, userId: member.user_id }
       )
     }
   }

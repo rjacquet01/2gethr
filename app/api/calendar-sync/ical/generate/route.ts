@@ -60,11 +60,11 @@ export async function POST(request: NextRequest) {
   await ensureSyncSchema()
   const familyId = familyMembership[0].family_id
 
-  // Calendar export is a Basic/Premium feature.
+  // Calendar export is a Plus/Premium feature.
   const sub = await checkFamilySubscription(familyId)
   if (!getTierDefinition(sub.tier).features.exportCalendar) {
     return NextResponse.json(
-      { success: false, error: 'Calendar export is available on Basic and Premium plans. Upgrade to get your calendar link.' },
+      { success: false, error: 'Calendar export is available on Plus and Premium plans. Upgrade to get your calendar link.' },
       { status: 403 }
     )
   }

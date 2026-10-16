@@ -1,6 +1,7 @@
 // Safe Link - Application Constants
 
 import { SubscriptionTier, type SubscriptionFeatures, type SubscriptionPlan } from "./types"
+import { SUBSCRIPTION_TIERS as SUBSCRIPTION_TIER_DEFS } from "./subscription-tiers"
 
 // ============================================
 // AUTH CONSTANTS
@@ -74,84 +75,45 @@ export const NOTIFICATION = {
 // SUBSCRIPTION PLANS
 // ============================================
 
+// Derived from lib/subscription-tiers.ts (the single source of truth for
+// names, prices, limits and feature flags) so these can never disagree with
+// what the pricing, subscription and upgrade pages show.
+const planFromTier = (tier: SubscriptionTier): SubscriptionPlan => {
+  const def = SUBSCRIPTION_TIER_DEFS[tier]
+  return {
+    tier,
+    name: def.name,
+    description: def.description,
+    priceMonthly: def.priceMonthlyCents,
+    priceYearly: def.priceAnnualCents,
+    features: [...def.featureList],
+  }
+}
+
 export const SUBSCRIPTION_PLANS: Record<SubscriptionTier, SubscriptionPlan> = {
-  FREE: {
-    tier: SubscriptionTier.FREE,
-    name: "Free",
-    description: "Basic family coordination",
-    priceMonthly: 0, // $0.00
-    priceYearly: 0, // $0.00
-    features: [
-      "Up to 2 children",
-      "Shared family calendar",
-      "Basic event notifications",
-      "30 days history",
-      "Email support",
-    ],
-  },
-  PREMIUM: {
-    tier: SubscriptionTier.PREMIUM,
-    name: "Basic",
-    description: "Enhanced family features",
-    priceMonthly: 299, // $2.99
-    priceYearly: 2499, // $24.99
-    features: [
-      "Up to 5 children",
-      "Custom reminder times",
-      "Complex recurring events",
-      "90 days history",
-      "SMS notifications",
-      "Priority support",
-    ],
-  },
-  PREMIUM_PLUS: {
-    tier: SubscriptionTier.PREMIUM_PLUS,
-    name: "Premium",
-    description: "Full family safety suite",
-    priceMonthly: 499, // $4.99
-    priceYearly: 3999, // $39.99
-    features: [
-      "Unlimited children",
-      "Real-time location sharing",
-      "Geofence alerts",
-      "1 year history",
-      "Custom reminder times",
-      "Priority support",
-    ],
-  },
+  FREE: planFromTier(SubscriptionTier.FREE),
+  PREMIUM: planFromTier(SubscriptionTier.PREMIUM),
+  PREMIUM_PLUS: planFromTier(SubscriptionTier.PREMIUM_PLUS),
+}
+
+const featuresFromTier = (tier: SubscriptionTier): SubscriptionFeatures => {
+  const def = SUBSCRIPTION_TIER_DEFS[tier]
+  return {
+    maxFamilyMembers: def.limits.maxFamilyMembers,
+    maxSavedPlaces: def.limits.maxSavedPlaces,
+    maxCalendars: def.limits.maxCalendars,
+    locationSharing: def.features.locationSharing,
+    geofencing: def.features.geofencing,
+    advancedRecurrence: def.features.advancedRecurrence,
+    exportCalendar: def.features.exportCalendar,
+    prioritySupport: def.features.prioritySupport,
+  }
 }
 
 export const SUBSCRIPTION_FEATURES: Record<SubscriptionTier, SubscriptionFeatures> = {
-  FREE: {
-    maxFamilyMembers: FAMILY.MAX_MEMBERS_FREE,
-    maxSavedPlaces: LOCATION.MAX_SAVED_PLACES_FREE,
-    maxCalendars: 1,
-    locationSharing: false,
-    geofencing: false,
-    advancedRecurrence: false,
-    exportCalendar: false,
-    prioritySupport: false,
-  },
-  PREMIUM: {
-    maxFamilyMembers: FAMILY.MAX_MEMBERS_PREMIUM,
-    maxSavedPlaces: LOCATION.MAX_SAVED_PLACES_PREMIUM,
-    maxCalendars: 5,
-    locationSharing: true,
-    geofencing: true,
-    advancedRecurrence: true,
-    exportCalendar: true,
-    prioritySupport: true,
-  },
-  PREMIUM_PLUS: {
-    maxFamilyMembers: FAMILY.MAX_MEMBERS_PREMIUM_PLUS,
-    maxSavedPlaces: LOCATION.MAX_SAVED_PLACES_PREMIUM_PLUS,
-    maxCalendars: -1, // Unlimited
-    locationSharing: true,
-    geofencing: true,
-    advancedRecurrence: true,
-    exportCalendar: true,
-    prioritySupport: true,
-  },
+  FREE: featuresFromTier(SubscriptionTier.FREE),
+  PREMIUM: featuresFromTier(SubscriptionTier.PREMIUM),
+  PREMIUM_PLUS: featuresFromTier(SubscriptionTier.PREMIUM_PLUS),
 }
 
 // ============================================

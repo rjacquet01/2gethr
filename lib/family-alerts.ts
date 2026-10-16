@@ -1,6 +1,6 @@
 import { sql } from "./db"
 import { sendPushToUser, isFirebaseConfigured } from "./services/push"
-import { sendSMS, isTwilioConfigured } from "./services/sms"
+import { sendSMSMetered, isTwilioConfigured } from "./services/sms"
 import { sendEmail, isResendConfigured } from "./services/email"
 
 interface AlertOptions {
@@ -66,7 +66,8 @@ export async function alertFamilyAdults(familyId: string, aboutUserId: string, o
     const smsOk = opts.soft ? false : opts.urgent ? r.sms_enabled !== false : r.sms_enabled === true
     if (smsOk && r.phone && isTwilioConfigured()) {
       try {
-        await sendSMS({ to: r.phone, body: `Togethr: ${opts.title} - ${opts.body}`.substring(0, 300) })
+        // Counts against the family's monthly SMS quota; urgent alerts are never blocked.
+        await sendSMSMetered({ familyId, to: r.phone, body: `Togethr: ${opts.title} - ${opts.body}`.substring(0, 300), urgent: !!opts.urgent })
       } catch (err) {
         console.error("alertFamilyAdults sms failed:", err)
       }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { sendPushToUser } from "@/lib/services/push"
 import { sendEmail, isResendConfigured } from "@/lib/services/email"
-import { sendSMS, isTwilioConfigured } from "@/lib/services/sms"
+import { sendSMSMetered, isTwilioConfigured } from "@/lib/services/sms"
 import { ensureReminderChildColumn } from "@/lib/reminder-schema"
 import { isQuietNow } from "@/lib/quiet-hours"
 
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     // this occurrence (sent_at gets cleared when a recurring reminder rolls
     // forward to its next remind_at, and when a user edits remind_at).
     const due = await sql`
-      SELECT r.id, r.title, r.description, r.remind_at, r.user_id,
+      SELECT r.id, r.title, r.description, r.remind_at, r.user_id, r.family_id,
              r.is_recurring, r.recurrence_rule, r.notify_channels,
              u.email, u.phone, u.timezone,
              cp.display_name as child_name, cfm.user_id as child_user_id
@@ -117,7 +117,10 @@ export async function GET(request: NextRequest) {
 
       if (channels.includes('sms') && userSettings.sms_enabled && reminder.phone && isTwilioConfigured()) {
         try {
-          await sendSMS({
+          // Counts against the family's monthly SMS quota.
+          await sendSMSMetered({
+            familyId: reminder.family_id,
+            userId: reminder.user_id,
             to: reminder.phone,
             body: `Togethr Reminder: ${displayTitle}`.substring(0, 160),
           })

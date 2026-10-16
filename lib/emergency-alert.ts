@@ -1,6 +1,6 @@
 import { sql } from "./db"
 import { sendPushToUser, isFirebaseConfigured } from "./services/push"
-import { sendSMS, isTwilioConfigured } from "./services/sms"
+import { sendSMSMetered, isTwilioConfigured } from "./services/sms"
 
 // Parent/guardian -> child emergency alert ("call me / reply now").
 // Lazy idempotent schema, same approach as lib/sos.ts.
@@ -60,10 +60,12 @@ async function record(alertId: string, channel: string, status: ChannelStatus, d
   }
 }
 
-async function sendSmsWithRetry(to: string, body: string): Promise<{ ok: boolean; error?: string }> {
+// An emergency alert is urgent: never blocked by the monthly SMS quota, but
+// each text that goes out still counts toward it (failed attempts don't).
+async function sendSmsWithRetry(to: string, body: string, familyId?: string, userId?: string): Promise<{ ok: boolean; error?: string }> {
   let last = "unknown error"
   for (let attempt = 0; attempt < 3; attempt++) {
-    const r = await sendSMS({ to, body })
+    const r = await sendSMSMetered({ to, body, familyId, userId, urgent: true })
     if (r.success) return { ok: true }
     last = r.error || last
     if (/not a valid|unverified|invalid|blacklist|not configured|unsubscribed|opted/i.test(last)) break
@@ -77,8 +79,10 @@ export async function dispatchEmergencyAlert(opts: {
   alertId: string
   senderName: string
   childUserId: string
+  /** Family whose SMS count the text adds to (it is never blocked). */
+  familyId?: string
 }): Promise<EmergencyDeliveryResult> {
-  const { alertId, senderName, childUserId } = opts
+  const { alertId, senderName, childUserId, familyId } = opts
   const child = (await sql`
     SELECT u.phone, rs.sms_enabled FROM users u
     LEFT JOIN reminder_settings rs ON rs.user_id = u.id
@@ -126,7 +130,7 @@ export async function dispatchEmergencyAlert(opts: {
 
   if (child?.phone && isTwilioConfigured() && child.sms_enabled !== false) {
     tasks.push((async () => {
-      const s = await sendSmsWithRetry(child.phone, smsBody)
+      const s = await sendSmsWithRetry(child.phone, smsBody, familyId, childUserId)
       out.sms = s.ok ? "sent" : "failed"
       if (!s.ok) out.smsReason = s.error
       await record(alertId, "sms", out.sms, s.error)

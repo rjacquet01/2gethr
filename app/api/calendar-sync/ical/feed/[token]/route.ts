@@ -126,11 +126,11 @@ export async function GET(
   const familyId = connections[0].family_id
   const feedUserId = connections[0].user_id
 
-  // Calendar export is a Basic/Premium feature: a family that dropped back to
+  // Calendar export is a Plus/Premium feature: a family that dropped back to
   // Free stops serving the feed.
   const feedSub = await checkFamilySubscription(familyId)
   if (!getTierDefinition(feedSub.tier).features.exportCalendar) {
-    return new NextResponse('Calendar export requires a Basic or Premium plan', { status: 403 })
+    return new NextResponse('Calendar export requires a Plus or Premium plan', { status: 403 })
   }
 
   const url = new URL(request.url)

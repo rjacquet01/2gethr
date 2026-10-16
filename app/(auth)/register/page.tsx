@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -134,7 +134,7 @@ export default function RegisterPage() {
                     className="h-11 pl-10"
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">For SMS alerts with Basic or Premium plans</p>
+                <p className="text-xs text-muted-foreground">For SMS alerts with Plus or Premium plans</p>
                 <div className="flex items-start gap-2 pt-1">
                   <Checkbox
                     id="sms-consent"

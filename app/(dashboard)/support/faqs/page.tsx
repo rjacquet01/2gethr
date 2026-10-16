@@ -10,6 +10,11 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 import { ArrowLeft, HelpCircle, Mail } from 'lucide-react'
+import { SUBSCRIPTION_TIERS, annualSavingsPercent, centsToDisplay } from '@/lib/subscription-tiers'
+
+// Plan names, prices and text-alert allowances come from lib/subscription-tiers.ts.
+const PLUS = SUBSCRIPTION_TIERS.PREMIUM
+const PREMIUM = SUBSCRIPTION_TIERS.PREMIUM_PLUS
 
 const faqs = [
   {
@@ -46,7 +51,7 @@ const faqs = [
       },
       {
         question: 'How do I set up event reminders?',
-        answer: 'When creating or editing an event, choose how long before it starts you want to be reminded. Reminders arrive by push notification and email, and by text message on the Basic and Premium plans. Choose your default reminder times and turn each notification type on or off in Settings > Notifications. Custom reminder times are a Premium feature.'
+        answer: `When creating or editing an event, choose how long before it starts you want to be reminded. Reminders arrive by push notification and email, and by text message on the ${PLUS.name} and ${PREMIUM.name} plans (${PLUS.name} includes ${PLUS.limits.smsMonthlyQuota} text alerts a month, ${PREMIUM.name} ${PREMIUM.limits.smsMonthlyQuota}). Choose your default reminder times and turn each notification type on or off in Settings > Notifications. Custom reminder times are available on ${PLUS.name} and ${PREMIUM.name}.`
       },
     ]
   },
@@ -89,7 +94,7 @@ const faqs = [
     questions: [
       {
         question: 'What features are included in each plan?',
-        answer: 'Free: shared family calendar and tasks, live family location with 2 saved places, up to 4 members, 30 days of history. Basic ($2.99/month): up to 6 members, 15 saved places, SMS notifications, advanced recurring events, calendar export, 90 days of history. Premium ($4.99/month): up to 12 members, 50 saved places, geofence arrival and departure alerts, custom reminder times, and 1 year of history. Annual billing is discounted. New members get a 14-day free Premium trial.'
+        answer: `Free: shared family calendar and tasks, live family location with 2 saved places, up to 4 members, 30 days of history. ${PLUS.name} ($${centsToDisplay(PLUS.priceMonthlyCents)}/month or $${centsToDisplay(PLUS.priceAnnualCents)}/year): up to 6 members, 15 saved places, ${PLUS.limits.smsMonthlyQuota} text alerts a month, custom reminder times, advanced recurring events, calendar export, 90 days of history. ${PREMIUM.name} ($${centsToDisplay(PREMIUM.priceMonthlyCents)}/month or $${centsToDisplay(PREMIUM.priceAnnualCents)}/year): up to 12 members, 50 saved places, geofence arrival and departure alerts, ${PREMIUM.limits.smsMonthlyQuota} text alerts a month, and 1 year of history. Annual billing saves ${annualSavingsPercent(PLUS)}% (about 2 months free). New members get a 14-day free Premium trial.`
       },
       {
         question: 'How do I upgrade my subscription?',

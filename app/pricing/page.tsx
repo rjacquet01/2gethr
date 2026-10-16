@@ -8,13 +8,12 @@ import { Badge } from '@/components/ui/badge'
 import { Check, Sparkles } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import { cn } from '@/lib/utils'
-import { listTierDefinitions } from '@/lib/subscription-tiers'
+import { listTierDefinitions, annualSavingsPercent, SUBSCRIPTION_TIERS } from '@/lib/subscription-tiers'
 
 // Pulled from lib/subscription-tiers.ts (the same data the in-app
 // /subscription page reads) so this public page can't drift out of sync
-// with what members actually see - and are actually charged - once signed
-// in, the way it previously did (this page quoted $2.99/$4.99 after Basic
-// and Premium were repriced to $3.99/$7.99 everywhere else).
+// with what members actually see - and are actually charged - once signed in.
+const ANNUAL_SAVINGS = annualSavingsPercent(SUBSCRIPTION_TIERS.PREMIUM)
 const tiers = listTierDefinitions().map((def) => ({
   name: def.name,
   description: def.description,
@@ -81,7 +80,7 @@ export default function PricingPage() {
               onClick={() => setBillingCycle('annual')}
             >
               Annual
-              <Badge variant="secondary" className="ml-2 text-xs">Save 17%</Badge>
+              <Badge variant="secondary" className="ml-2 text-xs">Save {ANNUAL_SAVINGS}%</Badge>
             </button>
           </div>
         </div>
@@ -125,7 +124,7 @@ export default function PricingPage() {
                   
                   {billingCycle === 'annual' && price > 0 && (
                     <p className="text-sm text-muted-foreground">
-                      ${price}/year billed annually
+                      ${price.toFixed(2)}/year billed annually · about 2 months free
                     </p>
                   )}
                   

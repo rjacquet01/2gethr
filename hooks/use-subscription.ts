@@ -230,9 +230,8 @@ export function useSubscription(familyId: string | null) {
 }
 
 // Pulled from the same lib/subscription-tiers.ts definitions the backend
-// uses, instead of a separately hand-maintained (and previously
-// out-of-date - $3.99/$7.99 here vs $2.99/$4.99 on the public pricing
-// page) copy.
+// uses (names Free / Plus / Premium and their prices), instead of a
+// separately hand-maintained copy.
 export function useSubscriptionTiers(): SubscriptionTierInfo[] {
   return listTierDefinitions().map((def) => ({
     name: def.name,

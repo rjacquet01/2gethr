@@ -54,7 +54,7 @@ export async function POST(
     // no-payment grant, so it is handled explicitly here instead: owner only,
     // once per person, and only from the Free plan.
     if (body?.action === "start_trial") {
-      // Default to Basic if the client doesn't say which plan to try.
+      // Default to Plus (PREMIUM) if the client doesn't say which plan to try.
       const requestedTier = body.tier ?? "PREMIUM"
       const trialTier = requestedTier === "PREMIUM" || requestedTier === "PREMIUM_PLUS" ? requestedTier : null
       if (!trialTier) {

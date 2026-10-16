@@ -6,7 +6,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, getUserWithFamily, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { verifyDeviceToken } from "@/lib/device-token"
 import { z } from "zod"
-import { sendSMS, SMS_TEMPLATES, isTwilioConfigured } from "@/lib/services/sms"
+import { sendSMSMetered, SMS_TEMPLATES, isTwilioConfigured } from "@/lib/services/sms"
 import { sendEmail, EMAIL_TEMPLATES, isResendConfigured } from "@/lib/services/email"
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
 import { distanceMeters, evaluateGeofence, suggestedPingIntervalSec } from "@/lib/geofence"
@@ -624,7 +624,8 @@ async function createGeofenceNotification(
           eventType === "ARRIVAL"
             ? SMS_TEMPLATES.GEOFENCE_ARRIVAL(userName, placeName)
             : SMS_TEMPLATES.GEOFENCE_DEPARTURE(userName, placeName)
-        const result = await sendSMS({ to: recipient.phone, body: smsBody })
+        // Geofence alerts count against the family's monthly SMS quota.
+        const result = await sendSMSMetered({ familyId, to: recipient.phone, body: smsBody })
         if (!result.success) {
           console.error("Geofence SMS failed:", result.error)
         }

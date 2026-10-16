@@ -4,7 +4,7 @@
  */
 
 import { sql } from '@/lib/db'
-import { sendSMS, SMS_TEMPLATES, isTwilioConfigured } from './sms'
+import { sendSMSMetered, SMS_TEMPLATES, isTwilioConfigured } from './sms'
 import { sendEmail, EMAIL_TEMPLATES, isResendConfigured } from './email'
 import { sendPushToUser, isFirebaseConfigured } from './push'
 import { createNotification } from '../notifications'
@@ -186,9 +186,13 @@ export async function dispatchNotification(
           smsBody = `Togethr: ${request.title} - ${request.body}`.substring(0, 160)
         }
         
-        const smsResult = await sendSMS({
+        // Counts against the family's monthly SMS quota (familyId from the
+        // notification data, else the recipient's family).
+        const smsResult = await sendSMSMetered({
           to: prefs.phone,
           body: smsBody,
+          familyId: typeof request.data?.familyId === 'string' ? request.data.familyId : null,
+          userId: request.userId,
         })
         result.sms = smsResult.success
         if (!smsResult.success && smsResult.error) {

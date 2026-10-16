@@ -1,6 +1,6 @@
 import { sql } from "./db"
 import { sendPushToUser, isFirebaseConfigured } from "./services/push"
-import { sendSMS, isTwilioConfigured } from "./services/sms"
+import { sendSMSMetered, isTwilioConfigured } from "./services/sms"
 import { sendEmail, isResendConfigured } from "./services/email"
 
 // Lazy idempotent schema (prod SQL scripts are never run by hand).
@@ -73,10 +73,12 @@ async function record(eventId: string, userId: string, channel: string, status: 
   }
 }
 
-async function sendSmsWithRetry(to: string, body: string): Promise<{ ok: boolean; error?: string }> {
+// SOS is an urgent safety alert: never blocked by the monthly SMS quota, but
+// each text that goes out still counts toward it (failed attempts don't).
+async function sendSmsWithRetry(to: string, body: string, familyId: string): Promise<{ ok: boolean; error?: string }> {
   let last = "unknown error"
   for (let attempt = 0; attempt < 3; attempt++) {
-    const r = await sendSMS({ to, body })
+    const r = await sendSMSMetered({ to, body, familyId, urgent: true })
     if (r.success) return { ok: true }
     last = r.error || last
     // permanent errors (bad number etc.) won't improve on retry
@@ -165,7 +167,7 @@ export async function dispatchSos(input: SosInput): Promise<RecipientResult[]> {
       // Emergency: text unless the person explicitly turned SMS off.
       if (r.phone && isTwilioConfigured() && r.sms_enabled !== false) {
         tasks.push((async () => {
-          const s = await sendSmsWithRetry(r.phone, smsBody)
+          const s = await sendSmsWithRetry(r.phone, smsBody, familyId)
           out.sms = s.ok ? "sent" : "failed"
           if (!s.ok) {
             out.smsReason = s.error

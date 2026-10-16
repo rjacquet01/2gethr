@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
       VALUES (${alertId}, ${familyId}, ${user.id}, ${row.target_member_id}, ${row.target_user_id})
     `
     const senderName = `${user.firstName || ""}`.trim() || "A parent"
-    const result = await dispatchEmergencyAlert({ alertId, senderName, childUserId: row.target_user_id })
+    const result = await dispatchEmergencyAlert({ alertId, senderName, childUserId: row.target_user_id, familyId })
     const reached = result.sms === "sent" || result.push === "sent"
     return NextResponse.json({ success: true, data: { alertId, reached, ...result } })
   } catch (error) {

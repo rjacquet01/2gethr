@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       PRIORITY_ALIASES[requestedPriority] ??
       (ALLOWED_PRIORITIES.includes(requestedPriority) ? requestedPriority : 'NORMAL')
 
-    // Priority support: Basic and Premium families get their tickets bumped to HIGH.
+    // Priority support: Plus and Premium families get their tickets bumped to HIGH.
     let finalPriority = normalizedPriority
     if (familyId && (finalPriority === 'NORMAL' || finalPriority === 'LOW')) {
       try {

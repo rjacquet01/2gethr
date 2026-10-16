@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { sendPushToUser } from "@/lib/services/push"
 import { sendEmail, isResendConfigured } from "@/lib/services/email"
-import { sendSMS, isTwilioConfigured } from "@/lib/services/sms"
+import { sendSMSMetered, isTwilioConfigured } from "@/lib/services/sms"
 import { isQuietNow } from "@/lib/quiet-hours"
 import { tierHasFeature } from "@/lib/subscription-tiers"
 
@@ -213,7 +213,9 @@ export async function GET(request: NextRequest) {
         // configured, AND we have a phone number on file.
         if (userSettings.sms_enabled && hasSmsNotifications && participant.phone && isTwilioConfigured()) {
           try {
-            await sendSMS({
+            // Counts against the family's monthly SMS quota.
+            await sendSMSMetered({
+              familyId: event.family_id,
               to: participant.phone,
               body: `Togethr Reminder: "${event.title}" starts ${timeText}${event.location ? ` at ${event.location}` : ''}.`,
             })

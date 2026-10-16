@@ -1,7 +1,10 @@
 import { checkFamilySubscription } from "@/lib/auth"
-import { getTierDefinition } from "@/lib/subscription-tiers"
+import { getTierDefinition, SUBSCRIPTION_TIERS } from "@/lib/subscription-tiers"
 
-/** The one reminder time every plan gets. Choosing other times needs Basic or Premium. */
+/** The paid plan names users see, e.g. "Plus and Premium". */
+const PAID_PLANS = `${SUBSCRIPTION_TIERS.PREMIUM.name} and ${SUBSCRIPTION_TIERS.PREMIUM_PLUS.name}`
+
+/** The one reminder time every plan gets. Choosing other times needs Plus or Premium. */
 export const STANDARD_REMINDER_MINUTES = 15
 
 interface RecurrenceLike {
@@ -38,10 +41,10 @@ export async function planGateError(
   const sub = await checkFamilySubscription(familyId)
   const f = getTierDefinition(sub.tier).features
   if (needsAdvanced && !f.advancedRecurrence) {
-    return "Custom repeat schedules (every 2 weeks, chosen days) are available on Basic and Premium plans. Upgrade to use them."
+    return `Custom repeat schedules (every 2 weeks, chosen days) are available on ${PAID_PLANS} plans. Upgrade to use them.`
   }
   if (needsCustom && !f.customReminderTimes) {
-    return "Custom reminder times are available on Basic and Premium plans. The Free plan uses the standard 15-minute reminder."
+    return `Custom reminder times are available on ${PAID_PLANS} plans. The Free plan uses the standard 15-minute reminder.`
   }
   return null
 }

@@ -640,11 +640,11 @@ function NewEventForm() {
                     <SelectContent>
                       <SelectItem value="daily">Daily</SelectItem>
                       <SelectItem value="weekly">Weekly</SelectItem>
-                      <SelectItem value="biweekly" disabled={!canAdvancedRecurrence}>{canAdvancedRecurrence ? 'Every 2 Weeks' : 'Every 2 Weeks (Basic)'}</SelectItem>
+                      <SelectItem value="biweekly" disabled={!canAdvancedRecurrence}>{canAdvancedRecurrence ? 'Every 2 Weeks' : 'Every 2 Weeks (Plus)'}</SelectItem>
                       <SelectItem value="monthly">Monthly</SelectItem>
                       <SelectItem value="yearly">Yearly</SelectItem>
                       <SelectItem value="weekdays">Weekdays (Mon-Fri)</SelectItem>
-                      <SelectItem value="custom" disabled={!canAdvancedRecurrence}>{canAdvancedRecurrence ? 'Custom days of the week' : 'Custom days of the week (Basic)'}</SelectItem>
+                      <SelectItem value="custom" disabled={!canAdvancedRecurrence}>{canAdvancedRecurrence ? 'Custom days of the week' : 'Custom days of the week (Plus)'}</SelectItem>
                     </SelectContent>
                   </Select>
 
@@ -741,7 +741,7 @@ function NewEventForm() {
                       htmlFor={`reminder-${opt.value}`}
                       className="text-sm cursor-pointer"
                     >
-                      {!canCustomReminders && opt.value !== 15 ? `${opt.label} (Basic)` : opt.label}
+                      {!canCustomReminders && opt.value !== 15 ? `${opt.label} (Plus)` : opt.label}
                     </label>
                   </div>
                 ))}

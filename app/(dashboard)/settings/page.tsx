@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import useSWR from 'swr'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuth, clearTokens, authFetch } from '@/hooks/use-auth'
@@ -157,6 +158,15 @@ export default function SettingsPage() {
   // lib/subscription-tiers.ts) instead of hardcoding which tier names
   // happen to include SMS/phone alerts today.
   const hasSmsFeature = !!access?.featureFlags.smsNotifications
+  // Texts used this month vs the plan's allowance (only fetched on the Notifications tab).
+  const { data: smsUsage } = useSWR<{ used: number; quota: number; trial: boolean }>(
+    tab === 'notifications' && hasSmsFeature && primaryFamily?.id ? `/api/families/${primaryFamily.id}/sms-usage` : null,
+    async (url: string) => {
+      const res = await authFetch(url)
+      if (!res.ok) throw new Error('Failed to load SMS usage')
+      return (await res.json()).data
+    }
+  )
   const hasPhoneAlerts = !!access?.featureFlags.phoneAlerts
 
   const handleToggle = async (key: keyof typeof settings) => {
@@ -559,7 +569,7 @@ export default function SettingsPage() {
                   <Input id="phone" type="tel" value={profile.phone} onChange={(e) => setProfile((p) => ({ ...p, phone: e.target.value }))} placeholder="+1 (555) 123-4567" className="flex-1" />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {hasSmsFeature ? 'Used for SMS notifications and alerts.' : 'Add a number now; SMS alerts need the Basic or Premium plan.'}
+                  {hasSmsFeature ? 'Used for SMS notifications and alerts.' : 'Add a number now; SMS alerts need the Plus or Premium plan.'}
                 </p>
               </div>
             </div>
@@ -585,12 +595,18 @@ export default function SettingsPage() {
             <Row
               label="SMS"
               htmlFor="sms-notifications"
-              badge={!hasSmsFeature ? <Badge variant="outline" className="text-xs">Basic+</Badge> : undefined}
+              badge={!hasSmsFeature ? <Badge variant="outline" className="text-xs">Plus+</Badge> : undefined}
               hint={
                 !hasSmsFeature ? (
-                  'Upgrade to Basic or Premium for text alerts'
+                  'Upgrade to Plus or Premium for text alerts'
                 ) : !profile.phone ? (
                   <span className="text-amber-600">Add a phone number in Profile first</span>
+                ) : smsUsage ? (
+                  <span className={smsUsage.used >= smsUsage.quota ? 'text-amber-600' : undefined}>
+                    SMS this month: {smsUsage.used} of {smsUsage.quota}
+                    {smsUsage.trial ? ' (trial)' : ''}
+                    {smsUsage.used >= smsUsage.quota ? ' - texts resume next month; push and email still arrive' : ''}
+                  </span>
                 ) : (
                   'Text message alerts'
                 )
@@ -630,7 +646,7 @@ export default function SettingsPage() {
                         disabled={settingsLoading || locked}
                       />
                       <label htmlFor={`default-reminder-${opt.value}`} className="cursor-pointer text-sm">
-                        {opt.label}{locked ? ' (Basic)' : ''}
+                        {opt.label}{locked ? ' (Plus)' : ''}
                       </label>
                     </div>
                   )

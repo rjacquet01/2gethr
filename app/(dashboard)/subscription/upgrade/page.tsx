@@ -21,13 +21,11 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { SUBSCRIPTION_TIERS } from '@/lib/subscription-tiers'
+import { SUBSCRIPTION_TIERS, annualSavingsPercent } from '@/lib/subscription-tiers'
 
 // Sourced from lib/subscription-tiers.ts rather than a hand-typed copy, so
 // this checkout page can't go out of sync with what /pricing and
-// /subscription advertise (this page's numbers happened to already match
-// when this change was made, but the same duplication is what let the
-// public pricing page drift to $2.99/$4.99 while this one said $3.99/$7.99).
+// /subscription advertise.
 const tiers = {
   PREMIUM: {
     name: SUBSCRIPTION_TIERS.PREMIUM.name,
@@ -73,7 +71,7 @@ function UpgradeForm() {
   const getTierKey = (param: string | undefined | null): 'PREMIUM' | 'PREMIUM_PLUS' => {
     if (!param) return 'PREMIUM'
     if (param === 'PREMIUM_PLUS' || param === 'PREMIUM PLUS') return 'PREMIUM_PLUS'
-    // PREMIUM or BASIC both map to the Basic plan (PREMIUM key)
+    // PREMIUM (or the old BASIC / new PLUS names) maps to the Plus plan (PREMIUM key)
     return 'PREMIUM'
   }
 
@@ -210,7 +208,7 @@ function UpgradeForm() {
                       </div>
                       <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{t.description}</p>
                       <p className="mt-2 text-lg font-bold">
-                        ${billingCycle === 'annual' ? (t.price.annual / 12).toFixed(2) : t.price.monthly}
+                        ${billingCycle === 'annual' ? (t.price.annual / 12).toFixed(2) : t.price.monthly.toFixed(2)}
                         <span className="text-xs font-normal text-muted-foreground">/mo</span>
                       </p>
                     </button>
@@ -226,7 +224,7 @@ function UpgradeForm() {
                       <span className="font-semibold">Monthly</span>
                       {billingCycle === 'monthly' && <Check className="h-4 w-4 text-primary" />}
                     </div>
-                    <p className="mt-1 text-xl font-bold">${tier.price.monthly}</p>
+                    <p className="mt-1 text-xl font-bold">${tier.price.monthly.toFixed(2)}</p>
                     <p className="text-xs text-muted-foreground">Billed monthly</p>
                   </button>
                   <button type="button" onClick={() => setBillingCycle('annual')} className={choice(billingCycle === 'annual')}>
@@ -235,11 +233,11 @@ function UpgradeForm() {
                       {billingCycle === 'annual' ? (
                         <Check className="h-4 w-4 text-primary" />
                       ) : (
-                        <Badge className="bg-green-500 text-[10px]">Save up to 33%</Badge>
+                        <Badge className="bg-green-500 text-[10px]">Save {annualSavingsPercent(SUBSCRIPTION_TIERS[selectedTier])}%</Badge>
                       )}
                     </div>
-                    <p className="mt-1 text-xl font-bold">${tier.price.annual}</p>
-                    <p className="text-xs text-muted-foreground">${(tier.price.annual / 12).toFixed(2)}/mo billed yearly</p>
+                    <p className="mt-1 text-xl font-bold">${tier.price.annual.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">${(tier.price.annual / 12).toFixed(2)}/mo billed yearly · about 2 months free</p>
                   </button>
                 </div>
               </div>

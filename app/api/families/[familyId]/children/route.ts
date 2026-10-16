@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, hashPassword, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
+import { getTierDefinition } from "@/lib/subscription-tiers"
 import { ensureAgeColumns } from "@/lib/age-schema"
 import { ageFromDob, dobError, childAgeInfo, GUEST_AGE_INFO } from "@/lib/age"
 
@@ -163,12 +164,12 @@ export async function POST(
       WHERE family_id = ${familyId} AND is_active = true AND role = 'CHILD'
     `
 
-    // maxChildren: FREE=2, PREMIUM (Basic)=5, PREMIUM_PLUS (Premium)=-1 (unlimited)
+    // maxChildren: FREE=2, PREMIUM (Plus)=5, PREMIUM_PLUS (Premium)=-1 (unlimited)
     const maxChildren = subscription.features.maxChildren
     const currentChildren = Number(childCount[0].count)
     
     if (maxChildren !== -1 && currentChildren >= maxChildren) {
-      const tierName = subscription.tier === 'FREE' ? 'Free' : subscription.tier === 'PREMIUM' ? 'Basic' : 'Premium'
+      const tierName = getTierDefinition(subscription.tier).name // Free / Plus / Premium
       return NextResponse.json(
         { 
           success: false, 
@@ -179,7 +180,7 @@ export async function POST(
     }
 
     // A brand-new child account also takes a seat, so it counts against the
-    // plan's family-member cap (Free 4, Basic 6, Premium 12). Assigning an
+    // plan's family-member cap (Free 4, Plus 6, Premium 12). Assigning an
     // existing member as a child does not add a seat.
     if (!validatedData.existingMemberId) {
       const maxMembers = subscription.features.maxFamilyMembers
@@ -188,7 +189,7 @@ export async function POST(
         WHERE family_id = ${familyId} AND is_active = true
       `
       if (maxMembers !== -1 && Number(memberCount[0].count) >= maxMembers) {
-        const tierName = subscription.tier === 'FREE' ? 'Free' : subscription.tier === 'PREMIUM' ? 'Basic' : 'Premium'
+        const tierName = getTierDefinition(subscription.tier).name // Free / Plus / Premium
         return NextResponse.json(
           {
             success: false,

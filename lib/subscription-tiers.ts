@@ -1,11 +1,10 @@
 // Single source of truth for subscription tier pricing, limits and feature
-// flags. Previously this same data was hand-duplicated in four places
-// (the public /pricing page, the in-app /subscription page's hook, the
-// /api/subscriptions route, and lib/services/subscription.ts) and they had
-// drifted apart - most notably Basic/Premium were repriced to $3.99/$7.99
-// in the in-app hook only, so the marketing page and the backend still
-// quoted the old $2.99/$4.99. Importing from here instead of re-typing the
-// numbers is what keeps that from happening again.
+// flags. Previously this same data was hand-duplicated in several places and
+// the copies drifted apart (different screens quoted different prices).
+// Import from here instead of re-typing names or numbers.
+//
+// User-facing names: FREE = "Free", PREMIUM = "Plus", PREMIUM_PLUS = "Premium".
+// The internal keys (and every value stored in the database) are unchanged.
 //
 // This file has no server-only imports (no db, no Node APIs) so it is safe
 // to import from both server code (API routes, services) and client
@@ -35,6 +34,17 @@ export interface TierLimits {
   maxSavedPlaces: number
   maxCalendars: number
   historyDays: number
+  /** Text messages per family per calendar month (urgent safety alerts are exempt). */
+  smsMonthlyQuota: number
+}
+
+/** Text messages per month while a family is on its free trial. */
+export const TRIAL_SMS_QUOTA = 10
+
+/** Yearly price as a whole-percent saving over 12 monthly payments (e.g. 17). */
+export function annualSavingsPercent(def: Pick<TierDefinition, "priceMonthlyCents" | "priceAnnualCents">): number {
+  if (def.priceMonthlyCents <= 0) return 0
+  return Math.round((1 - def.priceAnnualCents / (def.priceMonthlyCents * 12)) * 100)
 }
 
 export interface TierDefinition {
@@ -63,6 +73,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       maxSavedPlaces: 2,
       maxCalendars: 2,
       historyDays: 30,
+      smsMonthlyQuota: 0,
     },
     features: {
       locationSharing: true,
@@ -85,16 +96,17 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
   },
   PREMIUM: {
     key: "PREMIUM",
-    name: "Basic",
+    name: "Plus",
     description: "Enhanced family features",
-    priceMonthlyCents: 299, // $2.99
-    priceAnnualCents: 2499, // $24.99 (~30% off)
+    priceMonthlyCents: 599, // $5.99
+    priceAnnualCents: 5990, // $59.90 (17% off, about 2 months free)
     limits: {
       maxFamilyMembers: 6,
       maxChildren: 5,
       maxSavedPlaces: 15,
       maxCalendars: 5,
       historyDays: 90,
+      smsMonthlyQuota: 25,
     },
     features: {
       locationSharing: true,
@@ -112,7 +124,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       "Custom reminder times",
       "Complex recurring events",
       "90 days history",
-      "SMS notifications",
+      "25 text alerts/month",
       "Priority support",
     ],
   },
@@ -120,14 +132,15 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
     key: "PREMIUM_PLUS",
     name: "Premium",
     description: "Full family safety suite",
-    priceMonthlyCents: 499, // $4.99
-    priceAnnualCents: 3999, // $39.99 (~33% off)
+    priceMonthlyCents: 999, // $9.99
+    priceAnnualCents: 9990, // $99.90 (17% off, about 2 months free)
     limits: {
       maxFamilyMembers: 12,
       maxChildren: -1, // Unlimited
       maxSavedPlaces: 50,
       maxCalendars: 20,
       historyDays: 365,
+      smsMonthlyQuota: 100,
     },
     features: {
       locationSharing: true,
@@ -145,6 +158,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       "Geofence arrival & departure alerts",
       "1 year history",
       "Custom reminder times",
+      "100 text alerts/month",
       "Priority support",
     ],
   },
@@ -155,12 +169,12 @@ export function getTierDefinition(tier: string | null | undefined): TierDefiniti
   return SUBSCRIPTION_TIERS[key] || SUBSCRIPTION_TIERS.FREE
 }
 
-/** Cents -> display dollars, e.g. 399 -> "3.99". */
+/** Cents -> display dollars, e.g. 599 -> "5.99". */
 export function centsToDisplay(cents: number): string {
   return (cents / 100).toFixed(2)
 }
 
-/** Ordered list of tiers, Free -> Basic -> Premium, for rendering pricing grids. */
+/** Ordered list of tiers, Free -> Plus -> Premium, for rendering pricing grids. */
 export function listTierDefinitions(): TierDefinition[] {
   return SUBSCRIPTION_TIER_KEYS.map((key) => SUBSCRIPTION_TIERS[key])
 }
