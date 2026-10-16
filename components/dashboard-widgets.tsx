@@ -59,6 +59,32 @@ function useGeofenceActivity(familyId: string | undefined) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Who has the app open right now (green dot)                         */
+/* ------------------------------------------------------------------ */
+
+interface PresenceRow {
+  userId: string
+  online: boolean
+  lastActiveAt: string | null
+}
+
+const presenceFetcher = async (url: string): Promise<PresenceRow[]> => {
+  const res = await authFetch(url)
+  if (!res.ok) throw new Error('Failed to fetch')
+  const json = await res.json()
+  return json.data
+}
+
+// Refreshes every minute while the tab is visible (SWR pauses when hidden).
+function usePresence(familyId: string | undefined) {
+  return useSWR<PresenceRow[]>(
+    familyId ? `/api/families/${familyId}/presence` : null,
+    presenceFetcher,
+    { refreshInterval: 60_000, revalidateOnFocus: true }
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /* Family status strip                                                */
 /* ------------------------------------------------------------------ */
 
@@ -73,11 +99,15 @@ interface StripMember {
 export function FamilyStatusStrip({
   familyId,
   members,
+  currentUserId,
 }: {
   familyId: string
   members: StripMember[]
+  currentUserId?: string | null
 }) {
   const { data, isLoading } = useGeofenceActivity(familyId)
+  const { data: presence } = usePresence(familyId)
+  const presenceByUser = new Map((presence ?? []).map((p) => [p.userId, p]))
   const events = data?.events ?? []
   const scopeSelf = data?.scope === 'self'
 
@@ -109,19 +139,21 @@ export function FamilyStatusStrip({
                 .toUpperCase()
                 .slice(0, 2) || '?'
             const latest = latestByUser.get(m.userId)
-            let status = 'No activity in 24h'
-            let dot = 'bg-muted-foreground/40'
+            // The dot means "has the app open right now" (active in the last
+            // 5 minutes). You are always online on your own screen.
+            const p = presenceByUser.get(m.userId)
+            const online = (!!currentUserId && m.userId === currentUserId) || !!p?.online
+            const dot = online ? 'bg-green-500' : 'bg-muted-foreground/40'
+            // The text says where they are (place arrivals/departures), and
+            // falls back to when they were last active.
+            let status = online ? 'Active now' : p?.lastActiveAt
+              ? `Active ${formatDistanceToNow(new Date(p.lastActiveAt), { addSuffix: true })}`
+              : 'No activity in 24h'
             if (latest) {
               const when = formatDistanceToNow(new Date(latest.at), { addSuffix: true })
-              if (latest.type === 'ARRIVAL') {
-                status = `At ${latest.placeName}`
-                dot = 'bg-green-500'
-              } else {
-                status = `Left ${latest.placeName} ${when}`
-                dot = 'bg-amber-500'
-              }
-            } else if (scopeSelf && isLoading === false) {
-              // Kids only receive their own events; other members stay quiet.
+              status = latest.type === 'ARRIVAL' ? `At ${latest.placeName}` : `Left ${latest.placeName} ${when}`
+            } else if (scopeSelf && isLoading === false && !p) {
+              // Kids only receive their own place events; other members stay quiet.
               status = ''
             }
             return (
@@ -145,6 +177,9 @@ export function FamilyStatusStrip({
                   </Avatar>
                   <span
                     className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background ${dot}`}
+                    title={online ? 'Online' : 'Offline'}
+                    aria-label={online ? 'Online' : 'Offline'}
+                    role="img"
                   />
                 </div>
                 <div className="min-w-0">

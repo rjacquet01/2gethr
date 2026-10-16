@@ -36,7 +36,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 import { useState, useEffect, useCallback } from 'react'
 import { format, isToday, isTomorrow, parseISO, isPast } from 'date-fns'
-import { authFetch } from '@/hooks/use-auth'
+import { authFetch, useAuth } from '@/hooks/use-auth'
 import { useMyRole } from '@/hooks/use-my-role'
 import { Bell } from 'lucide-react'
 import { ComingUp, DashboardMiniMap, FloatingEmergencyButton } from '@/components/dashboard-extras'
@@ -54,6 +54,7 @@ export default function DashboardPage() {
   const primaryFamily = families[0]
   // Guests get calendar and tasks only: no family map, activity or SOS.
   const { isGuest } = useMyRole()
+  const { user } = useAuth()
   // Only fetch events when we have a valid family ID
   // Start from today and get next 7 days
   const today = new Date()
@@ -324,7 +325,7 @@ export default function DashboardPage() {
       />
 
       {/* Who is where right now */}
-      {!isGuest && <FamilyStatusStrip familyId={primaryFamily.id} members={familyMembers} />}
+      {!isGuest && <FamilyStatusStrip familyId={primaryFamily.id} members={familyMembers} currentUserId={user?.id} />}
 
       {/* Two-column layout: main content left, family activity right (stacks on phones) */}
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 lg:items-start">
