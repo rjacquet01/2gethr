@@ -77,7 +77,7 @@ const faqs = [
     questions: [
       {
         question: 'How do I enable location sharing?',
-        answer: 'Go to the Location page and click "Enable Location Sharing". You\'ll need to grant location permissions in your browser or mobile app. Basic live location is included on every plan (with 2 saved places) and can be disabled at any time.'
+        answer: `Go to the Location page and click "Enable Location Sharing". You'll need to grant location permissions in your browser or mobile app. Live location is included on every plan and can be turned off at any time. Free includes 2 saved places with no arrival/departure alerts; ${PLUS.name} includes ${PLUS.limits.maxSavedPlaces} saved places; ${PREMIUM.name} includes ${PREMIUM.limits.maxSavedPlaces} saved places plus arrival and departure alerts.`
       },
       {
         question: 'Who can see my location?',
@@ -94,7 +94,7 @@ const faqs = [
     questions: [
       {
         question: 'What features are included in each plan?',
-        answer: `Free: shared family calendar and tasks, live family location with 2 saved places, up to 4 members, 30 days of history. ${PLUS.name} ($${centsToDisplay(PLUS.priceMonthlyCents)}/month or $${centsToDisplay(PLUS.priceAnnualCents)}/year): up to 6 members, 15 saved places, ${PLUS.limits.smsMonthlyQuota} text alerts a month, custom reminder times, advanced recurring events, calendar export, 90 days of history. ${PREMIUM.name} ($${centsToDisplay(PREMIUM.priceMonthlyCents)}/month or $${centsToDisplay(PREMIUM.priceAnnualCents)}/year): up to 12 members, 50 saved places, geofence arrival and departure alerts, ${PREMIUM.limits.smsMonthlyQuota} text alerts a month, and 1 year of history. Annual billing saves ${annualSavingsPercent(PLUS)}% (about 2 months free). New members get a 14-day free Premium trial.`
+        answer: `Free: shared family calendar and tasks, live family location with 2 saved places (no arrival/departure alerts), up to 4 members, 30 days of history. ${PLUS.name} ($${centsToDisplay(PLUS.priceMonthlyCents)}/month or $${centsToDisplay(PLUS.priceAnnualCents)}/year): up to 6 members, 15 saved places, ${PLUS.limits.smsMonthlyQuota} text alerts a month, custom reminder times, advanced recurring events, calendar export, 90 days of history. ${PREMIUM.name} ($${centsToDisplay(PREMIUM.priceMonthlyCents)}/month or $${centsToDisplay(PREMIUM.priceAnnualCents)}/year): up to 12 members, 50 saved places, geofence arrival and departure alerts, ${PREMIUM.limits.smsMonthlyQuota} text alerts a month, and 1 year of history. Annual billing saves ${annualSavingsPercent(PLUS)}% (about 2 months free). New members get a 14-day free Premium trial.`
       },
       {
         question: 'How do I upgrade my subscription?',

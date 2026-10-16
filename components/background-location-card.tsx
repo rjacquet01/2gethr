@@ -41,7 +41,10 @@ export function BackgroundLocationCard({ memberId, familyId, intervalSec }: Prop
   useEffect(() => {
     if (!isAndroidApp) return
     load()
-    const t = setInterval(load, 30000)
+    // Only refresh the status while the screen is visible.
+    const t = setInterval(() => {
+      if (!document.hidden) load()
+    }, 30000)
     return () => clearInterval(t)
   }, [isAndroidApp, load])
 

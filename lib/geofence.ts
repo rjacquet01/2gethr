@@ -50,13 +50,23 @@ export function evaluateGeofence(opts: {
   return confidentDistance > radius + hysteresisBuffer(radius) ? "DEPARTURE" : null
 }
 
+/** Movement below this between two pings counts as standing still (GPS noise). */
+export const STATIONARY_METERS = 25
+
 /**
  * How often the device should report while near a geofence. Returns seconds,
  * or null when the user's own setting is fine. `gapMeters` is the distance
  * from the person to the nearest geofence edge (negative/zero = inside).
+ * `movedMeters` is how far they moved since the previous ping (null = unknown).
+ *
+ * Fast reporting only helps catch a crossing while someone is moving. A phone
+ * sitting at home is always "near" the Home boundary, and used to be told to
+ * report every 15s around the clock; when it hasn't moved, the user's own
+ * interval is used instead, and fast reporting resumes as soon as it moves.
  */
-export function suggestedPingIntervalSec(gapMeters: number | null): number | null {
+export function suggestedPingIntervalSec(gapMeters: number | null, movedMeters: number | null = null): number | null {
   if (gapMeters === null) return null
+  if (movedMeters !== null && movedMeters < STATIONARY_METERS) return null
   const gap = Math.max(0, gapMeters)
   if (gap <= 300) return 15
   if (gap <= 1000) return 30

@@ -384,7 +384,12 @@ export async function POST(request: NextRequest) {
         validatedData.accuracy,
         prevPing
       )
-      suggestedIntervalSec = suggestedPingIntervalSec(gap)
+      // Only report faster near a boundary while actually moving; a phone
+      // standing still (e.g. at home) keeps its normal interval.
+      const moved = prevPing
+        ? distanceMeters(prevPing.latitude, prevPing.longitude, validatedData.latitude, validatedData.longitude)
+        : null
+      suggestedIntervalSec = suggestedPingIntervalSec(gap, moved)
     }
 
     // Keep paid-plan history within the plan's window. Runs on ~2% of pings

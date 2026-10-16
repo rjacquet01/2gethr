@@ -52,6 +52,8 @@ function useCalendarTimer(
 
     const tick = async () => {
       if (isSyncingRef.current) return // don't overlap a slow sync with the next tick
+      // A hidden tab doesn't need to sync: the server cron covers background sync.
+      if (document.hidden) return
       isSyncingRef.current = true
       try {
         await syncNow(provider)
@@ -79,6 +81,8 @@ function useTaskTimer(connection: CalendarSyncConnection | undefined, endpoint: 
 
     const tick = async () => {
       if (isSyncingRef.current) return
+      // A hidden tab doesn't need to sync: the server cron covers background sync.
+      if (document.hidden) return
       isSyncingRef.current = true
       try {
         await authFetch(endpoint, { method: 'POST' })

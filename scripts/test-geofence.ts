@@ -50,6 +50,12 @@ assert.strictEqual(suggestedPingIntervalSec(-50), 15)
 assert.strictEqual(suggestedPingIntervalSec(500), 30)
 assert.strictEqual(suggestedPingIntervalSec(2000), 60)
 assert.strictEqual(suggestedPingIntervalSec(10000), null)
+// Standing still near/inside a geofence: no speed-up (the user's interval applies).
+assert.strictEqual(suggestedPingIntervalSec(-50, 5), null)
+assert.strictEqual(suggestedPingIntervalSec(100, 24), null)
+// Moving near a boundary: report fast again.
+assert.strictEqual(suggestedPingIntervalSec(100, 80), 15)
+assert.strictEqual(suggestedPingIntervalSec(500, 300), 30)
 
 // 8. Detection latency: walking 1.4 m/s toward a 100m fence, pings every 15s vs 300s.
 function latency(intervalSec: number) {
