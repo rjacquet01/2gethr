@@ -378,6 +378,35 @@ export default function FamilyPage() {
     }
   }
 
+  // Leave / remove confirmation (used by the full page and the guest card).
+  const leaveDialog = (
+    <AlertDialog open={!!memberToRemove} onOpenChange={(open) => { if (!open && !isRemovingMember) setMemberToRemove(null) }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {memberToRemove?.isSelf ? 'Leave this family?' : `Remove ${memberToRemove?.name}?`}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {memberToRemove?.isSelf
+              ? 'You will lose access to this family\'s calendar, tasks and locations. You can rejoin later with a new invite code.'
+              : 'They will immediately lose access to this family\'s calendar, tasks and locations. A new invite code will be generated so they can\'t rejoin with the old one.'}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isRemovingMember}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={isRemovingMember}
+            onClick={(e) => { e.preventDefault(); handleConfirmRemove() }}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {isRemovingMember ? <Spinner className="w-4 h-4 mr-2" /> : null}
+            {memberToRemove?.isSelf ? 'Leave Family' : 'Remove Member'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+
   if (familiesLoading || familyLoading) {
     return (
       <div className="space-y-6">
@@ -398,6 +427,73 @@ export default function FamilyPage() {
         <Button asChild className="mt-6">
           <Link href="/onboarding">Get Started</Link>
         </Button>
+      </div>
+    )
+  }
+
+  // A guest doesn't see the family's structure: no members, children, invite
+  // codes, settings, join requests or activity (the server sends none of it
+  // either). Just the family name, their own membership and a way out.
+  if (isGuest) {
+    const me = family.members?.find((m) => m.userId === user?.id)
+    return (
+      <div className="mx-auto max-w-lg space-y-4 pb-20 lg:pb-0">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl">{family.name}</CardTitle>
+            <CardDescription>You&apos;re a guest in this family</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-3 rounded-lg border p-3">
+              <MemberAvatar
+                name={me?.displayName || user?.firstName || 'You'}
+                avatarUrl={me?.avatarUrl}
+                color={me?.color}
+                emoji={me?.emoji}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{me?.displayName || 'You'}</p>
+                <Badge variant="outline" className="mt-1">
+                  <UserRound className="mr-1 h-3 w-3" />
+                  Guest
+                </Badge>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              You can see the calendar events and tasks you&apos;re part of, plus your own archive.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/calendar">Calendar</Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/tasks">Tasks</Link>
+              </Button>
+              {me && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={() => setMemberToRemove({ id: me.id, name: me.displayName, isSelf: true })}
+                >
+                  <LogOut className="mr-1 h-4 w-4" />
+                  Leave this family
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        {canStartOwn && (
+          <Card>
+            <CardContent className="flex flex-col items-start gap-2 py-4">
+              <p className="text-sm text-muted-foreground">
+                Want your own family? Start one without a new account. You&apos;ll stay in this one too.
+              </p>
+              <StartOwnFamilyButton />
+            </CardContent>
+          </Card>
+        )}
+        {leaveDialog}
       </div>
     )
   }
@@ -510,11 +606,6 @@ export default function FamilyPage() {
                   : 'Tasks and events will appear here when assigned to family members'
               }
             />
-            {isGuest && canStartOwn && (
-              <p className="mt-2 text-center text-sm text-muted-foreground">
-                Want your own family? Start one without a new account. You&apos;ll stay in this one too.
-              </p>
-            )}
           </CardContent>
         </Card>
       ) : (
@@ -758,31 +849,7 @@ export default function FamilyPage() {
       )}
 
 
-      <AlertDialog open={!!memberToRemove} onOpenChange={(open) => { if (!open && !isRemovingMember) setMemberToRemove(null) }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {memberToRemove?.isSelf ? 'Leave this family?' : `Remove ${memberToRemove?.name}?`}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {memberToRemove?.isSelf
-                ? 'You will lose access to this family\'s calendar, tasks and locations. You can rejoin later with a new invite code.'
-                : 'They will immediately lose access to this family\'s calendar, tasks and locations. A new invite code will be generated so they can\'t rejoin with the old one.'}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isRemovingMember}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isRemovingMember}
-              onClick={(e) => { e.preventDefault(); handleConfirmRemove() }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isRemovingMember ? <Spinner className="w-4 h-4 mr-2" /> : null}
-              {memberToRemove?.isSelf ? 'Leave Family' : 'Remove Member'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {leaveDialog}
 
       {/* Members, children and their settings */}
       <button

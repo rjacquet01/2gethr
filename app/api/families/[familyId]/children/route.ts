@@ -52,6 +52,11 @@ export async function GET(
       )
     }
 
+    // A guest doesn't get the family's children at all (not even names).
+    if (membership[0].role === "GUEST") {
+      return NextResponse.json({ success: true, data: [] })
+    }
+
     // Get children
     await ensureAgeColumns()
     const children = await sql`

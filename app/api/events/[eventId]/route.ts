@@ -272,6 +272,25 @@ export async function PATCH(
       WHERE id = ${eventId}
     `
 
+    // A guest editing their own event can keep who is already on it and add
+    // themselves, but can't add anyone else from the family.
+    if (event.role === "GUEST" && (validatedData.participantUserIds || validatedData.participantChildProfileIds)) {
+      const current = await sql`
+        SELECT user_id, child_profile_id FROM event_participants WHERE event_id = ${eventId}
+      `
+      const okUsers = new Set([user.id, ...current.map((p) => p.user_id as string).filter(Boolean)])
+      const okChildren = new Set(current.map((p) => p.child_profile_id as string).filter(Boolean))
+      const addsOthers =
+        (validatedData.participantUserIds || []).some((id) => !okUsers.has(id)) ||
+        (validatedData.participantChildProfileIds || []).some((id) => !okChildren.has(id))
+      if (addsOthers) {
+        return NextResponse.json(
+          { success: false, error: "Guests can only add themselves to an event" },
+          { status: 403 }
+        )
+      }
+    }
+
     // Replace the invited members (only real, active members of this family),
     // then tell whoever was newly added.
     if (validatedData.participantUserIds || validatedData.participantChildProfileIds) {

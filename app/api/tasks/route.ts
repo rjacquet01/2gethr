@@ -187,6 +187,10 @@ export async function POST(request: NextRequest) {
     await ensureAssignmentColumns()
 
     const creatorRole = membership[0].role as string
+    // A guest doesn't pick other family members: their tasks are for themselves.
+    if (creatorRole === 'GUEST' && ((assignedToUserId && assignedToUserId !== user.id) || assignedToChildId)) {
+      return NextResponse.json({ error: 'Guests can only assign tasks to themselves' }, { status: 403 })
+    }
     const assignerName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Someone'
 
     // Who is really being assigned? A child profile may have a login.

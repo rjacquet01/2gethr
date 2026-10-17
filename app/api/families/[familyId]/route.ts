@@ -79,6 +79,8 @@ export async function GET(
       JOIN users u ON fm.user_id = u.id
       LEFT JOIN child_profiles cp ON fm.id = cp.family_member_id
       WHERE fm.family_id = ${familyId} AND fm.is_active = true
+        -- A guest sees only their own membership, never the family's structure.
+        AND (${viewerIsGuest} = false OR fm.user_id = ${user.id})
       ORDER BY fm.role = 'PARENT' DESC, fm.joined_at ASC
     `
 
@@ -86,7 +88,7 @@ export async function GET(
     // promoted to Guardian/Adult at 18 keeps their child_profiles row for
     // history but is no longer listed as a child.
     await ensureAgeColumns()
-    const children = await sql`
+    const children = viewerIsGuest ? [] : await sql`
       SELECT
         cp.id, cp.display_name, cp.age, cp.school, cp.grade,
         cp.avatar_url, cp.created_at,
@@ -102,10 +104,12 @@ export async function GET(
       family: {
         id: family.id,
         name: family.name,
-        ownerId: family.owner_id,
+        // A guest gets the family name and their own membership only.
+        ownerId: viewerIsGuest ? null : family.owner_id,
         isOwner,
         inviteCode: isOwner ? family.invite_code : null,
-        inviteExpiresAt: family.invite_expires_at,
+        inviteExpiresAt: viewerIsGuest ? null : family.invite_expires_at,
+        viewerIsGuest,
         subscription: {
           tier: family.subscription_tier || "FREE",
           status: family.subscription_status || "ACTIVE",

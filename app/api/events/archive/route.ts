@@ -41,7 +41,9 @@ export async function POST(request: Request) {
     const role = memberCheck[0].role
     const ownerRow = await sql`SELECT 1 FROM families WHERE id = ${familyId} AND owner_id = ${payload.userId}`
     const isAdult = isAdultMemberRole(role)
-    if (!isAdult && ownerRow.length === 0) {
+    // A guest may archive only their own past events (the ones they created).
+    const guestUserId: string | null = role === "GUEST" ? payload.userId : null
+    if (!isAdult && ownerRow.length === 0 && !guestUserId) {
       return NextResponse.json({ error: "Only parents, guardians and adult members can archive events" }, { status: 403 })
     }
     
@@ -56,6 +58,7 @@ export async function POST(request: Request) {
         AND e.end_time < NOW()
         AND e.status != 'ARCHIVED'
         AND e.status != 'CANCELLED'
+        AND (${guestUserId}::text IS NULL OR e.created_by_id = ${guestUserId})
       `
       
       return NextResponse.json({

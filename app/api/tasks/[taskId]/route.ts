@@ -211,6 +211,21 @@ export async function PATCH(
     if (membership[0].role === 'GUEST' && !taskInvolvesUser(task, user.id)) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     }
+    // A guest works on their own tasks (created by or assigned to them). They
+    // may edit details only on tasks they created, and may assign only to
+    // themselves (or nobody): they don't pick other family members.
+    if (membership[0].role === 'GUEST') {
+      const isGeneralEdit = action === 'update' || updates.title || updates.description || updates.dueDate ||
+        updates.priority || updates.category || updates.assignedToUserId !== undefined ||
+        updates.assignedToChildId !== undefined || updates.requiresApproval !== undefined ||
+        updates.isRecurring !== undefined || updates.notifyChannels !== undefined
+      if (isGeneralEdit && task.created_by_id !== user.id) {
+        return NextResponse.json({ error: 'Only the person who created this task can edit it' }, { status: 403 })
+      }
+      if ((updates.assignedToUserId && updates.assignedToUserId !== user.id) || updates.assignedToChildId) {
+        return NextResponse.json({ error: 'Guests can only assign tasks to themselves' }, { status: 403 })
+      }
+    }
 
     // Assignment approval / acceptance
     if (action === 'accept_assignment' || action === 'decline_assignment') {

@@ -5,6 +5,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useFamilies, useFamily } from '@/hooks/use-family'
 import { useAuth, authFetch } from '@/hooks/use-auth'
+import { useMyRole } from '@/hooks/use-my-role'
+import { GuestAreaNotice } from '@/components/guest-area-notice'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -44,7 +46,9 @@ export default function FamilySettingsPage() {
   const { families, selectedFamilyId, selectFamily, isLoading: familiesLoading } = useFamilies()
   
   const { family, isLoading: familyLoading, mutate } = useFamily(selectedFamilyId || undefined)
-  
+  // Family settings, invite codes and members aren't for guests (per family).
+  const { isGuest } = useMyRole()
+
   const [saving, setSaving] = useState(false)
   const [regeneratingCode, setRegeneratingCode] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -201,6 +205,8 @@ export default function FamilySettingsPage() {
       </div>
     )
   }
+
+  if (isGuest) return <GuestAreaNotice />
 
   if (families.length === 0) {
     return (

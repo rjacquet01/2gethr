@@ -500,6 +500,15 @@ export async function POST(request: NextRequest) {
       participantUserIds = validMembers.map((m) => m.user_id as string)
     }
 
+    // A guest doesn't know (or get to pick) the rest of the family: their own
+    // events can only include themselves.
+    if (calendar.role === "GUEST" && (participantUserIds.some((id) => id !== user.id) || participantChildIds.length > 0)) {
+      return NextResponse.json(
+        { success: false, error: "Guests can only add themselves to an event" },
+        { status: 403 }
+      )
+    }
+
     // Kids may always invite others (adults then approve, kids accept); a kid
     // without the create-events permission still can't add solo events.
     const childInvitesOthers = calendar.role === "CHILD" && (participantUserIds.some((id) => id !== user.id) || participantChildIds.length > 0)

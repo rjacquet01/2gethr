@@ -59,11 +59,13 @@ export async function GET(request: NextRequest) {
           FROM family_members fm
           LEFT JOIN users u ON fm.user_id = u.id
           WHERE fm.family_id = ${f.id} AND fm.is_active = true
+            -- A guest sees only their own membership, never the family's structure.
+            AND (${f.user_role} <> 'GUEST' OR fm.user_id = ${user.id})
           ORDER BY fm.joined_at ASC
         `
         
-        // Also fetch children for each family
-        const children = await sql`
+        // Also fetch children for each family (none for a guest)
+        const children = f.user_role === 'GUEST' ? [] : await sql`
           SELECT 
             cp.id, cp.display_name, cp.age, cp.school, cp.grade,
             cp.avatar_url, cp.created_at, fm.user_id AS member_user_id
@@ -75,14 +77,16 @@ export async function GET(request: NextRequest) {
         return {
           id: f.id,
           name: f.name,
-          ownerId: f.owner_id,
+          // A guest gets the family name and their own membership only: no owner,
+          // member count, invite details, members or children.
+          ownerId: f.user_role === 'GUEST' ? null : f.owner_id,
           isOwner: f.owner_id === user.id,
           inviteCode: f.owner_id === user.id ? f.invite_code : null,
-          inviteExpiresAt: f.invite_expires_at,
+          inviteExpiresAt: f.user_role === 'GUEST' ? null : f.invite_expires_at,
           userRole: f.user_role,
           currentUserRole: f.user_role,
           membershipId: f.membership_id,
-          memberCount: Number(f.member_count),
+          memberCount: f.user_role === 'GUEST' ? null : Number(f.member_count),
           members: members.map((m) => ({
             id: m.id,
             userId: m.user_id,
