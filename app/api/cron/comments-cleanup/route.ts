@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { ensureSocialTables } from "@/lib/social"
+import { HISTORY_CAP_DAYS, HISTORY_PURGE_ENABLED, heldUserIds, heldFamilyIds } from "@/lib/retention"
 
 // Daily (see vercel.json). Retention for event comments and the family board:
 //  - anything soft-deleted more than 30 days ago is removed for good
-//  - anything older than 365 days is removed
+//  - anything older than 90 days (HISTORY_CAP_DAYS, the stored-history cap
+//    for every plan) is removed. Until HISTORY_PURGE_ENABLED is switched on
+//    the old 365-day limit still applies and the 90-day count is reported.
 //  - push-coalescing rows older than a day are dropped
-// A board post that goes also takes its comments with it.
+// Posts and comments by someone under a legal case or hold, or in a held
+// family, are never removed. A board post that goes takes its comments with it.
 function verifyCronRequest(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) return true
@@ -19,23 +23,43 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
     await ensureSocialTables()
+    const heldUsers = await heldUserIds()
+    const heldFamilies = await heldFamilyIds()
+    const ageDays = HISTORY_PURGE_ENABLED ? HISTORY_CAP_DAYS : 365
+
+    // What the 90-day rule removes (reported while it is still switched off).
+    const wouldDelete = HISTORY_PURGE_ENABLED ? null : (await sql`
+      SELECT
+        (SELECT count(*)::int FROM event_comments WHERE created_at < NOW() - make_interval(days => ${HISTORY_CAP_DAYS}::int)
+           AND NOT (user_id = ANY(${heldUsers}::text[])) AND NOT (family_id = ANY(${heldFamilies}::text[]))) AS event_comments,
+        (SELECT count(*)::int FROM family_post_comments WHERE created_at < NOW() - make_interval(days => ${HISTORY_CAP_DAYS}::int)
+           AND NOT (user_id = ANY(${heldUsers}::text[])) AND NOT (family_id = ANY(${heldFamilies}::text[]))) AS post_comments,
+        (SELECT count(*)::int FROM family_posts WHERE created_at < NOW() - make_interval(days => ${HISTORY_CAP_DAYS}::int)
+           AND NOT (user_id = ANY(${heldUsers}::text[])) AND NOT (family_id = ANY(${heldFamilies}::text[]))) AS posts
+    `)[0]
 
     const eventComments = await sql`
       DELETE FROM event_comments
-      WHERE (deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '30 days')
-         OR created_at < NOW() - INTERVAL '365 days'
+      WHERE ((deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '30 days')
+         OR created_at < NOW() - make_interval(days => ${ageDays}::int))
+        AND NOT (user_id = ANY(${heldUsers}::text[]))
+        AND NOT (family_id = ANY(${heldFamilies}::text[]))
       RETURNING id
     `
     const postComments = await sql`
       DELETE FROM family_post_comments
-      WHERE (deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '30 days')
-         OR created_at < NOW() - INTERVAL '365 days'
+      WHERE ((deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '30 days')
+         OR created_at < NOW() - make_interval(days => ${ageDays}::int))
+        AND NOT (user_id = ANY(${heldUsers}::text[]))
+        AND NOT (family_id = ANY(${heldFamilies}::text[]))
       RETURNING id
     `
     const posts = await sql`
       DELETE FROM family_posts
-      WHERE (deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '30 days')
-         OR created_at < NOW() - INTERVAL '365 days'
+      WHERE ((deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '30 days')
+         OR created_at < NOW() - make_interval(days => ${ageDays}::int))
+        AND NOT (user_id = ANY(${heldUsers}::text[]))
+        AND NOT (family_id = ANY(${heldFamilies}::text[]))
       RETURNING id
     `
     let orphanComments = 0
@@ -54,6 +78,8 @@ export async function GET(request: NextRequest) {
         postComments: postComments.length + orphanComments,
         posts: posts.length,
         pushLog: pushLog.length,
+        ageDays,
+        wouldDeleteAt90Days: wouldDelete,
       },
     })
   } catch (error) {

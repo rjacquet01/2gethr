@@ -146,7 +146,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       maxChildren: -1, // Unlimited
       maxSavedPlaces: 50,
       maxCalendars: 20,
-      historyDays: 365,
+      historyDays: 90, // every plan is capped at 90 days (lib/retention.ts)
       smsMonthlyQuota: 100,
     },
     features: {
@@ -163,7 +163,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       "Unlimited children",
       "Live family location (50 saved places)",
       "Geofence arrival & departure alerts",
-      "1 year history",
+      "90 days history",
       "Custom reminder times",
       "100 text alerts/month",
       "Priority support",

@@ -32,7 +32,7 @@ including super admins, has standing access to location or account data.
 Every step (case opened, counsel sign-off, approval, each data view, exports with hash, pings, notices) is written to an append-only log that cannot be edited or deleted from the application.
 
 ## Retention
-Location history is purged after `LOCATION_RETENTION_DAYS` (default 90) for every plan, unless covered by an open or approved case or a preservation hold. Less stored data means less to disclose.
+Location history is purged after `LOCATION_RETENTION_DAYS` (default 90) for every plan, unless covered by an open or approved case or a preservation hold. Archived tasks, events and reminders, and board posts and event/board comments, are deleted 90 days after they were archived or posted (`HISTORY_CAP_DAYS` in `lib/retention.ts`), with the same legal-hold exemption. Less stored data means less to disclose.
 
 ## Suggested privacy policy wording (have counsel review)
 "We may disclose information, including location information, to law enforcement or other authorities when we believe in good faith that it is required by valid legal process (such as a subpoena, court order or warrant), or when we believe it is necessary to prevent imminent danger of death or serious physical injury. We review each request, disclose only what the request lawfully requires, and, where the law allows, notify the affected family. We keep location history for a limited period (up to 90 days)."

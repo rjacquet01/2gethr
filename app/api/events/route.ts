@@ -248,7 +248,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Apply history limit based on subscription (for past events)
-    // FREE: 30 days, PREMIUM (Plus): 90 days, PREMIUM_PLUS (Premium): 365 days
+    // FREE: 30 days, PREMIUM (Plus): 90 days, PREMIUM_PLUS (Premium): 90 days
     const effectiveFamilyId = familyId || (events[0]?.family_id ? events[0].family_id : null)
     let historyDays = 30 // Default for free tier
     

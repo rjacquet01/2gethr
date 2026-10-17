@@ -24,7 +24,8 @@ export const PREMIUM_FEATURES = {
   LOCATION_SHARING: "location_sharing",
   GEOFENCE_ALERTS: "geofence_alerts",
   ADVANCED_RECURRING: "advanced_recurring",
-  EXTENDED_HISTORY: "extended_history",
+  // (EXTENDED_HISTORY was "1 year of history" on Premium; every plan is now
+  // capped at 90 days, so there is no extended tier to gate.)
   PHONE_ALERTS: "phone_alerts",
   SMS_NOTIFICATIONS: "sms_notifications",
 } as const
@@ -42,7 +43,6 @@ function deriveTierFeatureKeys(tier: string): string[] {
   if (def.features.customReminderTimes) keys.push(PREMIUM_FEATURES.CUSTOM_REMINDER_TIMES)
   if (def.features.locationSharing) keys.push(PREMIUM_FEATURES.LOCATION_SHARING)
   if (def.features.geofencing) keys.push(PREMIUM_FEATURES.GEOFENCE_ALERTS)
-  if (def.limits.historyDays >= 365) keys.push(PREMIUM_FEATURES.EXTENDED_HISTORY)
   if (def.features.phoneAlerts) keys.push(PREMIUM_FEATURES.PHONE_ALERTS)
   if (def.features.smsNotifications) keys.push(PREMIUM_FEATURES.SMS_NOTIFICATIONS)
   return keys

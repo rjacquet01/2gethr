@@ -105,8 +105,9 @@ export default function PrivacyPage() {
               Location sharing is off by default. When it is on, your location is visible only to family
               members who are permitted to see it. People who join a family as a limited-access guest
               cannot see location or saved places. Location history is kept according to your plan's
-              retention limit, and is deleted when you turn sharing off, delete your account, or the
-              retention period ends. You can turn location sharing off at any time.
+              retention limit, never longer than 90 days, and is deleted when you turn sharing off,
+              delete your account, or the retention period ends. You can turn location sharing off at
+              any time.
             </p>
           </section>
 
@@ -202,8 +203,9 @@ export default function PrivacyPage() {
               We keep your information while your account is active. After you delete your account, we
               keep it for up to 30 days for recovery and then delete it, except where we must keep
               limited records longer for legal, tax, fraud-prevention or dispute purposes (for example,
-              payment records held by Stripe). Board posts and comments are removed under the retention
-              limits shown in the app and when deleted by you or a family adult.
+              payment records held by Stripe). Archived tasks, events and reminders, board posts and
+              comments are kept for at most 90 days, and are removed sooner when deleted by you or a
+              family adult.
             </p>
           </section>
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
+import { purgeArchivedHistory, HISTORY_CAP_DAYS, HISTORY_PURGE_ENABLED } from "@/lib/retention"
 
 // Runs nightly (see vercel.json). Auto-archives, for every family:
 //  - tasks sitting in COMPLETED/CANCELLED (same bulk logic as the manual
@@ -12,6 +13,9 @@ import { sql } from "@/lib/db"
 // completed tasks and past events just piled up until a user happened to
 // open the Archive page's filters. This cron job is what actually keeps
 // the active Tasks/Events views pruned automatically.
+//
+// It then enforces the 90-day stored-history cap (lib/retention.ts):
+// archived items past the cap are deleted for good, unless under a legal hold.
 function verifyCronRequest(request: NextRequest): boolean {
   const authHeader = request.headers.get("authorization")
   const cronSecret = process.env.CRON_SECRET
@@ -76,12 +80,19 @@ export async function GET(request: NextRequest) {
 
     console.log("[Cron] Auto-archive processed:", { families: families.length, tasksArchived, eventsArchived })
 
+    // 90-day cap: archived tasks/events/reminders past HISTORY_CAP_DAYS are
+    // deleted with their child rows (legal holds excluded). Report-only until
+    // HISTORY_PURGE_ENABLED is switched on.
+    const purge = await purgeArchivedHistory({ dryRun: !HISTORY_PURGE_ENABLED })
+    console.log(`[Cron] History cap ${HISTORY_CAP_DAYS}d ${HISTORY_PURGE_ENABLED ? "purged" : "would purge"}:`, purge)
+
     return NextResponse.json({
       success: true,
       data: {
         familiesChecked: families.length,
         tasksArchived,
         eventsArchived,
+        historyCap: { days: HISTORY_CAP_DAYS, enabled: HISTORY_PURGE_ENABLED, ...purge },
         timestamp: new Date().toISOString(),
       },
     })
