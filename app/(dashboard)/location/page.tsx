@@ -530,42 +530,46 @@ function LocationPageContent() {
     // Forced polls (first fix, coming back to the app, a parent's request) want
     // a fresh fix. Heartbeat polls use the current accuracy mode and accept a
     // fix up to half the interval old, so a still phone rarely wakes the GPS.
-    // Only one poll runs at a time; a forced poll that arrives while another
-    // is in flight upgrades that one to "forced" instead of starting a second.
-    const POLL_STUCK_MS = 60_000 // a geolocation call that never answers
-    let pollingSince = 0
-    let forcePending = false
+    // Only one heartbeat poll is in flight at a time, so a slow, denied or
+    // timed-out lookup can't overlap the next one. Forced polls always run.
+    // The fallback lookup gives up within ~50 s; if a browser never answers at
+    // all (frozen tab), a poll older than POLL_STUCK_MS no longer blocks.
+    const POLL_STUCK_MS = 60_000
+    let inFlight = false
+    let inFlightSince = 0
     const poll = (force = false) => {
-      const now = Date.now()
-      if (pollingSince && now - pollingSince < POLL_STUCK_MS) {
-        if (force) forcePending = true
+      if (force) {
+        getPositionWithFallback(
+          (pos) => {
+            if (stopped) return
+            noteFix(pos)
+            sendLocation(pos, true)
+          },
+          () => {}
+        )
         return
       }
-      pollingSince = now
-      const finish = () => {
-        // A late answer from a poll given up as stuck must not clear a newer one.
-        if (pollingSince === now) pollingSince = 0
-        const wasForced = force || forcePending
-        forcePending = false
-        return wasForced
+      const now = Date.now()
+      if (inFlight && now - inFlightSince < POLL_STUCK_MS) return
+      inFlight = true
+      inFlightSince = now
+      // A late answer from a poll given up as stuck must not clear a newer one.
+      const done = () => {
+        if (inFlightSince === now) inFlight = false
       }
-      const onFix = (pos: GeolocationPosition) => {
-        const forced = finish()
-        if (stopped) return
-        noteFix(pos)
-        sendLocation(pos, forced)
-      }
-      const onError = () => {
-        finish()
-      }
-      if (force) {
-        getPositionWithFallback(onFix, onError)
-      } else {
-        getPositionWithFallback(onFix, onError, {
+      getPositionWithFallback(
+        (pos) => {
+          done()
+          if (stopped) return
+          noteFix(pos)
+          sendLocation(pos)
+        },
+        () => done(),
+        {
           highAccuracy: highAccuracy && !lowBattery(),
           maximumAge: Math.round(effectiveIntervalMs() / 2),
-        })
-      }
+        }
+      )
     }
 
     // Heartbeat so a still device keeps reporting on schedule (watchPosition
