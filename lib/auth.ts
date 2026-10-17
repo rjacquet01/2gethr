@@ -94,8 +94,12 @@ export async function generateAccessToken(userId: string): Promise<string> {
 }
 
 export async function generateRefreshToken(userId: string): Promise<string> {
+  // The random jti makes every refresh token unique. Without it, two tokens
+  // issued to the same user in the same second (iat has 1 s resolution) were
+  // byte-identical and the second INSERT hit refresh_tokens.token UNIQUE.
   return new SignJWT({ userId, type: "refresh" })
     .setProtectedHeader({ alg: "HS256" })
+    .setJti(crypto.randomUUID())
     .setIssuedAt()
     .setExpirationTime(REFRESH_TOKEN_EXPIRY)
     .sign(REFRESH_TOKEN_SECRET)
@@ -173,6 +177,79 @@ export async function generateTokenPair(
   `
 
   return { accessToken, refreshToken }
+}
+
+// A tagged-template query function, like `sql` from ./db. Injectable so
+// scripts/test-refresh-rotation.ts can run rotation inside a rolled-back
+// transaction.
+type QueryFn = (strings: TemplateStringsArray, ...values: unknown[]) => Promise<Record<string, unknown>[]>
+
+/** How long a just-rotated refresh token may still be answered with its replacement. */
+export const REFRESH_RACE_GRACE_SEC = 20
+
+/**
+ * Exchange a refresh token for a new pair, safely under concurrency.
+ *
+ * Revoking the old row and inserting its replacement is one statement, so
+ * exactly one caller wins: a concurrent UPDATE of the same row waits for the
+ * winner to commit, re-checks `revoked_at IS NULL` and matches nothing.
+ *
+ * The loser (two tabs, or the service worker and the page, refreshing at the
+ * same moment) gets the winner's new refresh token instead of an error, so a
+ * lost race never logs anyone out. The replacement is the row inserted in the
+ * same statement, recognised by created_at = the old row's revoked_at (both
+ * are that statement's NOW()). This only works within a short grace window
+ * and only while the replacement is still valid.
+ *
+ * Returns null when the token is unknown, expired or revoked (outside the race).
+ */
+export async function rotateRefreshToken(
+  oldToken: string,
+  userId: string,
+  sessionMeta?: { userAgent?: string; ipAddress?: string },
+  db: QueryFn = sql as unknown as QueryFn
+): Promise<{ accessToken: string; refreshToken: string } | null> {
+  const [accessToken, refreshToken] = await Promise.all([
+    generateAccessToken(userId),
+    generateRefreshToken(userId),
+  ])
+  const expiresAt = new Date()
+  expiresAt.setDate(expiresAt.getDate() + 7)
+
+  const rotated = await db`
+    WITH claimed AS (
+      UPDATE refresh_tokens
+      SET revoked_at = NOW()
+      WHERE token = ${oldToken}
+        AND user_id = ${userId}
+        AND revoked_at IS NULL
+        AND expires_at > NOW()
+      RETURNING user_id, user_agent, ip_address
+    )
+    INSERT INTO refresh_tokens (id, user_id, token, expires_at, created_at, user_agent, ip_address)
+    SELECT ${crypto.randomUUID()}::text, user_id, ${refreshToken}::text, ${expiresAt.toISOString()}::timestamptz, NOW(),
+      COALESCE(${sessionMeta?.userAgent || null}::text, user_agent),
+      COALESCE(${sessionMeta?.ipAddress || null}::text, ip_address)
+    FROM claimed
+    RETURNING id
+  `
+  if (rotated.length > 0) return { accessToken, refreshToken }
+
+  // Lost the race (or the token was never valid): hand back the replacement
+  // the winner just issued, if there is one.
+  const replacement = await db`
+    SELECT n.token
+    FROM refresh_tokens o
+    JOIN refresh_tokens n ON n.user_id = o.user_id AND n.created_at = o.revoked_at AND n.id <> o.id
+    WHERE o.token = ${oldToken}
+      AND o.user_id = ${userId}
+      AND o.revoked_at > NOW() - make_interval(secs => ${REFRESH_RACE_GRACE_SEC}::int)
+      AND n.revoked_at IS NULL
+      AND n.expires_at > NOW()
+    LIMIT 1
+  `
+  if (replacement.length > 0) return { accessToken, refreshToken: replacement[0].token as string }
+  return null
 }
 // ============================================
 // Cookie Management
@@ -364,29 +441,12 @@ async function refreshAccessToken(refreshToken: string): Promise<AuthResult> {
     return { user: null, error: "Invalid refresh token" }
   }
 
-  // Verify refresh token exists in database and is not revoked
-  const tokens = await sql`
-    SELECT id FROM refresh_tokens 
-    WHERE user_id = ${payload.userId} 
-    AND token = ${refreshToken}
-    AND revoked_at IS NULL 
-    AND expires_at > NOW()
-  `
-
-  if (tokens.length === 0) {
+  // Revoke the old token and issue a new pair in one step (race-safe).
+  const newTokens = await rotateRefreshToken(refreshToken, payload.userId)
+  if (!newTokens) {
     return { user: null, error: "Refresh token invalid or expired" }
   }
-
-  // Generate new tokens
-  const newTokens = await generateTokenPair(payload.userId)
   await setAuthCookies(newTokens.accessToken, newTokens.refreshToken)
-
-  // Revoke old refresh token
-  await sql`
-    UPDATE refresh_tokens 
-    SET revoked_at = NOW() 
-    WHERE token = ${refreshToken}
-  `
 
   const user = await getUserWithFamily(payload.userId)
   if (!user) {

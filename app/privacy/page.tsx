@@ -229,6 +229,8 @@ export default function PrivacyPage() {
             <p>
               Togethr, LLC
               <br />
+              29 Prospect Rd, Andover, MA 01810
+              <br />
               Questions or requests about this policy or your data: <Contact />
             </p>
           </section>

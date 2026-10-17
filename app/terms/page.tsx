@@ -123,6 +123,11 @@ export default function TermsPage() {
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">10. Contact Us</h2>
             <p>
+              Togethr, LLC
+              <br />
+              29 Prospect Rd, Andover, MA 01810
+            </p>
+            <p>
               If you have questions about these Terms, please contact us at{' '}
               <a href="mailto:admin@mytogethr.com" className="text-primary hover:underline">
                 admin@mytogethr.com

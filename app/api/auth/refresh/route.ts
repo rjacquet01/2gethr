@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
-import { sql } from "@/lib/db"
 import {
   verifyRefreshToken,
-  generateTokenPair,
+  rotateRefreshToken,
   getUserWithFamily,
 } from "@/lib/auth"
 
@@ -28,36 +27,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify token exists in database and is not revoked
-    const tokens = await sql`
-      SELECT id FROM refresh_tokens 
-      WHERE user_id = ${payload.userId} 
-      AND token = ${refreshToken}
-      AND revoked_at IS NULL 
-      AND expires_at > NOW()
-    `
+    // Revoke the old token and issue a new pair in one statement. If another
+    // request (another tab, the service worker) rotated this same token a
+    // moment ago, this returns that request's new token rather than failing.
+    // Device info is carried forward so a refreshed session still shows up
+    // correctly in Settings > Security's session list.
+    const newTokens = await rotateRefreshToken(refreshToken, payload.userId, {
+      ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
+      userAgent: request.headers.get("user-agent") || undefined,
+    })
 
-    if (tokens.length === 0) {
+    if (!newTokens) {
       return NextResponse.json(
         { success: false, error: "Refresh token expired or revoked" },
         { status: 401 }
       )
     }
-
-    // Revoke old refresh token
-    await sql`
-      UPDATE refresh_tokens 
-      SET revoked_at = NOW() 
-      WHERE token = ${refreshToken}
-    `
-
-    // Generate new tokens. Carry the device info forward so a refreshed
-    // session still shows up correctly in Settings > Security's session
-    // list rather than losing its device/IP the first time the token rotates.
-    const newTokens = await generateTokenPair(payload.userId, {
-      ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
-      userAgent: request.headers.get("user-agent") || undefined,
-    })
 
     // Get user data
     const user = await getUserWithFamily(payload.userId)

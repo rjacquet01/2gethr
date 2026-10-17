@@ -174,7 +174,7 @@ export default function PricingPage() {
             <div>
               <h3 className="font-semibold mb-2">Is location sharing required?</h3>
               <p className="text-muted-foreground">
-                No, location sharing is always optional and only available on Premium plans. Each family member controls their own sharing settings.
+                No, location sharing is always optional. Each family member controls their own sharing settings.
               </p>
             </div>
             <div>
