@@ -32,10 +32,14 @@ import { cn } from '@/lib/utils'
 
 // High-accuracy GPS often times out on laptops/desktops and indoors. Try it
 // first, then fall back to a coarser (Wi-Fi/cell/IP) fix so sharing still works.
+// Callers that don't need GPS (a still phone's heartbeat) can ask for a
+// low-accuracy fix and accept a recently cached one via `maximumAge`.
 function getPositionWithFallback(
   onSuccess: PositionCallback,
-  onError: PositionErrorCallback
+  onError: PositionErrorCallback,
+  opts: { highAccuracy?: boolean; maximumAge?: number } = {}
 ) {
+  const { highAccuracy = true, maximumAge = 0 } = opts
   navigator.geolocation.getCurrentPosition(
     onSuccess,
     (err) => {
@@ -46,10 +50,10 @@ function getPositionWithFallback(
       navigator.geolocation.getCurrentPosition(onSuccess, onError, {
         enableHighAccuracy: false,
         timeout: 30000,
-        maximumAge: 5 * 60 * 1000,
+        maximumAge: Math.max(maximumAge, 5 * 60 * 1000),
       })
     },
-    { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    { enableHighAccuracy: highAccuracy, timeout: highAccuracy ? 12000 : 20000, maximumAge }
   )
 }
 
@@ -380,6 +384,8 @@ function LocationPageContent() {
     let batteryManager: BatteryLike | null = null
     const readBattery = () => {
       if (batteryManager) battery = { level: batteryManager.level, charging: batteryManager.charging }
+      // Entering/leaving low battery stops/restarts the watch and retimes the heartbeat.
+      reconcileTracking()
     }
     const getBattery = (navigator as Navigator & { getBattery?: () => Promise<BatteryLike> }).getBattery
     getBattery?.call(navigator)
@@ -438,6 +444,8 @@ function LocationPageContent() {
         const json = await res.json().catch(() => null)
         const hint = json?.data?.suggestedIntervalSec
         suggestedMs = typeof hint === 'number' && hint > 0 ? hint * 1000 : null
+        // A fast-update hint (moving near a saved place) can switch GPS on.
+        reconcileTracking()
       } catch (error) {
         // Silent fail for live tracking
       } finally {
@@ -445,38 +453,117 @@ function LocationPageContent() {
       }
     }
 
-    const poll = (force = false) =>
-      getPositionWithFallback((pos) => sendLocation(pos, force), () => {})
+    // --- GPS only when it matters -------------------------------------------
+    // The watch runs in low-accuracy (Wi-Fi/cell) mode by default. It switches
+    // to high accuracy when the phone has moved >= 50 m within 2 minutes, or
+    // the server asks for updates every 30 s or faster (moving near a saved
+    // place), and drops back to low accuracy after 3 minutes without movement.
+    // On low battery the watch stops entirely and only the heartbeat runs.
+    const MOVE_WINDOW_MS = 2 * 60_000
+    const STILL_AFTER_MS = 3 * 60_000
+    const FAST_HINT_MS = 30_000
+    let highAccuracy = false
+    let watchId: number | null = null
+    let lastMovedAt = 0
+    // Recent fixes (last 2 minutes) to measure how far the phone has moved.
+    const recent: { t: number; lat: number; lng: number; acc: number }[] = []
 
-    // Initial fix right away.
-    poll(true)
+    const noteFix = (position: GeolocationPosition) => {
+      const now = Date.now()
+      const fix = {
+        t: now,
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        acc: position.coords.accuracy ?? 0,
+      }
+      while (recent.length > 0 && now - recent[0].t > MOVE_WINDOW_MS) recent.shift()
+      // Moved >= 50 m in the window. The threshold also grows with the fixes'
+      // own error, so coarse low-accuracy fixes jittering in place don't count.
+      if (recent.some((r) => metersBetween(r, fix) >= Math.max(MOVE_SEND_METERS, r.acc, fix.acc))) {
+        lastMovedAt = now
+      }
+      recent.push(fix)
+    }
 
-    // Movement-driven updates (throttled in sendLocation).
-    const watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        sendLocation(position)
-      },
-      () => {
-        // Geolocation errors are handled silently for continuous tracking
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    )
+    const isStill = () => Date.now() - lastMovedAt >= STILL_AFTER_MS
 
-    // Heartbeat so a stationary device still reports on schedule (watchPosition
-    // only fires when the position changes), at the adaptive interval.
-    let heartbeat: ReturnType<typeof setTimeout>
-    const schedule = () => {
+    const onWatchFix = (position: GeolocationPosition) => {
+      noteFix(position)
+      reconcileTracking()
+      sendLocation(position)
+    }
+
+    const startWatch = (high: boolean) => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+      highAccuracy = high
+      watchId = navigator.geolocation.watchPosition(
+        onWatchFix,
+        () => {
+          // Geolocation errors are handled silently for continuous tracking
+        },
+        { enableHighAccuracy: high, timeout: high ? 15000 : 30000, maximumAge: 0 }
+      )
+    }
+
+    const stopWatch = () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+      watchId = null
+    }
+
+    // Single place that decides watch on/off, accuracy mode and heartbeat timing.
+    let stopped = false
+    function reconcileTracking() {
+      if (stopped) return
+      if (lowBattery()) {
+        stopWatch()
+      } else {
+        const wantHigh = !isStill() || (suggestedMs !== null && suggestedMs <= FAST_HINT_MS)
+        if (watchId === null || wantHigh !== highAccuracy) startWatch(wantHigh)
+      }
+      scheduleHeartbeat()
+    }
+
+    // Forced polls (first fix, coming back to the app, a parent's request) want
+    // a fresh fix. Heartbeat polls use the current accuracy mode and accept a
+    // fix up to half the interval old, so a still phone rarely wakes the GPS.
+    const poll = (force = false) => {
+      const onFix = (pos: GeolocationPosition) => {
+        noteFix(pos)
+        sendLocation(pos, force)
+      }
+      if (force) {
+        getPositionWithFallback(onFix, () => {})
+      } else {
+        getPositionWithFallback(onFix, () => {}, {
+          highAccuracy: highAccuracy && !lowBattery(),
+          maximumAge: Math.round(effectiveIntervalMs() / 2),
+        })
+      }
+    }
+
+    // Heartbeat so a still device keeps reporting on schedule (watchPosition
+    // only fires when the position changes): due one effective interval after
+    // the last report.
+    let heartbeat: ReturnType<typeof setTimeout> | undefined
+    function scheduleHeartbeat() {
+      if (stopped) return
+      if (heartbeat) clearTimeout(heartbeat)
+      const wait = lastSentAt ? lastSentAt + effectiveIntervalMs() - Date.now() : effectiveIntervalMs()
       heartbeat = setTimeout(() => {
         if (!document.hidden) poll()
-        schedule()
-      }, Math.min(effectiveIntervalMs(), 30_000))
+        scheduleHeartbeat()
+      }, Math.max(1000, wait))
     }
-    schedule()
 
-    // A parent tapped "Request location": answer within ~20s instead of
-    // waiting out the sharing interval.
+    // Initial fix right away, then start the (low-accuracy) watch and heartbeat.
+    poll(true)
+    reconcileTracking()
+
+    // A parent tapped "Request location": answer within ~30s instead of
+    // waiting out the sharing interval. Skipped while the app is hidden and
+    // the phone is standing still.
     const requestWatch = setInterval(async () => {
-      if (document.hidden) return
+      if (document.hidden && isStill()) return
       try {
         const r = await authFetch('/api/location/request')
         if (!r.ok) return
@@ -485,7 +572,7 @@ function LocationPageContent() {
       } catch {
         // ignore
       }
-    }, 20_000)
+    }, 30_000)
 
     // Coming back to the app after being backgrounded: report immediately
     // instead of waiting out the interval.
@@ -495,8 +582,9 @@ function LocationPageContent() {
     document.addEventListener('visibilitychange', onVisible)
 
     return () => {
-      navigator.geolocation.clearWatch(watchId)
-      clearTimeout(heartbeat)
+      stopped = true
+      stopWatch()
+      if (heartbeat) clearTimeout(heartbeat)
       clearInterval(requestWatch)
       document.removeEventListener('visibilitychange', onVisible)
       batteryManager?.removeEventListener('levelchange', readBattery)
