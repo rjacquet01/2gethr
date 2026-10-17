@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { neon } from '@neondatabase/serverless'
 import { encrypt } from '@/lib/encryption'
+import { defaultFamilyFor } from '@/lib/permissions'
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -83,12 +84,10 @@ export async function GET(request: NextRequest) {
 
     // Find the user's active family (needed because calendar_sync_connections
     // has a NOT NULL family_id column tying the connection to a family).
-    const familyMembership = await sql`
-      SELECT family_id FROM family_members
-      WHERE user_id = ${userId} AND is_active = true
-      ORDER BY joined_at ASC
-      LIMIT 1
-    `
+    // Owned family first, then a full (non-guest) membership: someone who is a
+    // guest elsewhere and owns a family syncs into their own family.
+    const familyMembershipDefault = await defaultFamilyFor(userId)
+    const familyMembership = familyMembershipDefault ? [{ family_id: familyMembershipDefault.familyId }] : []
 
     if (familyMembership.length === 0) {
       return NextResponse.redirect(new URL('/settings/calendar-sync?error=no_family', request.url))

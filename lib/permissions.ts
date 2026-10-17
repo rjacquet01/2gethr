@@ -88,6 +88,38 @@ export async function isGuestInFamily(familyId: string, userId: string): Promise
 }
 
 /**
+ * The family a request means when it doesn't name one (calendar sync, the
+ * iCal feed, older clients). A person can own one family and be a member,
+ * often a guest, of others, so "first membership found" is not good enough:
+ * prefer the family they own, then one where they are a full member (not a
+ * guest), then the oldest membership. Returns the role in that family too,
+ * so callers never mix a role from one family with another family's data.
+ */
+export async function defaultFamilyFor(userId: string): Promise<{ familyId: string; role: FamilyRole } | null> {
+  const rows = await sql`
+    SELECT fm.family_id, fm.role
+    FROM family_members fm JOIN families f ON f.id = fm.family_id
+    WHERE fm.user_id = ${userId} AND fm.is_active = true
+    ORDER BY (f.owner_id = ${userId}) DESC, (fm.role = 'GUEST') ASC, fm.joined_at ASC
+    LIMIT 1
+  `
+  return rows.length ? { familyId: rows[0].family_id as string, role: rows[0].role as FamilyRole } : null
+}
+
+/**
+ * The caller's membership in one specific family (role included), or null
+ * when they aren't an active member of it.
+ */
+export async function membershipIn(familyId: string, userId: string): Promise<{ familyId: string; role: FamilyRole } | null> {
+  const rows = await sql`
+    SELECT family_id, role FROM family_members
+    WHERE family_id = ${familyId} AND user_id = ${userId} AND is_active = true
+    LIMIT 1
+  `
+  return rows.length ? { familyId: rows[0].family_id as string, role: rows[0].role as FamilyRole } : null
+}
+
+/**
  * For routes that aren't tied to one family: true when the user has active
  * memberships and every one of them is GUEST (so they have no family where
  * location features apply).

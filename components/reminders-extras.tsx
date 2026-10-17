@@ -135,9 +135,12 @@ const DEFAULT_CHANNELS = ['in_app', 'push', 'email']
 
 export function ReminderQuickAdd({
   members,
+  familyId,
   onCreated,
 }: {
   members: QuickMember[]
+  /** The family being viewed; the reminder is created there. */
+  familyId?: string
   onCreated: (reminder: any) => void
 }) {
   const [value, setValue] = useState('')
@@ -159,6 +162,7 @@ export function ReminderQuickAdd({
           isRecurring: parsed.recurrence !== 'NONE',
           recurrenceRule: parsed.recurrence !== 'NONE' ? parsed.recurrence : null,
           forMemberId: parsed.member?.id,
+          familyId,
           notifyChannels: DEFAULT_CHANNELS,
         }),
       })

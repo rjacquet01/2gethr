@@ -409,6 +409,19 @@ export async function POST(request: NextRequest) {
         `
         
         if (anyCalendars.length === 0) {
+          // No calendar visible: either the family has none yet, or the caller
+          // isn't a member. Only a member may get one created.
+          const isMember = await sql`
+            SELECT 1 FROM family_members
+            WHERE family_id = ${validatedData.familyId} AND user_id = ${user.id} AND is_active = true
+            LIMIT 1
+          `
+          if (isMember.length === 0) {
+            return NextResponse.json(
+              { success: false, error: "Calendar not found or access denied" },
+              { status: 404 }
+            )
+          }
           // Create a default calendar for this family
           const calendarId = crypto.randomUUID()
           await sql`

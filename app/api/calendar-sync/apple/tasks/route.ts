@@ -3,6 +3,7 @@ import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { ensureSyncSchema } from '@/lib/sync-schema'
 import { syncAppleReminders } from '@/lib/services/apple-reminders-sync'
+import { defaultFamilyFor } from '@/lib/permissions'
 
 // POST - Two-way sync of Togethr tasks and reminders with Apple Reminders
 // (VTODO over CalDAV). The work lives in lib/services/apple-reminders-sync.ts,
@@ -42,12 +43,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const familyMembership = await sql`
-      SELECT family_id FROM family_members
-      WHERE user_id = ${user.id} AND is_active = true
-      ORDER BY joined_at ASC
-      LIMIT 1
-    `
+    // Owned family first, then a full (non-guest) membership: someone who is a
+    // guest elsewhere and owns a family syncs into their own family.
+    const familyMembershipDefault = await defaultFamilyFor(user.id)
+    const familyMembership = familyMembershipDefault ? [{ family_id: familyMembershipDefault.familyId }] : []
 
     if (familyMembership.length === 0) {
       return NextResponse.json(

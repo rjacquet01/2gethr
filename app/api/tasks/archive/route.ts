@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { getHistoryDays } from "@/lib/history-limit"
+import { defaultFamilyFor, membershipIn } from "@/lib/permissions"
 
 // POST - Archive all completed/cancelled tasks for the family
 export async function POST(request: NextRequest) {
@@ -11,20 +12,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: error || "Unauthorized" }, { status: 401 })
     }
 
-    // Get family ID
-    const familyMembership = await sql`
-      SELECT family_id, role FROM family_members
-      WHERE user_id = ${user.id} AND is_active = true
-      LIMIT 1
-    `
-
-    if (familyMembership.length === 0) {
+    // The family being viewed (?familyId=), with the role from THAT
+    // membership. A guest in one family may own another; never mix them.
+    const requested = request.nextUrl.searchParams.get("familyId")
+    const familyMembership = requested ? await membershipIn(requested, user.id) : await defaultFamilyFor(user.id)
+    if (!familyMembership) {
       return NextResponse.json({ success: false, error: "No family found" }, { status: 404 })
     }
 
-    const familyId = familyMembership[0].family_id
+    const familyId = familyMembership.familyId
     // A guest only archives tasks they created or are assigned to.
-    const guestUserId: string | null = familyMembership[0].role === "GUEST" ? user.id : null
+    const guestUserId: string | null = familyMembership.role === "GUEST" ? user.id : null
 
     // Archive all completed or cancelled tasks
     const result = await sql`
@@ -66,20 +64,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: error || "Unauthorized" }, { status: 401 })
     }
 
-    // Get family ID
-    const familyMembership = await sql`
-      SELECT family_id, role FROM family_members
-      WHERE user_id = ${user.id} AND is_active = true
-      LIMIT 1
-    `
-
-    if (familyMembership.length === 0) {
+    // The family being viewed (?familyId=), with the role from THAT
+    // membership. A guest in one family may own another; never mix them.
+    const requested = request.nextUrl.searchParams.get("familyId")
+    const familyMembership = requested ? await membershipIn(requested, user.id) : await defaultFamilyFor(user.id)
+    if (!familyMembership) {
       return NextResponse.json({ success: false, error: "No family found" }, { status: 404 })
     }
 
-    const familyId = familyMembership[0].family_id
+    const familyId = familyMembership.familyId
     // Guests only see tasks they created or are assigned to.
-    const guestUserId: string | null = familyMembership[0].role === "GUEST" ? user.id : null
+    const guestUserId: string | null = familyMembership.role === "GUEST" ? user.id : null
 
     const historyDays = await getHistoryDays(familyId)
 

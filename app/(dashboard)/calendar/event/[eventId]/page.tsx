@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useEvent } from '@/hooks/use-events'
 import { useAuth, authFetch } from '@/hooks/use-auth'
+import { useFamilies } from '@/hooks/use-family'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -55,6 +56,7 @@ export default function EventDetailPage() {
   const eventId = params.eventId as string
   
   const { event, isLoading, deleteEvent } = useEvent(eventId)
+  const { families } = useFamilies()
   const [isDeleting, setIsDeleting] = useState(false)
   const { user: currentUser } = useAuth()
   // Parents (the owner is always a parent) can delete anyone's comment.
@@ -189,7 +191,10 @@ export default function EventDetailPage() {
       </div>
 
       {(() => {
-        const role = currentUser?.primaryFamilyRole
+        // My role in THIS event's family (not the account's owned family).
+        const eventFamilyId = (event as unknown as { calendar?: { familyId?: string } }).calendar?.familyId
+        const eventFamily = families.find((f) => f.id === eventFamilyId)
+        const role = eventFamily?.currentUserRole || eventFamily?.userRole
         const isAdult = role === 'PARENT' || role === 'GUARDIAN'
         const me = (event.participants as unknown as Array<{ userId?: string | null; status?: string; responseStatus?: string }> | undefined)
           ?.find((p) => p.userId && p.userId === currentUser?.id)

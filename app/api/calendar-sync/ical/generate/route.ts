@@ -4,6 +4,7 @@ import { sql } from '@/lib/db'
 import { getUserFromRequest, checkFamilySubscription } from '@/lib/auth'
 import { getTierDefinition } from '@/lib/subscription-tiers'
 import { ensureSyncSchema } from '@/lib/sync-schema'
+import { defaultFamilyFor } from '@/lib/permissions'
 
 // Lets a user get (or create) a standing subscription URL that any calendar
 // app can subscribe to (Apple Calendar, Outlook, Google Calendar's "From
@@ -46,12 +47,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: error || 'Not authenticated' }, { status: 401 })
   }
 
-  const familyMembership = await sql`
-    SELECT family_id FROM family_members
-    WHERE user_id = ${user.id} AND is_active = true
-    ORDER BY joined_at ASC
-    LIMIT 1
-  `
+  // Owned family first, then a full (non-guest) membership: someone who is a
+  // guest elsewhere and owns a family gets their own family's feed.
+  const familyMembershipDefault = await defaultFamilyFor(user.id)
+  const familyMembership = familyMembershipDefault ? [{ family_id: familyMembershipDefault.familyId }] : []
 
   if (familyMembership.length === 0) {
     return NextResponse.json({ success: false, error: 'You need to be part of a family first' }, { status: 400 })

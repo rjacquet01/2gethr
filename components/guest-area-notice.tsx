@@ -4,11 +4,13 @@ import Link from 'next/link'
 import { Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Empty } from '@/components/ui/empty'
+import { StartOwnFamilyButton, useCanStartOwnFamily } from '@/components/start-own-family'
 
 // Shown to guest members who open a family-only area (Location, Places)
 // directly. The page renders this instead of calling the APIs, which would
 // refuse a guest anyway.
 export function GuestAreaNotice() {
+  const canStartOwn = useCanStartOwnFamily()
   return (
     <Empty
       icon={Lock}
@@ -23,6 +25,14 @@ export function GuestAreaNotice() {
           <Link href="/tasks">Tasks</Link>
         </Button>
       </div>
+      {canStartOwn && (
+        <div className="mt-4 flex flex-col items-center gap-2">
+          <p className="text-sm text-muted-foreground">
+            Want your own family? Start one without a new account. You&apos;ll stay in this one too.
+          </p>
+          <StartOwnFamilyButton />
+        </div>
+      )}
     </Empty>
   )
 }

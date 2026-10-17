@@ -60,8 +60,9 @@ export async function GET(request: NextRequest) {
 
     // Verify user is in the family
     const membership = await sql`
-      SELECT role FROM family_members 
-      WHERE family_id = ${familyId} AND user_id = ${user.id} AND is_active = true
+      SELECT fm.role, f.owner_id FROM family_members fm
+      JOIN families f ON f.id = fm.family_id
+      WHERE fm.family_id = ${familyId} AND fm.user_id = ${user.id} AND fm.is_active = true
     `
 
     if (membership.length === 0) {
@@ -92,7 +93,8 @@ export async function GET(request: NextRequest) {
           status: "ACTIVE",
           tierInfo: SUBSCRIPTION_TIERS.FREE,
           familyId,
-          isOwner: user.primaryFamily?.ownerId === user.id,
+          // Owner of THIS family (a guest here may own a different family).
+          isOwner: membership[0].owner_id === user.id,
         },
       })
     }

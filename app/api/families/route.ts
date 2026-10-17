@@ -142,15 +142,36 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { name } = createFamilySchema.parse(body)
 
-    // Check if user already owns a family
+    // Check if user already owns a family. Deleting a family is a soft delete
+    // (memberships deactivated, the families row kept), so only a family the
+    // owner is still an active member of counts. The one-trial-per-owner
+    // check below still looks at every family they ever owned.
     const existingFamilies = await sql`
-      SELECT id FROM families WHERE owner_id = ${user.id}
+      SELECT f.id FROM families f
+      JOIN family_members fm ON fm.family_id = f.id AND fm.user_id = f.owner_id AND fm.is_active = true
+      WHERE f.owner_id = ${user.id}
     `
 
     if (existingFamilies.length > 0) {
       return NextResponse.json(
         { success: false, error: "You already own a family. You can only own one family." },
         { status: 400 }
+      )
+    }
+
+    // A child member can't start a family of their own. Anyone else may,
+    // including a guest or adult in someone else's family (they keep that
+    // membership and its role; the new family is separate).
+    const memberships = await sql`
+      SELECT role FROM family_members WHERE user_id = ${user.id} AND is_active = true
+    `
+    if (memberships.length > 0 && memberships.every((m) => m.role === "CHILD")) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Child members can't create their own family. Ask a parent if you need a change to your account.",
+        },
+        { status: 403 }
       )
     }
 

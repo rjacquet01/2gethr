@@ -4,6 +4,7 @@ import { formatCategory } from '@/lib/categories'
 import { use, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/use-auth'
+import { useFamilies } from '@/hooks/use-family'
 import { useTask, updateTask, deleteTask } from '@/hooks/use-tasks'
 import { useMyRole } from '@/hooks/use-my-role'
 import { CommentThread } from '@/components/comment-thread'
@@ -40,6 +41,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
   const router = useRouter()
   const { user: currentUser } = useAuth()
   const { task, isLoading, mutate } = useTask(taskId)
+  const { families } = useFamilies()
   const [processing, setProcessing] = useState(false)
   // Parents (the owner is always a parent) can delete anyone's comment.
   const { isParent } = useMyRole()
@@ -166,7 +168,9 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
       : 'Unassigned'
 
   const assignmentStatus = (task as unknown as { assignment_status?: string | null }).assignment_status || null
-  const myRole = currentUser?.primaryFamilyRole
+  // My role in THIS task's family (not the account's owned family).
+  const taskFamily = families.find((f) => f.id === (task as unknown as { family_id?: string }).family_id)
+  const myRole = taskFamily?.currentUserRole || taskFamily?.userRole
   const iAmAdult = myRole === 'PARENT' || myRole === 'GUARDIAN'
   const iAmAssignee = !!currentUser && task.assigned_to_id === currentUser.id
   const canRespond =

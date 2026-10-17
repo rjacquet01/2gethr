@@ -3,6 +3,7 @@ import { getUserFromRequest } from '@/lib/auth'
 import { decrypt, encrypt } from '@/lib/encryption'
 import { sql } from '@/lib/db'
 import { guestScopeUserId } from '@/lib/guest-scope'
+import { defaultFamilyFor } from '@/lib/permissions'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
@@ -162,9 +163,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user's family
-    const familyMembers = await sql`
-      SELECT family_id FROM family_members WHERE user_id = ${user.id} LIMIT 1
-    `
+    // Owned family first, then a full (non-guest) membership: someone who is a
+    // guest elsewhere and owns a family syncs into their own family.
+    const familyMembersDefault = await defaultFamilyFor(user.id)
+    const familyMembers = familyMembersDefault ? [{ family_id: familyMembersDefault.familyId }] : []
 
     if (familyMembers.length === 0) {
       return NextResponse.json(

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { syncAppleConnection } from '@/lib/services/calendar-sync-core'
+import { defaultFamilyFor } from '@/lib/permissions'
 
 // POST - Manually trigger Apple Calendar sync (also called by the
 // client-side auto-sync timer). Actual sync logic lives in
@@ -40,11 +41,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const familyMembership = await sql`
-      SELECT family_id FROM family_members
-      WHERE user_id = ${user.id} AND is_active = true
-      LIMIT 1
-    `
+    // Owned family first, then a full (non-guest) membership: someone who is a
+    // guest elsewhere and owns a family syncs into their own family.
+    const familyMembershipDefault = await defaultFamilyFor(user.id)
+    const familyMembership = familyMembershipDefault ? [{ family_id: familyMembershipDefault.familyId }] : []
 
     if (familyMembership.length === 0) {
       return NextResponse.json(

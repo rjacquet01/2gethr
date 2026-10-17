@@ -127,7 +127,7 @@ export default function DashboardLayout({
             <Logo size="md" textClassName="text-sidebar-foreground" />
           </div>
 
-          {/* Family switcher (only shown when you belong to 2+ families) */}
+          {/* Family switcher (2+ families, or one you don't own: offers "create your own") */}
           <div className="px-4 pt-4 empty:hidden">
             <FamilySwitcher variant="sidebar" />
           </div>

@@ -31,6 +31,7 @@ import {
 } from 'date-fns'
 import { toast } from 'sonner'
 import { authFetch } from '@/hooks/use-auth'
+import { useFamilies } from '@/hooks/use-family'
 import { cn } from '@/lib/utils'
 
 interface ArchivedTask {
@@ -103,11 +104,15 @@ export default function ArchivePage() {
   const [selecting, setSelecting] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
+  // Archived tasks belong to the family being viewed (the switcher's choice).
+  const { families } = useFamilies()
+  const familyId = families[0]?.id
+
   const fetchArchivedItems = useCallback(async () => {
     setIsLoading(true)
     try {
       const [tasksRes, eventsRes, remindersRes] = await Promise.all([
-        authFetch('/api/tasks/archive'),
+        authFetch(familyId ? `/api/tasks/archive?familyId=${encodeURIComponent(familyId)}` : '/api/tasks/archive'),
         authFetch('/api/events?status=ARCHIVED'),
         // A reminder has no separate "archive" step - completing or
         // dismissing it is the end of its active life - so ?status=ARCHIVED
@@ -133,7 +138,7 @@ export default function ArchivePage() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [familyId])
 
   useEffect(() => {
     fetchArchivedItems()

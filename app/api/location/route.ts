@@ -166,8 +166,10 @@ export async function GET(request: NextRequest) {
       })),
       // Everyone else in the family who can be asked for a one-time location
       // (even if their sharing is off). The recipient has to approve.
+      // Guests take no part in this family's location (requests to them are
+      // refused), so they aren't offered.
       pingable: locations
-        .filter(l => l.user_id && l.user_id !== user.id)
+        .filter(l => l.user_id && l.user_id !== user.id && l.role !== 'GUEST')
         .map(l => ({
           memberId: l.member_id,
           name: l.child_display_name || l.nickname || `${l.first_name || ''} ${l.last_name || ''}`.trim() || 'Family member',

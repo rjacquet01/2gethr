@@ -12,7 +12,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Input } from '@/components/ui/input'
 import { useCalendarSync } from '@/hooks/use-calendar-sync'
 import { authFetch, useAuth } from '@/hooks/use-auth'
-import { useFamily } from '@/hooks/use-family'
+import { useFamilies, useFamily } from '@/hooks/use-family'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
@@ -601,7 +601,11 @@ function ImportIcsCard() {
   const [assignChildIds, setAssignChildIds] = useState<string[]>([])
 
   const { user } = useAuth()
-  const { family } = useFamily(user?.primaryFamily?.id ?? null)
+  // The family being viewed (switcher choice), not the account's owned family:
+  // the import, the people offered and the role all come from it.
+  const { families } = useFamilies()
+  const importFamilyId = families[0]?.id ?? null
+  const { family } = useFamily(importFamilyId)
   const myRole = (family?.members || []).find((m) => m.userId === user?.id)?.role
   // Matches the import route: grown-up members (parent/guardian/adult) can assign.
   const canAssign = myRole === 'PARENT' || myRole === 'GUARDIAN' || myRole === 'ADULT'
@@ -615,7 +619,10 @@ function ImportIcsCard() {
         body.append('assignUserIds', JSON.stringify(assignUserIds))
         body.append('assignChildIds', JSON.stringify(assignChildIds))
       }
-      const res = await authFetch('/api/calendar-sync/ical/import', {
+      const importUrl = importFamilyId
+        ? `/api/calendar-sync/ical/import?familyId=${encodeURIComponent(importFamilyId)}`
+        : '/api/calendar-sync/ical/import'
+      const res = await authFetch(importUrl, {
         method: 'POST',
         ...(body instanceof FormData
           ? { body }

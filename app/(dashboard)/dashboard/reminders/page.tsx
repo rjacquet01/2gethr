@@ -53,6 +53,7 @@ import { toast } from 'sonner'
 import { authFetch, useAuth } from '@/hooks/use-auth'
 import { cn } from '@/lib/utils'
 import { useMyRole } from '@/hooks/use-my-role'
+import { useFamilies } from '@/hooks/use-family'
 import { AccountStatusBadge } from '@/components/account-status-badge'
 import {
   ReminderQuickAdd,
@@ -202,28 +203,22 @@ function RemindersPageContent() {
     }
   }, [searchParams, router])
 
-  // Load the active family's members so a reminder can be assigned to
-  // someone else (e.g. a spouse or a child). A child with no login is listed
-  // too; their reminder is delivered to the parent who creates it.
+  // The family being viewed (switcher choice). New reminders are created in
+  // it and can be assigned to its members (e.g. a spouse or a child). A
+  // child with no login is listed too; their reminder is delivered to the
+  // parent who creates it.
+  const { families } = useFamilies()
+  const activeFamily = families[0]
   useEffect(() => {
-    if (!user?.primaryFamily?.id) return
-    authFetch('/api/families')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        const family = data?.families?.find((f: { id: string }) => f.id === user.primaryFamily?.id)
-        if (family?.members) {
-          setFamilyMembers(
-            family.members.map((m: { id: string; userId: string | null; displayName: string; role?: string }) => ({
-              id: m.id,
-              userId: m.userId,
-              displayName: m.displayName,
-              role: m.role,
-            }))
-          )
-        }
-      })
-      .catch((error) => console.error('Failed to fetch family members:', error))
-  }, [user?.primaryFamily?.id])
+    setFamilyMembers(
+      (activeFamily?.members || []).map((m) => ({
+        id: m.id,
+        userId: m.userId,
+        displayName: m.displayName,
+        role: m.role,
+      }))
+    )
+  }, [activeFamily])
 
   const resetForm = () => {
     setEditingId(null)
@@ -284,6 +279,8 @@ function RemindersPageContent() {
           // back to "Doesn't repeat" actually clears recurrence_rule.
           recurrenceRule: recurrence !== 'NONE' ? recurrence : null,
           forMemberId: !editingId ? assigneeId || undefined : undefined,
+          // New reminders belong to the family being viewed, not the account's owned family.
+          familyId: !editingId ? activeFamily?.id : undefined,
           notifyChannels,
         }),
       })
@@ -612,7 +609,7 @@ function RemindersPageContent() {
         </Dialog>
       </div>
 
-      <ReminderQuickAdd members={familyMembers} onCreated={() => fetchReminders(true)} />
+      <ReminderQuickAdd members={familyMembers} familyId={activeFamily?.id} onCreated={() => fetchReminders(true)} />
 
       {/* Who */}
       {familyCount > 0 && (

@@ -144,7 +144,14 @@ export function useFamilies() {
       }
       
       await mutate()
-      return { success: true, family: data.family }
+      // The API returns the new family as `data` (it used to be read from
+      // `family`, which was always undefined), plus the free-trial message.
+      return {
+        success: true,
+        family: (data.data ?? data.family) as { id: string; name: string } | undefined,
+        trialStarted: data.trialStarted === true,
+        message: data.message as string | undefined,
+      }
     } catch (err) {
       return { success: false, error: 'Network error' }
     }

@@ -25,11 +25,15 @@ export async function GET(request: NextRequest) {
     if (me.length === 0) return NextResponse.json({ success: false, error: "Not a member of this family" }, { status: 403 })
     if (me[0].role === "GUEST") return guestForbidden()
 
+    // Pings belong to the person, not the family, so visibility comes from
+    // their membership in THIS family: a guest here is never readable here,
+    // even if they share in a family of their own.
     const target = await sql`
       SELECT fm.user_id, COALESCE(ls.share_with_family, false) AS share, COALESCE(ls.mode, 'OFF') AS mode
       FROM family_members fm
       LEFT JOIN location_settings ls ON ls.family_member_id = fm.id
       WHERE fm.id = ${memberId} AND fm.family_id = ${familyId} AND fm.is_active = true
+        AND fm.role <> 'GUEST'
     `
     if (target.length === 0 || !target[0].user_id) {
       return NextResponse.json({ success: false, error: "Member not found" }, { status: 404 })

@@ -81,6 +81,7 @@ import { cn } from '@/lib/utils'
 import { MemberAvatar, AppearanceButton } from '@/components/member-avatar'
 import { AccountStatusBadge } from '@/components/account-status-badge'
 import { JoinFamilyButton } from '@/components/join-family-dialog'
+import { StartOwnFamilyButton, useCanStartOwnFamily } from '@/components/start-own-family'
 import { BirthdateInput, ChildAccountDialog, RoleChoiceCard, Turns18Chip, type AgeAwareChild } from '@/components/child-age'
 
 export default function FamilyPage() {
@@ -93,6 +94,7 @@ export default function FamilyPage() {
   // Parents/guardians only (ADULT members are peers, not supervisors).
   const viewerIsAdult = ['PARENT', 'GUARDIAN'].includes(viewerRole?.currentUserRole || viewerRole?.userRole || '')
   const { isGuest } = useMyRole()
+  const canStartOwn = useCanStartOwnFamily()
   // Role choices at 18 and child account invites are parent/owner actions.
   const viewerIsParent = (viewerRole?.currentUserRole || viewerRole?.userRole) === 'PARENT' || (!!family && !!user && family.ownerId === user.id)
   const [childBirthdate, setChildBirthdate] = useState('')
@@ -443,6 +445,7 @@ export default function FamilyPage() {
             </Button>
           )}
           <JoinFamilyButton />
+          <StartOwnFamilyButton />
           <Button variant="outline" size="sm" asChild>
             <Link href="/family/settings">
               <Settings className="mr-1.5 h-4 w-4" />
@@ -507,6 +510,11 @@ export default function FamilyPage() {
                   : 'Tasks and events will appear here when assigned to family members'
               }
             />
+            {isGuest && canStartOwn && (
+              <p className="mt-2 text-center text-sm text-muted-foreground">
+                Want your own family? Start one without a new account. You&apos;ll stay in this one too.
+              </p>
+            )}
           </CardContent>
         </Card>
       ) : (

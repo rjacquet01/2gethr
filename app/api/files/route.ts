@@ -29,14 +29,17 @@ export async function GET(request: NextRequest) {
     if (pathname.startsWith("profile-photos/")) {
       const pathUserId = pathname.split("/")[1]
       
-      // If not own photo, check if in same family
-      if (pathUserId !== user.id && user.primaryFamily) {
+      // If not own photo, the owner must share any active family with the
+      // viewer (not just the viewer's owned/"primary" one: someone can own a
+      // family and also be a member, e.g. a guest, of another).
+      if (pathUserId !== user.id) {
         const { sql } = await import("@/lib/db")
         const familyMembers = await sql`
-          SELECT user_id FROM family_members 
-          WHERE family_id = ${user.primaryFamily.id} 
-          AND user_id = ${pathUserId}
-          AND is_active = true
+          SELECT 1 FROM family_members them
+          JOIN family_members me ON me.family_id = them.family_id
+          WHERE them.user_id = ${pathUserId} AND them.is_active = true
+            AND me.user_id = ${user.id} AND me.is_active = true
+          LIMIT 1
         `
         
         if (familyMembers.length === 0) {

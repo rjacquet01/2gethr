@@ -4,6 +4,7 @@ import { getUserFromRequest } from '@/lib/auth'
 import { splitIcsComponents, parseIcsField, parseIcsDateValue } from '@/lib/services/caldav'
 import { createNotification } from '@/lib/notifications'
 import { ensureEventParticipantChildColumns, resolveLoginlessChildIds, isAdultRole } from '@/lib/assignment'
+import { defaultFamilyFor, membershipIn } from '@/lib/permissions'
 
 // POST - One-off import of a .ics file (uploaded) or a remote .ics/webcal
 // URL, into the caller's family. This is the generic "import from any
@@ -32,16 +33,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: error || 'Not authenticated' }, { status: 401 })
     }
 
-    const familyMembership = await sql`
-      SELECT family_id, role FROM family_members
-      WHERE user_id = ${user.id} AND is_active = true
-      LIMIT 1
-    `
-    if (familyMembership.length === 0) {
+    // Import into the family being viewed (?familyId=, works for both upload
+    // and URL imports), using the importer's role in THAT family.
+    const requestedFamilyId = request.nextUrl.searchParams.get('familyId')
+    const familyMembership = requestedFamilyId
+      ? await membershipIn(requestedFamilyId, user.id)
+      : await defaultFamilyFor(user.id)
+    if (!familyMembership) {
       return NextResponse.json({ success: false, error: 'No family found' }, { status: 404 })
     }
-    const familyId = familyMembership[0].family_id
-    const importerRole = familyMembership[0].role as string
+    const familyId = familyMembership.familyId
+    const importerRole = familyMembership.role as string
 
     // Optional: assign every event in this file to family members. Accounts
     // (assignUserIds) and children with no login (assignChildIds).
