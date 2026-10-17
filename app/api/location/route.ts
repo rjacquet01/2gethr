@@ -10,6 +10,7 @@ import { sendSMSMetered, SMS_TEMPLATES, isTwilioConfigured } from "@/lib/service
 import { sendEmail, EMAIL_TEMPLATES, isResendConfigured } from "@/lib/services/email"
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
 import { distanceMeters, evaluateGeofence, confirmsDeparture, suggestedPingIntervalSec } from "@/lib/geofence"
+import { shouldMergeWithPrevious } from "@/lib/location-dedupe"
 import { fulfillLocationRequests } from "@/lib/location-schema"
 import { alertFamilyAdults } from "@/lib/family-alerts"
 import { ensureMemberAppearanceColumns } from "@/lib/member-appearance"
@@ -308,7 +309,7 @@ export async function POST(request: NextRequest) {
     // alert fire once per drop (it was never selected, so the alert repeated
     // on every ping at 15% or below).
     const prevPings = await sql`
-      SELECT latitude, longitude, accuracy, battery_level, timestamp FROM location_pings
+      SELECT id, latitude, longitude, accuracy, battery_level, timestamp FROM location_pings
       WHERE user_id = ${user.id}
       ORDER BY timestamp DESC
       LIMIT 1
@@ -347,30 +348,78 @@ export async function POST(request: NextRequest) {
       `
     }
 
-    // Store location ping - use text-based ID to match column type
-    const pingId = `ping_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-    await sql`
-      INSERT INTO location_pings (
-        id, user_id, latitude, longitude, accuracy, altitude,
-        speed, heading, battery_level, timestamp
+    // Geofences are evaluated on every report, before storing it: whether this
+    // report changed an arrival/departure decides below whether it may be
+    // merged into the previous row.
+    const moved = prevPing
+      ? distanceMeters(prevPing.latitude, prevPing.longitude, validatedData.latitude, validatedData.longitude)
+      : null
+    let suggestedIntervalSec: number | null = null
+    let geofenceChanged = false
+    if (subscription.features.geofencing) {
+      const geo = await checkGeofences(
+        user.id,
+        setting.family_id,
+        validatedData.latitude,
+        validatedData.longitude,
+        validatedData.accuracy,
+        prevPing
       )
-      VALUES (
-        ${pingId},
-        ${user.id},
-        ${validatedData.latitude},
-        ${validatedData.longitude},
-        ${validatedData.accuracy ?? null},
-        ${validatedData.altitude ?? null},
-        ${validatedData.speed ?? null},
-        ${validatedData.heading ?? null},
-        ${validatedData.batteryLevel ?? null},
-        ${validatedData.timestamp || new Date().toISOString()}
-      )
-    `
+      geofenceChanged = geo.recorded > 0
+      // Only report faster near a boundary while actually moving; a phone
+      // standing still (e.g. at home) keeps its normal interval.
+      suggestedIntervalSec = suggestedPingIntervalSec(geo.nearestGap, moved)
+    }
 
-    // Free tier gets live location only, not history: keep just the latest ping.
-    if (subscription.tier === "FREE" && !(await isUnderLegalHold(user.id))) {
-      await sql`DELETE FROM location_pings WHERE user_id = ${user.id} AND id != ${pingId}`
+    // A still phone repeating the same spot: move the previous row forward
+    // instead of adding one (lib/location-dedupe.ts). Last-seen stays fresh;
+    // a new row is still written every few minutes, after real movement, or
+    // when a geofence state changed.
+    const pingTimestamp = validatedData.timestamp || new Date().toISOString()
+    const merge = shouldMergeWithPrevious({
+      prev: prevPings[0]
+        ? { id: prevPings[0].id as string, latitude: Number(prevPings[0].latitude), longitude: Number(prevPings[0].longitude) }
+        : null,
+      next: { latitude: validatedData.latitude, longitude: validatedData.longitude },
+      distanceM: moved,
+      nowMs: Date.now(),
+      geofenceChanged,
+      hasQueued: queued.length > 0,
+    })
+    let pingId: string
+    if (merge) {
+      pingId = prevPings[0].id as string
+      await sql`
+        UPDATE location_pings
+        SET timestamp = ${pingTimestamp}, battery_level = COALESCE(${validatedData.batteryLevel ?? null}, battery_level)
+        WHERE id = ${pingId}
+      `
+    } else {
+      // Store location ping - use text-based ID to match column type
+      pingId = `ping_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+      await sql`
+        INSERT INTO location_pings (
+          id, user_id, latitude, longitude, accuracy, altitude,
+          speed, heading, battery_level, timestamp
+        )
+        VALUES (
+          ${pingId},
+          ${user.id},
+          ${validatedData.latitude},
+          ${validatedData.longitude},
+          ${validatedData.accuracy ?? null},
+          ${validatedData.altitude ?? null},
+          ${validatedData.speed ?? null},
+          ${validatedData.heading ?? null},
+          ${validatedData.batteryLevel ?? null},
+          ${pingTimestamp}
+        )
+      `
+
+      // Free tier gets live location only, not history: keep just the latest ping.
+      if (subscription.tier === "FREE" && !(await isUnderLegalHold(user.id))) {
+        await sql`DELETE FROM location_pings WHERE user_id = ${user.id} AND id != ${pingId}`
+      }
     }
 
     // A fresh fix answers any "request location now" a parent made.
@@ -393,25 +442,6 @@ export async function POST(request: NextRequest) {
       } catch (err) {
         console.error("Low battery alert failed (non-fatal):", err)
       }
-    }
-
-    // Check geofences if enabled (Premium feature)
-    let suggestedIntervalSec: number | null = null
-    if (subscription.features.geofencing) {
-      const gap = await checkGeofences(
-        user.id,
-        setting.family_id,
-        validatedData.latitude,
-        validatedData.longitude,
-        validatedData.accuracy,
-        prevPing
-      )
-      // Only report faster near a boundary while actually moving; a phone
-      // standing still (e.g. at home) keeps its normal interval.
-      const moved = prevPing
-        ? distanceMeters(prevPing.latitude, prevPing.longitude, validatedData.latitude, validatedData.longitude)
-        : null
-      suggestedIntervalSec = suggestedPingIntervalSec(gap, moved)
     }
 
     // Keep paid-plan history within the plan's window. Runs on ~2% of pings
@@ -451,7 +481,7 @@ async function checkGeofences(
   longitude: number,
   accuracy?: number | null,
   prevPing?: { latitude: number; longitude: number; accuracy: number | null; ageSec: number } | null
-): Promise<number | null> {
+): Promise<{ nearestGap: number | null; recorded: number }> {
   // Get all geofence-enabled places for this family
   await ensurePlaceNotifyChannelsColumn()
   const places = await sql`
@@ -459,7 +489,7 @@ async function checkGeofences(
     FROM saved_places
     WHERE family_id = ${familyId} AND geofence_enabled = true
   `
-  if (places.length === 0) return null
+  if (places.length === 0) return { nearestGap: null, recorded: 0 }
 
   // Last arrival/departure state per place for this user, in one query.
   const lastRows = await sql`
@@ -472,6 +502,7 @@ async function checkGeofences(
   for (const r of lastRows) lastByPlace.set(r.saved_place_id, r.event_type)
 
   let nearestGap: number | null = null
+  let recordedCount = 0
 
   for (const place of places) {
     const radius = Number(place.radius)
@@ -500,6 +531,7 @@ async function checkGeofences(
     // overlapping pings from double-alerting.
     const recorded = await recordGeofenceEvent(userId, place.id, transition, latitude, longitude)
     if (!recorded) continue
+    recordedCount++
 
     const wantsAlert = transition === "ARRIVAL" ? place.alert_on_arrival : place.alert_on_departure
     if (wantsAlert) {
@@ -507,7 +539,7 @@ async function checkGeofences(
     }
   }
 
-  return nearestGap
+  return { nearestGap, recorded: recordedCount }
 }
 
 async function recordGeofenceEvent(

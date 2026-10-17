@@ -30,6 +30,7 @@ import { SosButton } from '@/components/sos-button'
 import { MemberAvatar } from '@/components/member-avatar'
 import { AccountStatusBadge } from '@/components/account-status-badge'
 import { cn } from '@/lib/utils'
+import { StillnessTracker, MAX_QUIET_MS } from '@/lib/stillness'
 
 // High-accuracy GPS often times out on laptops/desktops and indoors. Try it
 // first, then fall back to a coarser (Wi-Fi/cell/IP) fix so sharing still works.
@@ -412,10 +413,18 @@ function LocationPageContent() {
       .catch(() => {})
     const lowBattery = () => !!battery && !battery.charging && battery.level < LOW_BATTERY_LEVEL
 
-    const effectiveIntervalMs = () =>
-      lowBattery()
-        ? Math.max(LOW_BATTERY_INTERVAL_MS, userIntervalMs)
-        : Math.max(MIN_GAP_MS, suggestedMs ? Math.min(userIntervalMs, suggestedMs) : userIntervalMs)
+    // Still/moving back-off (lib/stillness.ts): after STILL_1_AFTER_MS in one
+    // place report every STILL_1_INTERVAL_MS, after STILL_2_AFTER_MS every
+    // STILL_2_INTERVAL_MS (never quieter than MAX_QUIET_MS because of this).
+    // Leaving the spot reports at once and returns to the normal pace.
+    const motion = new StillnessTracker()
+
+    const effectiveIntervalMs = () => {
+      if (lowBattery()) return Math.max(LOW_BATTERY_INTERVAL_MS, userIntervalMs)
+      const moving = Math.max(MIN_GAP_MS, suggestedMs ? Math.min(userIntervalMs, suggestedMs) : userIntervalMs)
+      const still = motion.stillIntervalMs(Date.now())
+      return still ? Math.max(moving, Math.min(still, MAX_QUIET_MS)) : moving
+    }
 
     const metersBetween = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
       const R = 6371e3
@@ -482,7 +491,8 @@ function LocationPageContent() {
     // Recent fixes (last 2 minutes) to measure how far the phone has moved.
     const recent: { t: number; lat: number; lng: number; acc: number }[] = []
 
-    const noteFix = (position: GeolocationPosition) => {
+    // Records a fix; returns true when it ended a still period (report now).
+    const noteFix = (position: GeolocationPosition): boolean => {
       const now = Date.now()
       const fix = {
         t: now,
@@ -490,6 +500,13 @@ function LocationPageContent() {
         lng: position.coords.longitude,
         acc: position.coords.accuracy ?? 0,
       }
+      const { leftStill } = motion.update({
+        t: now,
+        lat: fix.lat,
+        lng: fix.lng,
+        accuracy: position.coords.accuracy ?? null,
+        speed: position.coords.speed ?? null,
+      })
       while (recent.length > 0 && now - recent[0].t > MOVE_WINDOW_MS) recent.shift()
       // Moved >= 50 m in the window. The threshold also grows with the fixes'
       // own error, so coarse low-accuracy fixes jittering in place don't count.
@@ -497,14 +514,16 @@ function LocationPageContent() {
         lastMovedAt = now
       }
       recent.push(fix)
+      return leftStill
     }
 
     const isStill = () => Date.now() - lastMovedAt >= STILL_AFTER_MS
 
     const onWatchFix = (position: GeolocationPosition) => {
-      noteFix(position)
+      const leftStill = noteFix(position)
       reconcileTracking()
-      sendLocation(position)
+      // Leaving a still spot is reported right away, whatever the interval.
+      sendLocation(position, leftStill)
     }
 
     const startWatch = (high: boolean) => {
@@ -572,8 +591,8 @@ function LocationPageContent() {
         (pos) => {
           done()
           if (stopped) return
-          noteFix(pos)
-          sendLocation(pos)
+          const leftStill = noteFix(pos)
+          sendLocation(pos, leftStill)
         },
         () => done(),
         {
