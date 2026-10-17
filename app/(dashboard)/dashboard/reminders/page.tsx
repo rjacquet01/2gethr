@@ -169,10 +169,20 @@ function RemindersPageContent() {
     )
   }
 
+  // The family being viewed (switcher choice): the list, new reminders and the
+  // people they can be assigned to all come from it.
+  const { families, isLoading: familiesLoading } = useFamilies()
+  const activeFamily = families[0]
+  const activeFamilyId = activeFamily?.id
+
   const fetchReminders = useCallback(async (silent = false) => {
+    if (!activeFamilyId) {
+      if (!familiesLoading) setIsLoading(false)
+      return
+    }
     if (!silent) setIsLoading(true)
     try {
-      const res = await authFetch('/api/reminders')
+      const res = await authFetch(`/api/reminders?familyId=${encodeURIComponent(activeFamilyId)}`)
       if (res.ok) {
         const data = await res.json()
         setReminders(data.data || [])
@@ -185,7 +195,7 @@ function RemindersPageContent() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [activeFamilyId, familiesLoading])
 
   useEffect(() => {
     fetchReminders()
@@ -207,8 +217,6 @@ function RemindersPageContent() {
   // it and can be assigned to its members (e.g. a spouse or a child). A
   // child with no login is listed too; their reminder is delivered to the
   // parent who creates it.
-  const { families } = useFamilies()
-  const activeFamily = families[0]
   useEffect(() => {
     setFamilyMembers(
       (activeFamily?.members || []).map((m) => ({

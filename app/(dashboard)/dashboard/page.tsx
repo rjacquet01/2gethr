@@ -87,9 +87,11 @@ export default function DashboardPage() {
   const [reminders, setReminders] = useState<ReminderSummary[]>([])
   const [remindersLoading, setRemindersLoading] = useState(true)
 
+  // Reminders for the family being viewed only (the switcher's choice).
   const fetchReminders = useCallback(async () => {
+    if (!primaryFamily?.id) return
     try {
-      const res = await authFetch('/api/reminders?status=PENDING')
+      const res = await authFetch(`/api/reminders?status=PENDING&familyId=${encodeURIComponent(primaryFamily.id)}`)
       if (res.ok) {
         const data = await res.json()
         setReminders((data.data || []).slice(0, 5))
@@ -99,7 +101,7 @@ export default function DashboardPage() {
     } finally {
       setRemindersLoading(false)
     }
-  }, [])
+  }, [primaryFamily?.id])
 
   useEffect(() => {
     fetchReminders()

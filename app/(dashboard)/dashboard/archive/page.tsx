@@ -75,7 +75,7 @@ interface Item {
   id: string
   title: string
   sub: string
-  when: Date // when it was archived / last changed
+  when: Date | null // when it was archived / last changed (null = unknown, never epoch)
 }
 
 const KIND_META: Record<Kind, { label: string; plural: string; icon: typeof Bell; tone: string }> = {
@@ -84,7 +84,8 @@ const KIND_META: Record<Kind, { label: string; plural: string; icon: typeof Bell
   reminder: { label: 'Reminder', plural: 'Reminders', icon: Bell, tone: 'bg-amber-500/10 text-amber-600' },
 }
 
-function bucketOf(d: Date): string {
+function bucketOf(d: Date | null): string {
+  if (!d) return 'Undated'
   if (isToday(d)) return 'Today'
   if (isYesterday(d)) return 'Yesterday'
   if (differenceInCalendarDays(new Date(), d) <= 7) return 'This week'
@@ -104,20 +105,27 @@ export default function ArchivePage() {
   const [selecting, setSelecting] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
-  // Archived tasks belong to the family being viewed (the switcher's choice).
-  const { families } = useFamilies()
+  // The archive is the family being viewed (the switcher's choice): tasks,
+  // events and reminders are all fetched for it and re-fetched on a switch.
+  const { families, isLoading: familiesLoading } = useFamilies()
   const familyId = families[0]?.id
 
   const fetchArchivedItems = useCallback(async () => {
+    // Everything here is per family; wait until the selected family is known
+    // (or, with no family at all, just stop loading).
+    if (!familyId) {
+      if (!familiesLoading) setIsLoading(false)
+      return
+    }
     setIsLoading(true)
     try {
       const [tasksRes, eventsRes, remindersRes] = await Promise.all([
-        authFetch(familyId ? `/api/tasks/archive?familyId=${encodeURIComponent(familyId)}` : '/api/tasks/archive'),
-        authFetch('/api/events?status=ARCHIVED'),
+        authFetch(`/api/tasks/archive?familyId=${encodeURIComponent(familyId)}`),
+        authFetch(`/api/events?status=ARCHIVED&familyId=${encodeURIComponent(familyId)}`),
         // A reminder has no separate "archive" step - completing or
         // dismissing it is the end of its active life - so ?status=ARCHIVED
         // means "everything no longer active" (COMPLETED, DISMISSED, ARCHIVED).
-        authFetch('/api/reminders?status=ARCHIVED'),
+        authFetch(`/api/reminders?status=ARCHIVED&familyId=${encodeURIComponent(familyId)}`),
       ])
       if (tasksRes.ok) {
         const d = await tasksRes.json()
@@ -138,16 +146,22 @@ export default function ArchivePage() {
     } finally {
       setIsLoading(false)
     }
-  }, [familyId])
+  }, [familyId, familiesLoading])
 
   useEffect(() => {
     fetchArchivedItems()
   }, [fetchArchivedItems])
 
   const items: Item[] = useMemo(() => {
-    const safe = (s?: string) => {
-      const d = s ? parseISO(s) : new Date(0)
-      return Number.isNaN(d.getTime()) ? new Date(0) : d
+    // First real date among the candidates. Missing or invalid dates give
+    // null (shown without a date, sorted last), never 1 Jan 1970.
+    const safe = (...candidates: Array<string | null | undefined>): Date | null => {
+      for (const s of candidates) {
+        if (!s) continue
+        const d = parseISO(s)
+        if (!Number.isNaN(d.getTime()) && d.getTime() > 0) return d
+      }
+      return null
     }
     const t: Item[] = tasks.map((x) => ({
       key: `task:${x.id}`,
@@ -164,8 +178,8 @@ export default function ArchivePage() {
       kind: 'event',
       id: x.id,
       title: x.title,
-      sub: [x.startTime ? format(safe(x.startTime), 'MMM d, yyyy') : null, x.location].filter(Boolean).join(' · '),
-      when: safe(x.updatedAt),
+      sub: [safe(x.startTime) ? format(safe(x.startTime)!, 'MMM d, yyyy') : null, x.location].filter(Boolean).join(' · '),
+      when: safe(x.updatedAt, x.endTime, x.startTime),
     }))
     const r: Item[] = reminders.map((x) => ({
       key: `reminder:${x.id}`,
@@ -175,7 +189,7 @@ export default function ArchivePage() {
       sub: x.status === 'COMPLETED' ? 'Completed' : x.status === 'DISMISSED' ? 'Dismissed' : 'Archived',
       when: safe(x.updated_at),
     }))
-    return [...t, ...e, ...r].sort((a, b) => b.when.getTime() - a.when.getTime())
+    return [...t, ...e, ...r].sort((a, b) => (b.when?.getTime() ?? -Infinity) - (a.when?.getTime() ?? -Infinity))
   }, [tasks, events, reminders])
 
   const q = query.trim().toLowerCase()
@@ -455,7 +469,7 @@ export default function ArchivePage() {
                       <p className="truncate text-sm font-medium">{it.title}</p>
                       <p className="truncate text-xs text-muted-foreground">
                         {it.sub && <>{it.sub} · </>}
-                        {format(it.when, 'MMM d, yyyy')}
+                        {it.when ? format(it.when, 'MMM d, yyyy') : ''}
                       </p>
                     </button>
                     {!selecting && (

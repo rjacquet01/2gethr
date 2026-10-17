@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
           e.id, e.calendar_id, e.title, e.description, e.location,
           e.start_time, e.end_time, e.is_all_day, e.status, e.visibility,
           e.color, e.category, e.reminder_minutes, e.is_recurring, e.created_by_id,
-          e.saved_place_id, e.recurrence_rule_id, e.created_at,
+          e.saved_place_id, e.recurrence_rule_id, e.created_at, e.updated_at,
           c.name as calendar_name, c.color as calendar_color,
           u.first_name as creator_first_name, u.last_name as creator_last_name,
           sp.name as place_name, sp.address as place_address
@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
             e.id, e.calendar_id, e.title, e.description, e.location,
             e.start_time, e.end_time, e.is_all_day, e.status, e.visibility,
             e.color, e.category, e.reminder_minutes, e.is_recurring, e.created_by_id,
-            e.saved_place_id, e.recurrence_rule_id, e.created_at,
+            e.saved_place_id, e.recurrence_rule_id, e.created_at, e.updated_at,
             c.name as calendar_name, c.color as calendar_color,
             u.first_name as creator_first_name, u.last_name as creator_last_name,
             sp.name as place_name, sp.address as place_address
@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
             e.id, e.calendar_id, e.title, e.description, e.location,
             e.start_time, e.end_time, e.is_all_day, e.status, e.visibility,
             e.color, e.category, e.reminder_minutes, e.is_recurring, e.created_by_id,
-            e.saved_place_id, e.recurrence_rule_id, e.created_at,
+            e.saved_place_id, e.recurrence_rule_id, e.created_at, e.updated_at,
             c.name as calendar_name, c.color as calendar_color,
             u.first_name as creator_first_name, u.last_name as creator_last_name,
             sp.name as place_name, sp.address as place_address
@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
             e.id, e.calendar_id, e.title, e.description, e.location,
             e.start_time, e.end_time, e.is_all_day, e.status, e.visibility,
             e.color, e.category, e.reminder_minutes, e.is_recurring, e.created_by_id,
-            e.saved_place_id, e.recurrence_rule_id, e.created_at,
+            e.saved_place_id, e.recurrence_rule_id, e.created_at, e.updated_at,
             c.name as calendar_name, c.color as calendar_color,
             u.first_name as creator_first_name, u.last_name as creator_last_name,
             sp.name as place_name, sp.address as place_address
@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
             e.id, e.calendar_id, e.title, e.description, e.location,
             e.start_time, e.end_time, e.is_all_day, e.status, e.visibility,
             e.color, e.category, e.reminder_minutes, e.is_recurring, e.created_by_id,
-            e.saved_place_id, e.recurrence_rule_id, e.created_at,
+            e.saved_place_id, e.recurrence_rule_id, e.created_at, e.updated_at,
             c.name as calendar_name, c.color as calendar_color,
             u.first_name as creator_first_name, u.last_name as creator_last_name,
             sp.name as place_name, sp.address as place_address
@@ -213,7 +213,7 @@ export async function GET(request: NextRequest) {
           e.id, e.calendar_id, e.title, e.description, e.location,
           e.start_time, e.end_time, e.is_all_day, e.status, e.visibility,
           e.color, e.category, e.reminder_minutes, e.is_recurring, e.created_by_id,
-          e.saved_place_id, e.recurrence_rule_id, e.created_at,
+          e.saved_place_id, e.recurrence_rule_id, e.created_at, e.updated_at,
           c.name as calendar_name, c.color as calendar_color, c.family_id,
           u.first_name as creator_first_name, u.last_name as creator_last_name,
           sp.name as place_name, sp.address as place_address
@@ -333,6 +333,9 @@ export async function GET(request: NextRequest) {
         } : null,
         participants: participantsByEvent[e.id] || [],
         createdAt: e.created_at,
+        // When it last changed (e.g. archived). Falls back to the event's own
+        // times so a client never has to invent a date.
+        updatedAt: e.updated_at ?? e.end_time ?? e.start_time,
       })),
     })
   } catch (error) {

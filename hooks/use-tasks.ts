@@ -42,8 +42,9 @@ export function useTasks(familyId?: string, status?: string) {
   if (familyId) params.set('familyId', familyId)
   if (status) params.set('status', status)
   
-  // Build the URL - always fetch even without familyId (API handles getting user's families)
-  const url = `/api/tasks?${params.toString()}`
+  // Tasks are per family (the switcher's choice). Without a familyId the API
+  // returns every family's tasks mixed together, so wait until it is known.
+  const url = familyId ? `/api/tasks?${params.toString()}` : null
   
   const { data, error, isLoading, mutate } = useSWR<{ data: Task[] }>(
     url,
