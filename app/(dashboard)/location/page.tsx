@@ -98,6 +98,17 @@ interface LocationSettings {
   updateIntervalSec: number
 }
 
+/** This phone's battery as a whole percent, or null where the browser doesn't expose it. */
+async function currentBatteryLevel(): Promise<number | null> {
+  try {
+    const getBattery = (navigator as Navigator & { getBattery?: () => Promise<{ level: number }> }).getBattery
+    const b = getBattery ? await getBattery.call(navigator) : null
+    return b ? Math.round(b.level * 100) : null
+  } catch {
+    return null
+  }
+}
+
 // Guests don't get family location: show a notice instead of mounting the
 // page (whose hooks would call the location APIs).
 export default function LocationPage() {
@@ -358,8 +369,33 @@ function LocationPageContent() {
     let lastSent: { lat: number; lng: number } | null = null
     let sending = false
 
+    // Battery level goes with each ping (parents see it and get a low-battery
+    // heads-up). Below 20% and not charging, report at most every 5 minutes so
+    // sharing doesn't drain a nearly flat phone. Browsers without the Battery
+    // Status API (Safari, Firefox) just send no level and keep the normal pace.
+    const LOW_BATTERY_LEVEL = 0.2
+    const LOW_BATTERY_INTERVAL_MS = 5 * 60_000
+    type BatteryLike = EventTarget & { level: number; charging: boolean }
+    let battery: { level: number; charging: boolean } | null = null
+    let batteryManager: BatteryLike | null = null
+    const readBattery = () => {
+      if (batteryManager) battery = { level: batteryManager.level, charging: batteryManager.charging }
+    }
+    const getBattery = (navigator as Navigator & { getBattery?: () => Promise<BatteryLike> }).getBattery
+    getBattery?.call(navigator)
+      .then((b) => {
+        batteryManager = b
+        readBattery()
+        b.addEventListener('levelchange', readBattery)
+        b.addEventListener('chargingchange', readBattery)
+      })
+      .catch(() => {})
+    const lowBattery = () => !!battery && !battery.charging && battery.level < LOW_BATTERY_LEVEL
+
     const effectiveIntervalMs = () =>
-      Math.max(MIN_GAP_MS, suggestedMs ? Math.min(userIntervalMs, suggestedMs) : userIntervalMs)
+      lowBattery()
+        ? Math.max(LOW_BATTERY_INTERVAL_MS, userIntervalMs)
+        : Math.max(MIN_GAP_MS, suggestedMs ? Math.min(userIntervalMs, suggestedMs) : userIntervalMs)
 
     const metersBetween = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
       const R = 6371e3
@@ -377,7 +413,8 @@ function LocationPageContent() {
       const sinceLast = now - lastSentAt
       const moved = lastSent ? metersBetween(lastSent, here) : Infinity
       const due = sinceLast >= effectiveIntervalMs() - 1000
-      const movedEnough = moved >= MOVE_SEND_METERS && sinceLast >= MIN_GAP_MS
+      // On low battery, movement doesn't trigger extra reports either.
+      const movedEnough = moved >= MOVE_SEND_METERS && sinceLast >= (lowBattery() ? LOW_BATTERY_INTERVAL_MS : MIN_GAP_MS)
       if (sending || !(force || due || movedEnough)) return
       sending = true
       lastSentAt = now
@@ -393,6 +430,7 @@ function LocationPageContent() {
             altitude: position.coords.altitude ?? null,
             speed: position.coords.speed ?? null,
             heading: position.coords.heading ?? null,
+            batteryLevel: battery ? Math.round(battery.level * 100) : null,
             memberId: mySettings.memberId,
             familyId: mySettings.familyId,
           }),
@@ -461,6 +499,8 @@ function LocationPageContent() {
       clearTimeout(heartbeat)
       clearInterval(requestWatch)
       document.removeEventListener('visibilitychange', onVisible)
+      batteryManager?.removeEventListener('levelchange', readBattery)
+      batteryManager?.removeEventListener('chargingchange', readBattery)
     }
   }, [mySettings?.mode, mySettings?.updateIntervalSec, mySettings?.shareWithFamily, mySettings?.memberId, mySettings?.familyId])
 
@@ -501,6 +541,7 @@ function LocationPageContent() {
                   altitude: position.coords.altitude ?? null,
                   speed: position.coords.speed ?? null,
                   heading: position.coords.heading ?? null,
+                  batteryLevel: await currentBatteryLevel(),
                   memberId,
                   familyId,
                 }),
