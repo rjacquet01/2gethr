@@ -9,7 +9,7 @@ import { z } from "zod"
 import { sendSMSMetered, SMS_TEMPLATES, isTwilioConfigured } from "@/lib/services/sms"
 import { sendEmail, EMAIL_TEMPLATES, isResendConfigured } from "@/lib/services/email"
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
-import { distanceMeters, evaluateGeofence, suggestedPingIntervalSec } from "@/lib/geofence"
+import { distanceMeters, evaluateGeofence, confirmsDeparture, suggestedPingIntervalSec } from "@/lib/geofence"
 import { fulfillLocationRequests } from "@/lib/location-schema"
 import { alertFamilyAdults } from "@/lib/family-alerts"
 import { ensureMemberAppearanceColumns } from "@/lib/member-appearance"
@@ -285,9 +285,12 @@ export async function POST(request: NextRequest) {
 
     // Previous ping (before this one is stored) - used to require two
     // consecutive "outside" fixes before declaring a departure, so a single
-    // wild GPS/Wi-Fi outlier can't trigger a false "left" alert.
+    // wild GPS/Wi-Fi outlier can't trigger a false "left" alert. Its accuracy
+    // decides whether it can confirm; its battery level makes the low-battery
+    // alert fire once per drop (it was never selected, so the alert repeated
+    // on every ping at 15% or below).
     const prevPings = await sql`
-      SELECT latitude, longitude, timestamp FROM location_pings
+      SELECT latitude, longitude, accuracy, battery_level, timestamp FROM location_pings
       WHERE user_id = ${user.id}
       ORDER BY timestamp DESC
       LIMIT 1
@@ -296,6 +299,7 @@ export async function POST(request: NextRequest) {
       ? {
           latitude: Number(prevPings[0].latitude),
           longitude: Number(prevPings[0].longitude),
+          accuracy: prevPings[0].accuracy != null ? Number(prevPings[0].accuracy) : null,
           ageSec: (Date.now() - new Date(prevPings[0].timestamp).getTime()) / 1000,
         }
       : null
@@ -428,7 +432,7 @@ async function checkGeofences(
   latitude: number,
   longitude: number,
   accuracy?: number | null,
-  prevPing?: { latitude: number; longitude: number; ageSec: number } | null
+  prevPing?: { latitude: number; longitude: number; accuracy: number | null; ageSec: number } | null
 ): Promise<number | null> {
   // Get all geofence-enabled places for this family
   await ensurePlaceNotifyChannelsColumn()
@@ -463,11 +467,12 @@ async function checkGeofences(
     const transition = evaluateGeofence({ distance, accuracy, radius, wasInside })
     if (!transition) continue
 
-    // A departure also needs the previous fix (if it's recent) to be outside
-    // the radius, so a one-off outlier fix can't fire a false "left".
+    // A departure also needs the previous fix (if it's recent) to be trusted
+    // (accuracy within half the radius) and outside the radius, so a one-off
+    // outlier fix can't fire a false "left".
     if (transition === "DEPARTURE" && prevPing && prevPing.ageSec < 600) {
       const prevDistance = distanceMeters(prevPing.latitude, prevPing.longitude, Number(place.latitude), Number(place.longitude))
-      if (prevDistance <= radius) continue
+      if (!confirmsDeparture({ distance: prevDistance, accuracy: prevPing.accuracy }, radius)) continue
     }
 
     // State is always recorded so arrival/departure tracking stays correct

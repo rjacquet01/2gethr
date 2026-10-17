@@ -19,9 +19,26 @@ export function hysteresisBuffer(radius: number): number {
   return Math.max(20, radius * 0.15)
 }
 
-/** Largest reported GPS error we will trust for a place of this radius. */
+/** Largest reported GPS error we will trust for a place of this radius: half the radius. */
 export function maxTrustedAccuracy(radius: number): number {
-  return Math.max(radius * 0.5, 50)
+  return radius / 2
+}
+
+/**
+ * Only fixes that report their accuracy, and are at least as precise as half
+ * the place's radius, may cause an arrival or departure. A fix with unknown
+ * accuracy can't be checked, so it is never trusted.
+ */
+export function isTrustedFix(accuracy: number | null | undefined, radius: number): boolean {
+  return typeof accuracy === "number" && Number.isFinite(accuracy) && accuracy >= 0 && accuracy <= maxTrustedAccuracy(radius)
+}
+
+/**
+ * A departure needs a second, earlier fix that agrees: the previous fix must
+ * itself be trusted and outside the radius. One stray fix can't fire a "left".
+ */
+export function confirmsDeparture(prev: { distance: number; accuracy: number | null | undefined }, radius: number): boolean {
+  return isTrustedFix(prev.accuracy, radius) && prev.distance > radius
 }
 
 /**
@@ -31,7 +48,8 @@ export function maxTrustedAccuracy(radius: number): number {
  *   even after giving the fix the benefit of its own error margin the person
  *   is beyond radius + hysteresis. This stops a single noisy fix near the
  *   edge from producing a false "left".
- * - Fixes too imprecise for the place size are ignored either way.
+ * - Fixes less precise than half the radius, or with unknown accuracy, are
+ *   ignored either way.
  */
 export function evaluateGeofence(opts: {
   distance: number
@@ -40,8 +58,8 @@ export function evaluateGeofence(opts: {
   wasInside: boolean
 }): GeofenceTransition {
   const { distance, radius, wasInside } = opts
-  const accuracy = opts.accuracy && opts.accuracy > 0 ? opts.accuracy : 0
-  if (accuracy > maxTrustedAccuracy(radius)) return null
+  if (!isTrustedFix(opts.accuracy, radius)) return null
+  const accuracy = opts.accuracy as number
 
   if (!wasInside) {
     return distance <= radius ? "ARRIVAL" : null

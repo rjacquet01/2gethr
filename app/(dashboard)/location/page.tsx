@@ -390,6 +390,9 @@ function LocationPageContent() {
     const getBattery = (navigator as Navigator & { getBattery?: () => Promise<BatteryLike> }).getBattery
     getBattery?.call(navigator)
       .then((b) => {
+        // The page may have been left before the battery answer arrived:
+        // don't attach listeners that cleanup can no longer remove.
+        if (stopped) return
         batteryManager = b
         readBattery()
         b.addEventListener('levelchange', readBattery)
@@ -511,6 +514,7 @@ function LocationPageContent() {
     }
 
     // Single place that decides watch on/off, accuracy mode and heartbeat timing.
+    // Called after every fix, every send (new server hint) and battery change.
     let stopped = false
     function reconcileTracking() {
       if (stopped) return
@@ -520,21 +524,44 @@ function LocationPageContent() {
         const wantHigh = !isStill() || (suggestedMs !== null && suggestedMs <= FAST_HINT_MS)
         if (watchId === null || wantHigh !== highAccuracy) startWatch(wantHigh)
       }
-      scheduleHeartbeat()
+      scheduleHeartbeat(true)
     }
 
     // Forced polls (first fix, coming back to the app, a parent's request) want
     // a fresh fix. Heartbeat polls use the current accuracy mode and accept a
     // fix up to half the interval old, so a still phone rarely wakes the GPS.
+    // Only one poll runs at a time; a forced poll that arrives while another
+    // is in flight upgrades that one to "forced" instead of starting a second.
+    const POLL_STUCK_MS = 60_000 // a geolocation call that never answers
+    let pollingSince = 0
+    let forcePending = false
     const poll = (force = false) => {
+      const now = Date.now()
+      if (pollingSince && now - pollingSince < POLL_STUCK_MS) {
+        if (force) forcePending = true
+        return
+      }
+      pollingSince = now
+      const finish = () => {
+        // A late answer from a poll given up as stuck must not clear a newer one.
+        if (pollingSince === now) pollingSince = 0
+        const wasForced = force || forcePending
+        forcePending = false
+        return wasForced
+      }
       const onFix = (pos: GeolocationPosition) => {
+        const forced = finish()
+        if (stopped) return
         noteFix(pos)
-        sendLocation(pos, force)
+        sendLocation(pos, forced)
+      }
+      const onError = () => {
+        finish()
       }
       if (force) {
-        getPositionWithFallback(onFix, () => {})
+        getPositionWithFallback(onFix, onError)
       } else {
-        getPositionWithFallback(onFix, () => {}, {
+        getPositionWithFallback(onFix, onError, {
           highAccuracy: highAccuracy && !lowBattery(),
           maximumAge: Math.round(effectiveIntervalMs() / 2),
         })
@@ -542,17 +569,35 @@ function LocationPageContent() {
     }
 
     // Heartbeat so a still device keeps reporting on schedule (watchPosition
-    // only fires when the position changes): due one effective interval after
-    // the last report.
+    // only fires when the position changes).
+    // - When the timer fires, the next one is exactly one effective interval
+    //   from now, whether or not the poll ran (hidden page) or succeeded. That
+    //   interval is never under MIN_GAP_MS, so the timer can't spin.
+    // - When reconciling (after a fix/send/battery change) it lines up one
+    //   interval after the last report. If that moment has already passed, an
+    //   already-pending timer is kept, else it fires once after MIN_GAP_MS.
     let heartbeat: ReturnType<typeof setTimeout> | undefined
-    function scheduleHeartbeat() {
+    let heartbeatAt = 0
+    function scheduleHeartbeat(fromLastSent: boolean) {
       if (stopped) return
+      const now = Date.now()
+      const interval = effectiveIntervalMs()
+      let at = fromLastSent && lastSentAt ? lastSentAt + interval : now + interval
+      if (at < now + MIN_GAP_MS) {
+        if (heartbeat && heartbeatAt > now) return
+        at = now + MIN_GAP_MS
+      }
+      if (heartbeat && Math.abs(heartbeatAt - at) < 1000) return
       if (heartbeat) clearTimeout(heartbeat)
-      const wait = lastSentAt ? lastSentAt + effectiveIntervalMs() - Date.now() : effectiveIntervalMs()
-      heartbeat = setTimeout(() => {
-        if (!document.hidden) poll()
-        scheduleHeartbeat()
-      }, Math.max(1000, wait))
+      heartbeatAt = at
+      heartbeat = setTimeout(onHeartbeat, at - now)
+    }
+    function onHeartbeat() {
+      heartbeat = undefined
+      heartbeatAt = 0
+      if (stopped) return
+      if (!document.hidden) poll()
+      scheduleHeartbeat(false)
     }
 
     // Initial fix right away, then start the (low-accuracy) watch and heartbeat.

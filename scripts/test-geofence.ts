@@ -1,5 +1,5 @@
 import assert from "node:assert"
-import { distanceMeters, evaluateGeofence, suggestedPingIntervalSec } from "../lib/geofence"
+import { distanceMeters, evaluateGeofence, suggestedPingIntervalSec, isTrustedFix, confirmsDeparture } from "../lib/geofence"
 
 const HOME = { lat: 37.7749, lng: -122.4194 }
 const R = 100
@@ -43,6 +43,28 @@ assert.deepStrictEqual(run([{ north: 0, acc: 5 }, { north: 130, acc: 5 }]), ["AR
 
 // 6. Small 50m geofence still works with typical 15m accuracy.
 assert.deepStrictEqual(run([{ north: 300, acc: 15 }, { north: 30, acc: 15 }, { north: 90, acc: 15 }], 50), ["ARRIVAL", "DEPARTURE"])
+
+// 6b. Accuracy must be within half the radius. 50m place: 25m ok, 30m ignored
+// (the old 50m floor used to trust it). 100m place: 50m ok, 51m ignored.
+assert.deepStrictEqual(run([{ north: 0, acc: 25 }], 50), ["ARRIVAL"], "50m place, 25m fix trusted")
+assert.deepStrictEqual(run([{ north: 0, acc: 30 }], 50), [], "50m place, 30m fix ignored")
+assert.deepStrictEqual(run([{ north: 0, acc: 50 }], 100), ["ARRIVAL"], "100m place, 50m fix trusted")
+assert.deepStrictEqual(run([{ north: 0, acc: 51 }], 100), [], "100m place, 51m fix ignored")
+// A coarse Wi-Fi/cell fix (~100m) never moves state for a 100m place, either way.
+assert.deepStrictEqual(run([{ north: 0, acc: 10 }, { north: 600, acc: 100 }, { north: 0, acc: 10 }]), ["ARRIVAL"], "coarse fix can't depart")
+// Unknown accuracy is never trusted.
+assert.strictEqual(evaluateGeofence({ distance: 0, accuracy: null, radius: R, wasInside: false }), null)
+assert.strictEqual(evaluateGeofence({ distance: 0, radius: R, wasInside: false }), null)
+assert.strictEqual(evaluateGeofence({ distance: 500, accuracy: undefined, radius: R, wasInside: true }), null)
+assert.strictEqual(isTrustedFix(NaN, R), false)
+assert.strictEqual(isTrustedFix(-1, R), false)
+assert.strictEqual(isTrustedFix(0, R), true)
+
+// 6c. Departure confirmation: the previous fix must be trusted AND outside.
+assert.strictEqual(confirmsDeparture({ distance: 150, accuracy: 10 }, R), true, "prev outside + precise confirms")
+assert.strictEqual(confirmsDeparture({ distance: 80, accuracy: 10 }, R), false, "prev inside doesn't confirm")
+assert.strictEqual(confirmsDeparture({ distance: 150, accuracy: 80 }, R), false, "prev too coarse doesn't confirm")
+assert.strictEqual(confirmsDeparture({ distance: 150, accuracy: null }, R), false, "prev unknown accuracy doesn't confirm")
 
 // 7. Adaptive interval hints.
 assert.strictEqual(suggestedPingIntervalSec(null), null)
