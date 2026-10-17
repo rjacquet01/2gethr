@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { SUBSCRIPTION_TIERS } from "../route"
+import { TRIAL_DAYS } from "@/lib/subscription-tiers"
 
 const updateSubscriptionSchema = z.object({
   tier: z.enum(["FREE", "PREMIUM", "PREMIUM_PLUS"]),
@@ -46,7 +47,7 @@ export async function POST(
 
     const body = await request.json()
 
-    // Free trial (the "Start 14-Day Trial" button on the Subscription page).
+    // Free trial (the "Start N-day trial" button on the Subscription page).
     // That button has been posting { action: 'start_trial', tier } here, but
     // this route only understood plain tier changes - and since the security
     // fix below rejects any paid tier, every trial attempt failed with a
@@ -94,7 +95,7 @@ export async function POST(
         )
       }
 
-      const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+      const trialEnd = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000)
       let subscriptionId: string
       if (existing.length > 0) {
         subscriptionId = existing[0].id
@@ -128,7 +129,7 @@ export async function POST(
           id, subscription_id, old_status, new_status, source, notes, changed_at
         ) VALUES (
           gen_random_uuid(), ${subscriptionId}, ${existing[0]?.status ?? "NONE"}, 'TRIALING',
-          'USER_REQUEST', ${`14-day ${trialTier} trial started`}, NOW()
+          'USER_REQUEST', ${`${TRIAL_DAYS}-day ${trialTier} trial started`}, NOW()
         )
       `
 
@@ -141,7 +142,7 @@ export async function POST(
       return NextResponse.json({
         success: true,
         subscription: { tier: trialTier, status: "TRIALING", trialEnd: trialEnd.toISOString() },
-        message: "Your 14-day free trial has started",
+        message: `Your ${TRIAL_DAYS}-day free trial has started`,
       })
     }
 

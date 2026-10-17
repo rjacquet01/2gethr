@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Check, Sparkles } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import { cn } from '@/lib/utils'
-import { listTierDefinitions, annualSavingsPercent, SUBSCRIPTION_TIERS } from '@/lib/subscription-tiers'
+import { listTierDefinitions, annualSavingsPercent, SUBSCRIPTION_TIERS, TRIAL_DAYS } from '@/lib/subscription-tiers'
 
 // Pulled from lib/subscription-tiers.ts (the same data the in-app
 // /subscription page reads) so this public page can't drift out of sync
@@ -52,7 +52,7 @@ export default function PricingPage() {
             Simple, transparent pricing
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Choose the plan that fits your family. New members get a 14-day free Premium trial.
+            Choose the plan that fits your family. New members get a {TRIAL_DAYS}-day free Premium trial.
           </p>
         </div>
 
@@ -168,7 +168,7 @@ export default function PricingPage() {
             <div>
               <h3 className="font-semibold mb-2">What happens after my trial ends?</h3>
               <p className="text-muted-foreground">
-                After your 14-day Premium trial, you can choose to subscribe or continue with our Free plan. No card is needed to start the trial, so there's nothing to cancel and you won't be charged unless you choose to subscribe.
+                After your {TRIAL_DAYS}-day Premium trial, you can choose to subscribe or continue with our Free plan. No card is needed to start the trial, so there's nothing to cancel and you won't be charged unless you choose to subscribe.
               </p>
             </div>
             <div>

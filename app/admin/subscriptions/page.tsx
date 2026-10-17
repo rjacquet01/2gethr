@@ -35,6 +35,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
+import { TRIAL_DAYS } from '@/lib/subscription-tiers'
 
 interface SubscriptionData {
   id: string
@@ -79,7 +80,7 @@ export default function AdminSubscriptionsPage() {
     action: string
   }>({ open: false, subscription: null, action: '' })
   const [actionReason, setActionReason] = useState('')
-  const [trialDays, setTrialDays] = useState('14')
+  const [trialDays, setTrialDays] = useState(String(TRIAL_DAYS))
   const [newTier, setNewTier] = useState('PREMIUM')
   const [actionLoading, setActionLoading] = useState(false)
 

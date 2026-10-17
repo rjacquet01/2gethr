@@ -37,7 +37,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePurchaseUi } from '@/hooks/use-purchase-ui'
-import { getTierDefinition, SUBSCRIPTION_TIERS, annualSavingsPercent } from '@/lib/subscription-tiers'
+import { getTierDefinition, SUBSCRIPTION_TIERS, annualSavingsPercent, TRIAL_DAYS } from '@/lib/subscription-tiers'
 
 export default function SubscriptionPage() {
   const router = useRouter()
@@ -89,7 +89,7 @@ export default function SubscriptionPage() {
     setIsStartingTrial(false)
 
     if (result.success) {
-      toast.success('Trial started! Enjoy 14 days of premium features.')
+      toast.success(`Trial started! Enjoy ${TRIAL_DAYS} days of premium features.`)
     } else {
       toast.error(result.error || 'Failed to start trial')
     }
@@ -383,7 +383,7 @@ export default function SubscriptionPage() {
                           disabled={isStartingTrial}
                         >
                           {isStartingTrial ? <Spinner className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                          Start 14-day trial
+                          Start {TRIAL_DAYS}-day trial
                         </Button>
                         <Button
                           className="w-full"

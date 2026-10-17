@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Logo } from '@/components/logo'
-import { listTierDefinitions, centsToDisplay } from '@/lib/subscription-tiers'
+import { listTierDefinitions, centsToDisplay, TRIAL_DAYS } from '@/lib/subscription-tiers'
 import { 
   Calendar, 
   MapPin, 
@@ -182,7 +182,7 @@ export default function HomePage() {
               </Button>
             </div>
             <ul className="mt-6 flex flex-wrap items-center justify-center lg:justify-start gap-x-5 gap-y-2 text-sm text-muted-foreground">
-              <li className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" />14-day free trial</li>
+              <li className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" />{TRIAL_DAYS}-day free trial</li>
               <li className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" />No credit card required</li>
               <li className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" />Cancel anytime</li>
             </ul>
@@ -250,7 +250,7 @@ export default function HomePage() {
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-3xl lg:text-4xl font-bold text-foreground mb-3">Simple, family-friendly pricing</h2>
-            <p className="text-lg text-muted-foreground">Start with a 14-day free Premium trial. No credit card needed.</p>
+            <p className="text-lg text-muted-foreground">Start with a {TRIAL_DAYS}-day free Premium trial. No credit card needed.</p>
           </div>
           <div className="grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
             {tiers.map((tier) => {
@@ -305,7 +305,7 @@ export default function HomePage() {
                 Ready to get your family organized?
               </h2>
               <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
-                Bring your calendar, chores and reminders together in one place. Try every Premium feature free for 14 days.
+                Bring your calendar, chores and reminders together in one place. Try every Premium feature free for {TRIAL_DAYS} days.
               </p>
               <Button size="lg" asChild className="h-12 px-8">
                 <Link href="/register">

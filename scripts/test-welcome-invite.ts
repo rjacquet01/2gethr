@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import { TRIAL_DAYS } from '../lib/subscription-tiers'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const testEmail = 'ray.jacquet@yahoo.com'
@@ -37,7 +38,7 @@ async function sendTestEmails() {
                 Thank you for joining Togethr! We're excited to help you keep your family connected and safe.
               </p>
               <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 30px;">
-                Get started by setting up your family profile and inviting your family members. You have a <strong>30-day free Premium trial</strong> to explore all features!
+                Get started by setting up your family profile and inviting your family members. You have a <strong>${TRIAL_DAYS}-day free Premium trial</strong> to explore all features!
               </p>
               <div style="text-align: center;">
                 <a href="https://togethr.app/dashboard" 
@@ -53,7 +54,7 @@ async function sendTestEmails() {
         </body>
         </html>
       `,
-      text: 'Welcome to Togethr, Ray! Thank you for joining. Get started by setting up your family profile. You have a 30-day free Premium trial!'
+      text: `Welcome to Togethr, Ray! Thank you for joining. Get started by setting up your family profile. You have a ${TRIAL_DAYS}-day free Premium trial!`
     })
     console.log('Welcome email sent successfully:', welcomeResult)
   } catch (error) {

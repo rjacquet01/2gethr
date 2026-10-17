@@ -1,5 +1,5 @@
 import { sql } from '@/lib/db'
-import { SUBSCRIPTION_TIERS as TIER_DEFINITIONS, getTierDefinition } from '@/lib/subscription-tiers'
+import { SUBSCRIPTION_TIERS as TIER_DEFINITIONS, getTierDefinition, TRIAL_DAYS } from '@/lib/subscription-tiers'
 
 // Local enums to match database
 const SubscriptionTier = {
@@ -337,7 +337,7 @@ export async function syncSubscription(
 export async function startFreeTrial(
   familyId: string,
   userId: string,
-  trialDays: number = 14
+  trialDays: number = TRIAL_DAYS
 ): Promise<SubscriptionInfo> {
   const trialEnd = new Date()
   trialEnd.setDate(trialEnd.getDate() + trialDays)

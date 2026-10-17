@@ -337,7 +337,7 @@ Get notified when family members arrive at or leave specific locations:
 
 ### Starting a Free Trial
 
-New users can start a 14-day Premium trial:
+New users can start a 7-day Premium trial (length set by TRIAL_DAYS in lib/subscription-tiers.ts):
 1. Go to **Settings** > **Subscription**
 2. Click **"Start Free Trial"**
 3. No payment required during trial

@@ -38,6 +38,13 @@ export interface TierLimits {
   smsMonthlyQuota: number
 }
 
+/**
+ * Length of the free Premium trial for new families, in days. Every trial
+ * length and every "N-day trial" string is built from this. Changing it only
+ * affects trials started afterwards (existing rows keep their trial_ends_at).
+ */
+export const TRIAL_DAYS = 7
+
 /** Text messages per month while a family is on its free trial. */
 export const TRIAL_SMS_QUOTA = 10
 

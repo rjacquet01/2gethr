@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromToken, hasPermission, logAdminAction } from '@/lib/admin-auth'
 import { sql } from '@/lib/db'
 import { stripe, getPriceId } from '@/lib/stripe'
+import { TRIAL_DAYS } from '@/lib/subscription-tiers'
 
 // History is an audit nicety: a failure to write it must never fail the change.
 async function safeHistory(run: () => Promise<unknown>) {
@@ -104,7 +105,7 @@ export async function PATCH(
     }
     
     if (action === 'grant_trial') {
-      const days = parseInt(trialDays) || 14
+      const days = parseInt(trialDays) || TRIAL_DAYS
       const trialEnd = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
       
       await sql`

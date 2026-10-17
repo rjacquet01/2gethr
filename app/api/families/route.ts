@@ -4,6 +4,7 @@ import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 
 // Note: users table uses profile_photo_url column, not avatar_url
 import { z } from "zod"
+import { TRIAL_DAYS } from "@/lib/subscription-tiers"
 
 const createFamilySchema = z.object({
   name: z.string().min(1, "Family name is required").max(100),
@@ -182,13 +183,13 @@ export async function POST(request: NextRequest) {
       VALUES (${calendarId}, ${familyId}, 'Family Calendar', '#3B82F6', true, true, NOW(), NOW())
     `
 
-    // Every new family starts on a 14-day free Premium trial, no card needed.
+    // Every new family starts on a TRIAL_DAYS-day free Premium trial, no card needed.
     // When it ends the cron job (app/api/cron/reminders) drops the family to
     // Free, and the owner can subscribe from the Subscription page. A user can
     // only own one family, so this is one trial per owner. If the insert
     // fails the family is still created on the Free plan.
     const subscriptionId = crypto.randomUUID()
-    const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+    const trialEnd = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000)
     let trialStarted = false
     try {
       const priorTrial = await sql`
@@ -214,7 +215,7 @@ export async function POST(request: NextRequest) {
             id, subscription_id, old_status, new_status, source, notes, changed_at
           ) VALUES (
             gen_random_uuid(), ${subscriptionId}, 'NONE', 'TRIALING',
-            'SYSTEM', '14-day PREMIUM_PLUS trial started automatically at sign-up', NOW()
+            'SYSTEM', ${`${TRIAL_DAYS}-day PREMIUM_PLUS trial started automatically at sign-up`}, NOW()
           )
         `
         trialStarted = true
@@ -257,7 +258,7 @@ export async function POST(request: NextRequest) {
         calendarId,
       },
       trialStarted,
-      message: trialStarted ? "Family created. Your 14-day free trial has started." : "Family created successfully",
+      message: trialStarted ? `Family created. Your ${TRIAL_DAYS}-day free trial has started.` : "Family created successfully",
     })
   } catch (error) {
     if (error instanceof z.ZodError) {
