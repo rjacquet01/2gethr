@@ -148,6 +148,7 @@ export async function GET(request: NextRequest) {
         userId: l.user_id,
         name: l.child_display_name || l.nickname || `${l.first_name} ${l.last_name}`,
         role: l.role,
+        hasAccount: !!l.user_id,
         color: l.color ?? null,
         emoji: l.emoji ?? null,
         profilePhotoPath: l.profile_photo_path,
@@ -171,9 +172,24 @@ export async function GET(request: NextRequest) {
           memberId: l.member_id,
           name: l.child_display_name || l.nickname || `${l.first_name || ''} ${l.last_name || ''}`.trim() || 'Family member',
           role: l.role,
+          hasAccount: true,
           color: l.color ?? null,
           emoji: l.emoji ?? null,
         })),
+      // Kids with no login have no phone to share from or approve a ping, so
+      // they appear in neither list above. Parents/guardians get them here so
+      // the page can say "No account" instead of leaving them out silently.
+      noAccountChildren: isParentOrGuardian
+        ? locations
+            .filter(l => l.role === 'CHILD' && !l.user_id)
+            .map(l => ({
+              memberId: l.member_id,
+              name: l.child_display_name || l.nickname || 'Child',
+              hasAccount: false,
+              color: l.color ?? null,
+              emoji: l.emoji ?? null,
+            }))
+        : [],
       // One-time locations people approved for me in the last hour.
       snapshots: snapshots.map(r => ({
         requestId: r.id,

@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { BellRing, Loader2 } from 'lucide-react'
+import { AccountStatusBadge, NO_ACCOUNT_HINT } from '@/components/account-status-badge'
 
-interface Child { memberId: string; name: string }
+interface Child { memberId: string; name: string; hasAccount?: boolean }
 
 /**
  * Parent/guardian -> child "call or reply now" alert (Premium). Only renders for
@@ -85,11 +86,17 @@ export function EmergencyAlertButton({ familyId }: { familyId?: string }) {
                 <li key={c.memberId} className="space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium">{c.name}</span>
-                    <Button variant="destructive" size="sm" onClick={() => send(c)} disabled={sendingTo !== null}>
-                      {sendingTo === c.memberId && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      {results[c.memberId] ? 'Send again' : 'Send alert'}
-                    </Button>
+                    {c.hasAccount === false ? (
+                      // No login means no phone to alert: label instead of a button that can't work.
+                      <AccountStatusBadge hasAccount={false} />
+                    ) : (
+                      <Button variant="destructive" size="sm" onClick={() => send(c)} disabled={sendingTo !== null}>
+                        {sendingTo === c.memberId && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {results[c.memberId] ? 'Send again' : 'Send alert'}
+                      </Button>
+                    )}
                   </div>
+                  {c.hasAccount === false && <p className="text-xs text-muted-foreground">{NO_ACCOUNT_HINT}</p>}
                   {results[c.memberId] && (
                     <p className={`text-sm ${results[c.memberId].ok ? 'text-muted-foreground' : 'text-amber-600'}`}>{results[c.memberId].message}</p>
                   )}

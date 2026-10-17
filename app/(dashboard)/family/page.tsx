@@ -79,6 +79,7 @@ import {
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { MemberAvatar, AppearanceButton } from '@/components/member-avatar'
+import { AccountStatusBadge } from '@/components/account-status-badge'
 import { JoinFamilyButton } from '@/components/join-family-dialog'
 import { BirthdateInput, ChildAccountDialog, RoleChoiceCard, Turns18Chip, type AgeAwareChild } from '@/components/child-age'
 
@@ -172,6 +173,7 @@ export default function FamilyPage() {
     color?: string | null
     emoji?: string | null
     role: string
+    hasAccount?: boolean
     childProfileId: string | null
     tasks: Array<{
       id: string
@@ -541,6 +543,9 @@ export default function FamilyPage() {
                           {roleLabel(member.role)}
                         </Badge>
                       )}
+                      {viewerIsAdult && member.role === 'CHILD' && (
+                        <AccountStatusBadge hasAccount={member.hasAccount ?? !!member.userId} />
+                      )}
                       {memberChild?.age != null && (
                         <span className="shrink-0 text-xs text-muted-foreground">Age {memberChild.age}</span>
                       )}
@@ -823,6 +828,9 @@ export default function FamilyPage() {
                         <RoleIcon className="w-3 h-3 mr-1" />
                         {roleLabel(member.role)}
                       </Badge>)}
+                      {viewerIsAdult && member.role === 'CHILD' && (
+                        <AccountStatusBadge hasAccount={member.hasAccount ?? !!member.userId} className="mt-1" />
+                      )}
                     </div>
                     {family.ownerId === member.userId && (
                       <Badge variant="outline" className="text-xs">Owner</Badge>
@@ -1031,6 +1039,9 @@ export default function FamilyPage() {
                           {child.displayName}
                         </p>
                         <div className="flex flex-wrap items-center gap-2 mt-1">
+                          {viewerIsAdult && (
+                            <AccountStatusBadge hasAccount={child.hasAccount ?? !!child.hasLogin} showHint />
+                          )}
                           {child.age != null && (
                             <Badge variant="outline" className="text-xs">
                               Age {child.age}

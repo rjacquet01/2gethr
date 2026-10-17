@@ -131,6 +131,7 @@ export async function GET(
           // canHaveAccount, turns18On, daysUntil18, needsRoleChoice
           ...childAgeInfo({ dob: child.dob, age: child.age, role: child.member_role, userId: child.member_user_id, snoozedUntil: child.adult_prompt_snoozed_until }),
           hasLogin: !!child.member_user_id,
+          hasAccount: !!child.member_user_id,
           canEdit: membership[0].role === 'PARENT',
           // Emergency notes stay with parents, guardians and the child themself.
           emergencyNotes: child.emergency_notes,

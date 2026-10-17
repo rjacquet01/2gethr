@@ -17,6 +17,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useFamily } from '@/hooks/use-family'
+import { useMyRole } from '@/hooks/use-my-role'
+import { AccountStatusBadge } from '@/components/account-status-badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import {
@@ -54,6 +56,7 @@ export default function EditEventPage() {
   const [participantChildIds, setParticipantChildIds] = useState<string[]>([])
   const eventFamilyId = (event as unknown as { calendar?: { familyId?: string } } | undefined)?.calendar?.familyId
   const { family } = useFamily(eventFamilyId)
+  const { isSupervisor } = useMyRole()
   
   const [formData, setFormData] = useState({
     title: '',
@@ -381,6 +384,7 @@ export default function EditEventPage() {
                       <label htmlFor={`participant-${m.id}`} className="text-sm cursor-pointer">
                         {m.displayName} <span className="text-xs text-muted-foreground capitalize">({m.role.toLowerCase()})</span>
                       </label>
+                      {isSupervisor && m.role === 'CHILD' && <AccountStatusBadge hasAccount={m.hasAccount ?? true} />}
                     </div>
                   ))}
                   {(family.children || []).filter((c) => !c.hasLogin).map((c) => (
@@ -397,6 +401,7 @@ export default function EditEventPage() {
                       <label htmlFor={`participant-child-${c.id}`} className="text-sm cursor-pointer">
                         {c.displayName} <span className="text-xs text-muted-foreground">(child)</span>
                       </label>
+                      {isSupervisor && <AccountStatusBadge hasAccount={false} />}
                     </div>
                   ))}
                   {(family.members || []).length === 0 && (family.children || []).length === 0 && (

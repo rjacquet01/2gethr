@@ -21,6 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AccountStatusBadge } from '@/components/account-status-badge'
 
 /* ------------------------------------------------------------------ */
 /* Shared geofence activity data (same endpoint as the Places page)   */
@@ -90,7 +91,9 @@ function usePresence(familyId: string | undefined) {
 
 interface StripMember {
   id: string
-  userId: string
+  userId: string | null
+  role?: string
+  hasAccount?: boolean
   displayName: string
   avatarUrl: string | null
   color?: string | null
@@ -100,10 +103,13 @@ export function FamilyStatusStrip({
   familyId,
   members,
   currentUserId,
+  showAccountStatus = false,
 }: {
   familyId: string
   members: StripMember[]
   currentUserId?: string | null
+  /** Parents/guardians: label kids with no login instead of an offline status. */
+  showAccountStatus?: boolean
 }) {
   const { data, isLoading } = useGeofenceActivity(familyId)
   const { data: presence } = usePresence(familyId)
@@ -138,10 +144,12 @@ export function FamilyStatusStrip({
                 .join('')
                 .toUpperCase()
                 .slice(0, 2) || '?'
-            const latest = latestByUser.get(m.userId)
+            // A child with no login has no app, presence or location to show.
+            const noAccount = !(m.hasAccount ?? !!m.userId)
+            const latest = m.userId ? latestByUser.get(m.userId) : undefined
             // The dot means "has the app open right now" (active in the last
             // 5 minutes). You are always online on your own screen.
-            const p = presenceByUser.get(m.userId)
+            const p = m.userId ? presenceByUser.get(m.userId) : undefined
             const online = (!!currentUserId && m.userId === currentUserId) || !!p?.online
             const dot = online ? 'bg-green-500' : 'bg-muted-foreground/40'
             // The text says where they are (place arrivals/departures), and
@@ -156,6 +164,7 @@ export function FamilyStatusStrip({
               // Kids only receive their own place events; other members stay quiet.
               status = ''
             }
+            if (noAccount) status = ''
             return (
               <Link
                 key={m.id}
@@ -175,16 +184,20 @@ export function FamilyStatusStrip({
                       {initials}
                     </AvatarFallback>
                   </Avatar>
-                  <span
-                    className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background ${dot}`}
-                    title={online ? 'Online' : 'Offline'}
-                    aria-label={online ? 'Online' : 'Offline'}
-                    role="img"
-                  />
+                  {!noAccount && (
+                    <span
+                      className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background ${dot}`}
+                      title={online ? 'Online' : 'Offline'}
+                      aria-label={online ? 'Online' : 'Offline'}
+                      role="img"
+                    />
+                  )}
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">{m.displayName}</p>
-                  {isLoading ? (
+                  {noAccount ? (
+                    showAccountStatus && <AccountStatusBadge hasAccount={false} className="mt-0.5" />
+                  ) : isLoading ? (
                     <Skeleton className="h-3 w-20 mt-1" />
                   ) : (
                     status && (

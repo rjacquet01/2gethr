@@ -168,6 +168,7 @@ export async function GET(
       return {
         memberId: member.member_id,
         userId: member.user_id,
+        hasAccount: !!member.user_id,
         displayName: member.display_name || childProfile?.display_name || `${member.first_name} ${member.last_name}`,
         avatarUrl: member.avatar_url || childProfile?.avatar_url || null,
         color: member.color || null,
@@ -209,6 +210,7 @@ export async function GET(
       memberActivities.push({
         memberId: child.family_member_id,
         userId: null,
+        hasAccount: false,
         displayName: child.display_name,
         avatarUrl: child.avatar_url,
         color: (child as { color?: string }).color || null,

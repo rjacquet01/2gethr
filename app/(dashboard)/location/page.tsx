@@ -28,6 +28,7 @@ import { BackgroundLocationCard } from '@/components/background-location-card'
 import { TrackedMap } from '@/components/tracked-map'
 import { SosButton } from '@/components/sos-button'
 import { MemberAvatar } from '@/components/member-avatar'
+import { AccountStatusBadge } from '@/components/account-status-badge'
 import { cn } from '@/lib/utils'
 
 // High-accuracy GPS often times out on laptops/desktops and indoors. Try it
@@ -84,6 +85,14 @@ interface PingableMember {
   role: string
 }
 
+// A child with no login (sent to parents/guardians only).
+interface NoAccountChild {
+  memberId: string
+  name: string
+  color?: string | null
+  emoji?: string | null
+}
+
 interface LocationSnapshot {
   requestId: string
   name: string
@@ -135,6 +144,7 @@ function LocationPageContent() {
   const { access, isLoading: subscriptionLoading } = useSubscription(selectedFamily?.id || null)
   const [locations, setLocations] = useState<FamilyMemberLocation[]>([])
   const [pingable, setPingable] = useState<PingableMember[]>([])
+  const [noAccountKids, setNoAccountKids] = useState<NoAccountChild[]>([])
   const [snapshots, setSnapshots] = useState<LocationSnapshot[]>([])
   const [mySettings, setMySettings] = useState<LocationSettings | null>(null)
   const [loading, setLoading] = useState(true)
@@ -242,6 +252,7 @@ function LocationPageContent() {
       if (res.ok) {
         setLocations(data.data || [])
         setPingable(Array.isArray(data.pingable) ? data.pingable : [])
+        setNoAccountKids(Array.isArray(data.noAccountChildren) ? data.noAccountChildren : [])
         setSnapshots(Array.isArray(data.snapshots) ? data.snapshots : [])
         setSubscriptionError(false)
       } else if (data.code === 'SUBSCRIPTION_REQUIRED') {
@@ -1190,6 +1201,25 @@ function LocationPageContent() {
                       </>
                     )}
                   </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Kids with no login (parents/guardians only): no phone to share from */}
+          {noAccountKids.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold">
+                No account <span className="font-normal text-muted-foreground">{noAccountKids.length}</span>
+              </h2>
+              {noAccountKids.map((k) => (
+                <div key={k.memberId} className="flex items-center gap-3 rounded-lg border bg-card p-3">
+                  <MemberAvatar name={k.name} color={k.color} emoji={k.emoji} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{k.name}</p>
+                    <p className="text-xs text-muted-foreground">No app login, so live location isn&apos;t available</p>
+                  </div>
+                  <AccountStatusBadge hasAccount={false} />
                 </div>
               ))}
             </div>

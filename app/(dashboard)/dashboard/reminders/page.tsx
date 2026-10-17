@@ -52,6 +52,8 @@ import { addDays, addMinutes, format, parseISO, set } from 'date-fns'
 import { toast } from 'sonner'
 import { authFetch, useAuth } from '@/hooks/use-auth'
 import { cn } from '@/lib/utils'
+import { useMyRole } from '@/hooks/use-my-role'
+import { AccountStatusBadge } from '@/components/account-status-badge'
 import {
   ReminderQuickAdd,
   groupReminders,
@@ -137,6 +139,7 @@ export default function RemindersPage() {
 
 function RemindersPageContent() {
   const { user } = useAuth()
+  const { isSupervisor } = useMyRole()
   const router = useRouter()
   const searchParams = useSearchParams()
   const [reminders, setReminders] = useState<Reminder[]>([])
@@ -199,9 +202,9 @@ function RemindersPageContent() {
     }
   }, [searchParams, router])
 
-  // Load the active family's adult members so a reminder can be assigned to
-  // someone else (e.g. a spouse). Reminders only deliver to real user
-  // accounts, so children (who have no login) aren't offered here.
+  // Load the active family's members so a reminder can be assigned to
+  // someone else (e.g. a spouse or a child). A child with no login is listed
+  // too; their reminder is delivered to the parent who creates it.
   useEffect(() => {
     if (!user?.primaryFamily?.id) return
     authFetch('/api/families')
@@ -576,11 +579,23 @@ function RemindersPageContent() {
                         .filter((m) => m.userId !== user?.id)
                         .map((m) => (
                           <SelectItem key={m.id} value={m.id}>
-                            {m.displayName}
+                            <span className="flex items-center gap-2">
+                              {m.displayName}
+                              {isSupervisor && m.role === 'CHILD' && <AccountStatusBadge hasAccount={!!m.userId} />}
+                            </span>
                           </SelectItem>
                         ))}
                     </SelectContent>
                   </Select>
+                  {/* A child with no login can't get the reminder; the API sends it to you, labeled with their name. */}
+                  {(() => {
+                    const target = familyMembers.find((m) => m.id === assigneeId)
+                    return target && target.role === 'CHILD' && !target.userId ? (
+                      <p className="text-xs text-muted-foreground">
+                        {target.displayName} has no login, so this reminder will come to you.
+                      </p>
+                    ) : null
+                  })()}
                 </div>
               )}
             </div>

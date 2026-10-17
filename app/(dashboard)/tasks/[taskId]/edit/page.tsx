@@ -3,7 +3,9 @@
 import { use, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useFamilies } from '@/hooks/use-family'
+import { useFamilies, useFamily } from '@/hooks/use-family'
+import { useMyRole } from '@/hooks/use-my-role'
+import { AccountStatusBadge } from '@/components/account-status-badge'
 import { useTask, updateTask } from '@/hooks/use-tasks'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -63,9 +65,12 @@ export default function EditTaskPage({ params }: { params: Promise<{ taskId: str
     }
   }, [task])
 
-  // Combine members and children for assignment
+  // Members and children for assignment. Children come from the family
+  // detail (members never carry a children list, so this picker was empty).
+  const { family: familyDetail } = useFamily(primaryFamily?.id || null)
+  const { isSupervisor } = useMyRole()
   const members = primaryFamily?.members || []
-  const allChildren = members.flatMap(m => m.children || [])
+  const allChildren = familyDetail?.children || []
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -206,7 +211,10 @@ export default function EditTaskPage({ params }: { params: Promise<{ taskId: str
                     <SelectItem value="none">None</SelectItem>
                     {allChildren.map((child) => (
                       <SelectItem key={child.id} value={child.id}>
-                        {child.displayName}
+                        <span className="flex items-center gap-2">
+                          {child.displayName}
+                          {isSupervisor && <AccountStatusBadge hasAccount={child.hasAccount ?? !!child.hasLogin} />}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>

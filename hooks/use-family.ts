@@ -16,6 +16,8 @@ export interface FamilyMember {
   color?: string | null
   emoji?: string | null
   permissions: Record<string, boolean>
+  /** Has their own login (user_id set). False only for a child with no login. */
+  hasAccount?: boolean
   isActive: boolean
   joinedAt: string
 }
@@ -28,6 +30,8 @@ export interface ChildProfile {
   familyMemberId?: string
   /** true when the child has their own login (invited by user account); false = profile only */
   hasLogin?: boolean
+  /** Same as hasLogin; the name the parent-view labels use */
+  hasAccount?: boolean
   avatarUrl: string | null
   color?: string | null
   emoji?: string | null

@@ -37,14 +37,18 @@ export async function GET(request: NextRequest) {
     if (me.length === 0 || !ADULT_ROLES.includes(me[0].role)) {
       return NextResponse.json({ success: true, data: { eligible: false, reason: "NOT_PARENT", children: [] } })
     }
+    // All kids, so the dialog can show "No account" for those who have no
+    // login (nothing to alert) instead of a Send button that can't work.
     const kids = await sql`
-      SELECT fm.id, COALESCE(NULLIF(fm.nickname, ''), u.first_name, 'Child') AS name
+      SELECT fm.id, COALESCE(NULLIF(fm.nickname, ''), cp.display_name, u.first_name, 'Child') AS name,
+             (u.id IS NOT NULL) AS has_account
       FROM family_members fm
-      JOIN users u ON u.id = fm.user_id
-      WHERE fm.family_id = ${familyId} AND fm.role = 'CHILD' AND fm.is_active = true AND fm.user_id IS NOT NULL
+      LEFT JOIN users u ON u.id = fm.user_id
+      LEFT JOIN child_profiles cp ON cp.family_member_id = fm.id
+      WHERE fm.family_id = ${familyId} AND fm.role = 'CHILD' AND fm.is_active = true
     `
-    const children = kids.map((k) => ({ memberId: k.id as string, name: k.name as string }))
-    if (children.length === 0) {
+    const children = kids.map((k) => ({ memberId: k.id as string, name: k.name as string, hasAccount: k.has_account === true }))
+    if (!children.some((c) => c.hasAccount)) {
       return NextResponse.json({ success: true, data: { eligible: false, reason: "NO_CHILDREN", children: [] } })
     }
     const sub = await checkFamilySubscription(familyId)

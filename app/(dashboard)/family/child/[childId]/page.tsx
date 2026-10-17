@@ -20,6 +20,8 @@ import { BirthdateInput, Turns18Chip, formatYmd } from '@/components/child-age'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { MemberAvatar, AppearanceButton } from '@/components/member-avatar'
+import { AccountStatusBadge } from '@/components/account-status-badge'
+import { useMyRole } from '@/hooks/use-my-role'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Empty } from '@/components/ui/empty'
@@ -56,6 +58,8 @@ interface ChildProfile {
   familyId: string
   familyName: string
   familyMemberId?: string | null
+  /** Has their own login; false = managed by a parent */
+  hasAccount?: boolean
   color?: string | null
   emoji?: string | null
 }
@@ -130,6 +134,7 @@ export default function ChildProfilePage({
 }) {
   const { childId } = use(params)
   const router = useRouter()
+  const { isSupervisor } = useMyRole()
 
   const { data: childData, isLoading, error, mutate } = useSWR<ChildData>(
     `/api/children/${childId}`,
@@ -233,6 +238,9 @@ export default function ChildProfilePage({
               <Baby className="w-3 h-3 mr-1" />
               Child
             </Badge>
+            {isSupervisor && profile.hasAccount != null && (
+              <AccountStatusBadge hasAccount={profile.hasAccount} showHint />
+            )}
             {profile.grade && (
               <Badge variant="outline">
                 <GraduationCap className="w-3 h-3 mr-1" />

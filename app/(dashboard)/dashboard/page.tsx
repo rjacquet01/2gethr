@@ -53,7 +53,7 @@ export default function DashboardPage() {
   const { families, isLoading: familiesLoading } = useFamilies()
   const primaryFamily = families[0]
   // Guests get calendar and tasks only: no family map, activity or SOS.
-  const { isGuest } = useMyRole()
+  const { isGuest, isSupervisor } = useMyRole()
   const { user } = useAuth()
   // Only fetch events when we have a valid family ID
   // Start from today and get next 7 days
@@ -325,7 +325,14 @@ export default function DashboardPage() {
       />
 
       {/* Who is where right now */}
-      {!isGuest && <FamilyStatusStrip familyId={primaryFamily.id} members={familyMembers} currentUserId={user?.id} />}
+      {!isGuest && (
+        <FamilyStatusStrip
+          familyId={primaryFamily.id}
+          members={familyMembers}
+          currentUserId={user?.id}
+          showAccountStatus={isSupervisor}
+        />
+      )}
 
       {/* Two-column layout: main content left, family activity right (stacks on phones) */}
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 lg:items-start">

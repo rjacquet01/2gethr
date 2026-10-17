@@ -22,6 +22,8 @@ import { ArrowLeft, ListTodo } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
+import { useMyRole } from '@/hooks/use-my-role'
+import { AccountStatusBadge } from '@/components/account-status-badge'
 
 export default function NewTaskPage() {
   const router = useRouter()
@@ -30,7 +32,8 @@ export default function NewTaskPage() {
   
   // Fetch detailed family data including members and children
   const { family: primaryFamily, isLoading: familyLoading } = useFamily(primaryFamilyId || null)
-  
+  const { isSupervisor } = useMyRole()
+
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [assignedToUserId, setAssignedToUserId] = useState<string>('')
@@ -215,7 +218,10 @@ export default function NewTaskPage() {
                     <SelectItem value="no-child">None</SelectItem>
                     {allChildren.filter(c => c.id).map((child) => (
                       <SelectItem key={child.id} value={child.id}>
-                        {child.displayName}
+                        <span className="flex items-center gap-2">
+                          {child.displayName}
+                          {isSupervisor && <AccountStatusBadge hasAccount={child.hasAccount ?? !!child.hasLogin} />}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>

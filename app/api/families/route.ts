@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
         const children = await sql`
           SELECT 
             cp.id, cp.display_name, cp.age, cp.school, cp.grade,
-            cp.avatar_url, cp.created_at
+            cp.avatar_url, cp.created_at, fm.user_id AS member_user_id
           FROM child_profiles cp
           JOIN family_members fm ON cp.family_member_id = fm.id
           WHERE fm.family_id = ${f.id} AND fm.role = 'CHILD'
@@ -89,6 +89,8 @@ export async function GET(request: NextRequest) {
             role: m.role,
             displayName: m.nickname || `${m.first_name || ''} ${m.last_name || ''}`.trim() || 'Unknown',
             avatarUrl: m.profile_photo_url,
+            // false for a child managed by a parent (no login, user_id NULL)
+            hasAccount: !!m.user_id,
             isActive: m.is_active,
             joinedAt: m.joined_at,
           })),
@@ -100,6 +102,7 @@ export async function GET(request: NextRequest) {
             grade: f.user_role === 'GUEST' ? null : c.grade,
             age: f.user_role === 'GUEST' ? null : c.age,
             school: f.user_role === 'GUEST' ? null : c.school,
+            hasAccount: !!c.member_user_id,
             createdAt: c.created_at,
           })),
           subscription: {

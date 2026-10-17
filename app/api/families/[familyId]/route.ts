@@ -120,6 +120,9 @@ export async function GET(
           avatarUrl: m.profile_photo_path,
           color: m.color || null,
           emoji: m.emoji || null,
+          // Members here always have a login (joined to users); explicit so
+          // every kid in the parent view carries the same flag.
+          hasAccount: !!m.user_id,
           isActive: m.is_active,
           joinedAt: m.joined_at,
           permissions: {
@@ -142,6 +145,9 @@ export async function GET(
           avatarUrl: c.avatar_url,
           familyMemberId: c.family_member_id,
           hasLogin: !!c.member_user_id,
+          // Kid with their own login (family_members.user_id set) vs. one
+          // managed by a parent with no login.
+          hasAccount: !!c.member_user_id,
           color: c.color || null,
           emoji: c.emoji || null,
           grade: viewerIsGuest ? null : c.grade,

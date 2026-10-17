@@ -30,6 +30,7 @@ import {
 import { useAuth, authFetch } from '@/hooks/use-auth'
 import { useFamilies, useFamily, FamilyMember, ChildProfile } from '@/hooks/use-family'
 import { useMyRole } from '@/hooks/use-my-role'
+import { AccountStatusBadge } from '@/components/account-status-badge'
 
 const EVENT_CATEGORIES = [
   { value: 'GENERAL', label: 'General', color: 'bg-gray-500' },
@@ -81,7 +82,7 @@ function NewEventForm() {
   const dateParam = searchParams.get('date')
   const { user, isLoading: authLoading } = useAuth()
   const { families, isLoading: familiesLoading } = useFamilies()
-  const { isGuest } = useMyRole()
+  const { isGuest, isSupervisor } = useMyRole()
   
   // Use date from URL param if provided and valid, otherwise use today
   const getInitialDate = (): Date => {
@@ -133,6 +134,7 @@ function NewEventForm() {
 
   // Get selected family details with members
   const { family } = useFamily(formData.familyId || undefined)
+  const noLoginChildren = (family?.children || []).filter((c) => !(c.hasAccount ?? c.hasLogin))
 
   // Plan gates (Free: standard reminder only, simple repeats only). Permissive
   // until the plan has loaded; the server enforces regardless.
@@ -849,8 +851,11 @@ function NewEventForm() {
                                 </Avatar>
                                 <div className="flex-1 text-left">
                                   <div className="font-medium text-sm">{member.displayName}</div>
-                                  <div className="text-xs text-muted-foreground capitalize">
-                                    {member.role.toLowerCase()}
+                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <span className="capitalize">{member.role.toLowerCase()}</span>
+                                    {isSupervisor && member.role === 'CHILD' && (
+                                      <AccountStatusBadge hasAccount={member.hasAccount ?? !!member.userId} />
+                                    )}
                                   </div>
                                 </div>
                               </button>
@@ -858,13 +863,14 @@ function NewEventForm() {
                           </div>
                         )}
 
-                        {/* Children */}
-                        {family.children && family.children.length > 0 && (
+                        {/* Children without a login. Kids with one are already
+                            listed above as members (same as the edit page). */}
+                        {noLoginChildren.length > 0 && (
                           <div className="p-2 border-t">
                             <div className="text-xs font-medium text-muted-foreground px-2 py-1">
                               Children
                             </div>
-                            {family.children.map((child) => (
+                            {noLoginChildren.map((child) => (
                               <button
                                 key={child.id}
                                 type="button"
@@ -894,7 +900,10 @@ function NewEventForm() {
                                   </AvatarFallback>
                                 </Avatar>
                                 <div className="flex-1 text-left">
-                                  <div className="font-medium text-sm">{child.displayName}</div>
+                                  <div className="flex items-center gap-1.5 font-medium text-sm">
+                                    {child.displayName}
+                                    {isSupervisor && <AccountStatusBadge hasAccount={false} />}
+                                  </div>
                                   {child.grade && (
                                     <div className="text-xs text-muted-foreground">
                                       Grade {child.grade}
