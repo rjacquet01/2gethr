@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
-import { purgeArchivedHistory, HISTORY_CAP_DAYS, HISTORY_PURGE_ENABLED } from "@/lib/retention"
+import { purgeArchivedHistory, HISTORY_CAP_DAYS, isHistoryPurgeEnabled } from "@/lib/retention"
 
 // Runs nightly (see vercel.json). Auto-archives, for every family:
 //  - tasks sitting in COMPLETED/CANCELLED (same bulk logic as the manual
@@ -81,10 +81,12 @@ export async function GET(request: NextRequest) {
     console.log("[Cron] Auto-archive processed:", { families: families.length, tasksArchived, eventsArchived })
 
     // 90-day cap: archived tasks/events/reminders past HISTORY_CAP_DAYS are
-    // deleted with their child rows (legal holds excluded). Report-only until
-    // HISTORY_PURGE_ENABLED is switched on.
-    const purge = await purgeArchivedHistory({ dryRun: !HISTORY_PURGE_ENABLED })
-    console.log(`[Cron] History cap ${HISTORY_CAP_DAYS}d ${HISTORY_PURGE_ENABLED ? "purged" : "would purge"}:`, purge)
+    // deleted with their child rows (legal holds excluded). On unless
+    // RETENTION_PURGE_DISABLED=true is set (then it only reports). At most
+    // MAX_ROWS_PER_TABLE rows per table per run.
+    const purgeEnabled = isHistoryPurgeEnabled()
+    const purge = await purgeArchivedHistory({ dryRun: !purgeEnabled })
+    console.log(`[Cron] History cap ${HISTORY_CAP_DAYS}d ${purgeEnabled ? "purged" : "would purge (RETENTION_PURGE_DISABLED)"}:`, purge)
 
     return NextResponse.json({
       success: true,
@@ -92,7 +94,7 @@ export async function GET(request: NextRequest) {
         familiesChecked: families.length,
         tasksArchived,
         eventsArchived,
-        historyCap: { days: HISTORY_CAP_DAYS, enabled: HISTORY_PURGE_ENABLED, ...purge },
+        historyCap: { days: HISTORY_CAP_DAYS, enabled: purgeEnabled, ...purge },
         timestamp: new Date().toISOString(),
       },
     })
