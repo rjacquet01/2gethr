@@ -180,8 +180,7 @@ export async function generateTokenPair(
 }
 
 // A tagged-template query function, like `sql` from ./db. Injectable so
-// scripts/test-refresh-rotation.ts can run rotation inside a rolled-back
-// transaction.
+// scripts/test-refresh-rotation.ts can run rotation against a temp table.
 type QueryFn = (strings: TemplateStringsArray, ...values: unknown[]) => Promise<Record<string, unknown>[]>
 
 /** How long a just-rotated refresh token may still be answered with its replacement. */
