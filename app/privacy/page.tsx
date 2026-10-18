@@ -39,7 +39,7 @@ export default function PrivacyPage() {
         <h1 className="text-3xl font-bold mb-8">Privacy Policy</h1>
 
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: October 16, 2026</p>
+          <p className="text-muted-foreground">Last updated: October 18, 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Who we are</h2>
@@ -61,6 +61,7 @@ export default function PrivacyPage() {
               <li>Family, member and child profiles, including a child's name, date of birth, school, grade and emergency notes that a parent chooses to enter</li>
               <li>Calendar events, tasks, reminders, saved places, and notes</li>
               <li>Messages you post in the Service: event comments, family board posts and replies, and support tickets</li>
+              <li>Photos of flyers you pin to the family board (we remove location and camera details from the photo when it is uploaded)</li>
             </ul>
 
             <h3 className="text-lg font-medium">Information collected as you use the Service</h3>
@@ -203,9 +204,9 @@ export default function PrivacyPage() {
               We keep your information while your account is active. After you delete your account, we
               keep it for up to 30 days for recovery and then delete it, except where we must keep
               limited records longer for legal, tax, fraud-prevention or dispute purposes (for example,
-              payment records held by Stripe). Archived tasks, events and reminders, board posts and
-              comments are kept for at most 90 days, and are removed sooner when deleted by you or a
-              family adult.
+              payment records held by Stripe). Archived tasks, events and reminders, board posts
+              (including flyer photos) and comments are kept for at most 90 days, and are removed sooner
+              when deleted by you or a family adult.
             </p>
           </section>
 
