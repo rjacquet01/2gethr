@@ -9,8 +9,8 @@ import { POST_MAX, RATE_LIMIT_MESSAGE, ensureSocialTables, overRateLimit } from 
 export const runtime = "nodejs"
 
 // POST - pin a photo flyer: multipart { file, body? (caption), pinned?,
-// expiresOn? (YYYY-MM-DD: take it down after that day) }. Parents, guardians
-// and adults only. At BOARD_LIMITS.MAX_FLYERS flyers (or MAX_PINS pins) the
+// expiresOn? (YYYY-MM-DD: take it down after that day) }. Any family
+// member (guests have no board). At BOARD_LIMITS.MAX_FLYERS flyers (or MAX_PINS pins) the
 // oldest unprotected one is taken down to make room; the response lists
 // what came down (rolledOff).
 export async function POST(request: NextRequest, { params }: { params: Promise<{ familyId: string }> }) {
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const access = await boardAccess(familyId, user.id)
     if (access instanceof NextResponse) return access
     if (!access.canPinFlyers) {
-      return NextResponse.json({ success: false, error: "Only parents, guardians and adults can pin photos" }, { status: 403 })
+      return NextResponse.json({ success: false, error: "Only family members can pin photos" }, { status: 403 })
     }
     if (await overRateLimit(user.id, "board")) {
       return NextResponse.json({ success: false, error: RATE_LIMIT_MESSAGE }, { status: 429 })

@@ -46,8 +46,13 @@ export const flyerStore = {
   get: (pathname: string, ifNoneMatch?: string) => get(pathname, { access: "private", ifNoneMatch }),
 }
 
-/** Adults may pin photo flyers; kids post text notes only, guests nothing. */
+/** Every family member may pin photo flyers; guests get no board at all. */
 export function canPinFlyers(role: string): boolean {
+  return role !== "GUEST"
+}
+
+/** Parents, guardians and adults: Keep up and the Taken down list. */
+export function isBoardAdult(role: string): boolean {
   return ["PARENT", "GUARDIAN", "ADULT", "ADMIN"].includes(role)
 }
 

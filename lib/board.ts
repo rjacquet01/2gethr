@@ -2,15 +2,15 @@ import { NextResponse } from "next/server"
 import { sql } from "./db"
 import { getMemberAccess, guestForbidden } from "./permissions"
 import { authorInfo, notifySocial, type AuthorInfo } from "./social"
-import { canPinFlyers, flyerImageUrl } from "./board-flyers"
+import { canPinFlyers, flyerImageUrl, isBoardAdult } from "./board-flyers"
 
 export interface BoardAccess {
   role: string
   /** PARENT or the family owner: may pin and delete anyone's posts/comments */
   canModerate: boolean
-  /** PARENT / GUARDIAN / ADULT: may pin photo flyers (kids post notes only) */
+  /** Every member (guests never get here): may pin photo flyers */
   canPinFlyers: boolean
-  /** The same adults: may set Keep up and see / restore taken-down pins */
+  /** PARENT / GUARDIAN / ADULT: may set Keep up and see / restore taken-down pins */
   canManagePins: boolean
 }
 
@@ -19,7 +19,7 @@ export async function boardAccess(familyId: string, userId: string): Promise<Boa
   const access = await getMemberAccess(familyId, userId)
   if (!access) return NextResponse.json({ success: false, error: "Not a member of this family" }, { status: 403 })
   if (access.isGuest) return guestForbidden()
-  return { role: access.role, canModerate: access.isParent || access.isOwner, canPinFlyers: canPinFlyers(access.role), canManagePins: canPinFlyers(access.role) }
+  return { role: access.role, canModerate: access.isParent || access.isOwner, canPinFlyers: canPinFlyers(access.role), canManagePins: isBoardAdult(access.role) }
 }
 
 const FALLBACK_AUTHOR: AuthorInfo = { authorName: "Family member", avatarUrl: null, color: null, emoji: null }
