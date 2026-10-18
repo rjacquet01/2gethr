@@ -1,45 +1,29 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'
 import useSWRInfinite from 'swr/infinite'
 import { toast } from 'sonner'
-import { MessagesSquare, MoreHorizontal, Pin, PinOff, Trash2 } from 'lucide-react'
+import { Camera, Images, StickyNote } from 'lucide-react'
 import { authFetch, useAuth } from '@/hooks/use-auth'
 import { useMyRole } from '@/hooks/use-my-role'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { Empty } from '@/components/ui/empty'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { MemberAvatar } from '@/components/member-avatar'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { GuestAreaNotice } from '@/components/guest-area-notice'
-import { CommentThread, relativeTime, type ThreadComment } from '@/components/comment-thread'
+import { BoardSurface } from '@/components/board/board-surface'
+import { BoardItem } from '@/components/board/board-item'
+import { PostDetail } from '@/components/board/post-detail'
+import { FlyerEditor } from '@/components/board/flyer-editor'
+import type { BoardPage, BoardPost } from '@/components/board/types'
 
 const POST_MAX = 500
 const POLL_MS = 45_000
-
-interface BoardPost extends ThreadComment {
-  pinned: boolean
-  commentCount: number
-  latestComments: ThreadComment[]
-}
-
-interface BoardPage {
-  pinned: BoardPost[]
-  posts: BoardPost[]
-  hasMore: boolean
-  nextBefore: string | null
-  canModerate: boolean
-}
 
 const fetchJson = async <T,>(url: string): Promise<T> => {
   const res = await authFetch(url)
@@ -78,13 +62,15 @@ function FamilyBoard({ familyId }: { familyId: string }) {
     { revalidateFirstPage: false, revalidateOnFocus: true }
   )
   const first = data?.[0]
-  const pinned = first?.pinned || []
+  const pinned = useMemo(() => first?.pinned || [], [first])
   const posts = useMemo(() => (data || []).flatMap((p) => p.posts), [data])
   const canModerate = !!first?.canModerate
+  const canPinFlyers = !!first?.canPinFlyers
+  const all = useMemo(() => [...pinned, ...posts], [pinned, posts])
   const newest = useMemo(() => {
-    const all = [...pinned, ...posts].map((p) => p.createdAt)
-    return all.length ? all.reduce((a, b) => (a > b ? a : b)) : null
-  }, [pinned, posts])
+    const times = all.map((p) => p.createdAt as string)
+    return times.length ? times.reduce((a, b) => (a > b ? a : b)) : null
+  }, [all])
 
   // Cheap poll while the tab is visible: only asks for posts newer than the
   // newest one we have, so a quiet board returns an empty list.
@@ -105,11 +91,17 @@ function FamilyBoard({ familyId }: { familyId: string }) {
     authFetch(`${base}/seen`, { method: 'POST' }).catch(() => {})
   }, [first, newest, base])
 
+  // --- detail view -------------------------------------------------------
+  const [openId, setOpenId] = useState<string | null>(null)
+  const openPost = all.find((p) => p.id === openId) || null
+
+  // --- note composer -----------------------------------------------------
+  const [noteOpen, setNoteOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [pinIt, setPinIt] = useState(false)
   const [posting, setPosting] = useState(false)
 
-  const submit = async () => {
+  const submitNote = async () => {
     const body = draft.trim()
     if (!body || posting) return
     setPosting(true)
@@ -126,24 +118,83 @@ function FamilyBoard({ familyId }: { familyId: string }) {
       }
       setDraft('')
       setPinIt(false)
+      setNoteOpen(false)
       mutate()
     } finally {
       setPosting(false)
     }
   }
 
-  const removePost = async (id: string) => {
-    const res = await authFetch(`${base}/${id}`, { method: 'DELETE' })
+  // --- flyer capture -----------------------------------------------------
+  const cameraInput = useRef<HTMLInputElement>(null)
+  const galleryInput = useRef<HTMLInputElement>(null)
+  const [pickedFile, setPickedFile] = useState<File | null>(null)
+  const [replaceFor, setReplaceFor] = useState<BoardPost | null>(null)
+
+  const pickPhoto = (source: 'camera' | 'gallery', forPost: BoardPost | null) => {
+    setReplaceFor(forPost)
+    ;(source === 'camera' ? cameraInput : galleryInput).current?.click()
+  }
+  const onPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] || null
+    e.target.value = ''
+    if (f) setPickedFile(f)
+  }
+  const closeEditor = useCallback(() => {
+    setPickedFile(null)
+    setReplaceFor(null)
+  }, [])
+
+  const uploadFlyer = async (jpeg: Blob, caption: string, pinTop: boolean): Promise<boolean> => {
+    const form = new FormData()
+    form.append('file', jpeg, 'flyer.jpg')
+    const target = replaceFor
+    if (!target) {
+      if (caption) form.append('body', caption)
+      if (pinTop) form.append('pinned', 'true')
+    }
+    const res = await authFetch(target ? `${base}/${target.id}/flyer` : `${base}/flyers`, {
+      method: target ? 'PUT' : 'POST',
+      body: form,
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      toast.error(json.error || (res.status === 413 ? 'That photo is too large' : 'Could not pin the flyer'))
+      return false
+    }
+    toast.success(target ? 'Photo replaced' : 'Flyer pinned')
+    closeEditor()
+    mutate()
+    return true
+  }
+
+  // --- post actions ------------------------------------------------------
+  const removePost = async (post: BoardPost) => {
+    if (!window.confirm(post.flyer ? 'Delete this flyer?' : 'Delete this note?')) return
+    const res = await authFetch(`${base}/${post.id}`, { method: 'DELETE' })
     const json = await res.json().catch(() => ({}))
     if (!res.ok) toast.error(json.error || 'Could not delete post')
     else {
-      toast.success('Post deleted')
+      toast.success('Deleted')
+      setOpenId(null)
       mutate()
     }
   }
 
-  const setPinned = async (id: string, value: boolean) => {
-    const res = await authFetch(`${base}/${id}`, {
+  const removePhoto = async (post: BoardPost) => {
+    if (!window.confirm('Remove the photo and keep the note?')) return
+    const res = await authFetch(`${base}/${post.id}/flyer`, { method: 'DELETE' })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) toast.error(json.error || 'Could not remove the photo')
+    else {
+      toast.success('Photo removed')
+      if (json.data?.postRemoved) setOpenId(null)
+      mutate()
+    }
+  }
+
+  const setPinned = async (post: BoardPost, value: boolean) => {
+    const res = await authFetch(`${base}/${post.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pinned: value }),
@@ -151,7 +202,7 @@ function FamilyBoard({ familyId }: { familyId: string }) {
     const json = await res.json().catch(() => ({}))
     if (!res.ok) toast.error(json.error || 'Could not update post')
     else {
-      toast.success(value ? 'Post pinned' : 'Post unpinned')
+      toast.success(value ? 'Kept at the top' : 'Unpinned from the top')
       mutate()
     }
   }
@@ -160,167 +211,121 @@ function FamilyBoard({ familyId }: { familyId: string }) {
   const loadingMore = size > 0 && data && typeof data[size - 1] === 'undefined'
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 pb-20 lg:pb-0">
-      <div>
-        <h1 className="text-xl font-bold sm:text-2xl">Family board</h1>
-        <p className="text-sm text-muted-foreground">Short notes for the whole family.</p>
+    <div className="mx-auto max-w-5xl space-y-4 pb-20 lg:pb-0">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="mr-auto">
+          <h1 className="text-xl font-bold sm:text-2xl">Family board</h1>
+          <p className="text-sm text-muted-foreground">Flyers and notes for the whole family.</p>
+        </div>
+        <Button variant="outline" onClick={() => setNoteOpen(true)}>
+          <StickyNote className="mr-1.5 h-4 w-4" /> Write a note
+        </Button>
+        {canPinFlyers && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Camera className="mr-1.5 h-4 w-4" /> Pin a flyer
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => pickPhoto('camera', null)}>
+                <Camera className="mr-2 h-4 w-4" /> Take a photo
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => pickPhoto('gallery', null)}>
+                <Images className="mr-2 h-4 w-4" /> Choose from gallery
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
-      {/* Post box */}
-      <Card className="py-0">
-        <CardContent className="space-y-2 p-3">
+      {/* Hidden pickers: one opens the camera, the other the gallery. */}
+      <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPicked} />
+      <input ref={galleryInput} type="file" accept="image/*" className="hidden" onChange={onPicked} />
+
+      <BoardSurface>
+        {isLoading ? (
+          <div className="columns-2 gap-4 sm:columns-3 lg:columns-4">
+            {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="mb-5 h-36 w-full rounded-sm bg-white/50" />)}
+          </div>
+        ) : all.length === 0 ? (
+          <div className="flex min-h-[50vh] flex-col items-center justify-center text-center">
+            <div className="rotate-[-2deg] rounded-[2px] bg-[#fff3a3] px-5 py-4 text-neutral-800 shadow-[0_8px_14px_-6px_rgba(0,0,0,0.35)]">
+              <p className="font-medium">The board is empty</p>
+              <p className="mt-1 text-sm">
+                {canPinFlyers ? 'Pin a school flyer or write a note for everyone.' : 'Write a note for everyone.'}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="columns-2 gap-4 sm:columns-3 lg:columns-4">
+            {all.map((p) => <BoardItem key={p.id} post={p} onOpen={() => setOpenId(p.id)} />)}
+          </div>
+        )}
+        {lastPage?.hasMore && (
+          <div className="mt-2 flex justify-center">
+            <Button variant="secondary" size="sm" onClick={() => setSize(size + 1)} disabled={!!loadingMore}>
+              {loadingMore ? <Spinner className="mr-1.5 h-4 w-4" /> : null}
+              Load more
+            </Button>
+          </div>
+        )}
+      </BoardSurface>
+
+      <PostDetail
+        post={openPost}
+        familyId={familyId}
+        currentUserId={user?.id}
+        canModerate={canModerate}
+        canPinFlyers={canPinFlyers}
+        onClose={() => setOpenId(null)}
+        onDelete={removePost}
+        onPin={setPinned}
+        onReplacePhoto={(p) => pickPhoto('gallery', p)}
+        onRemovePhoto={removePhoto}
+      />
+
+      <FlyerEditor
+        file={pickedFile}
+        mode={replaceFor ? 'replace' : 'new'}
+        canPinToTop={canModerate}
+        onCancel={closeEditor}
+        onSubmit={uploadFlyer}
+      />
+
+      {/* Note composer */}
+      <Dialog open={noteOpen} onOpenChange={setNoteOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Write a note</DialogTitle>
+            <DialogDescription>It goes up on the board for the whole family.</DialogDescription>
+          </DialogHeader>
           <Textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value.slice(0, POST_MAX))}
             placeholder="Share something with the family..."
-            rows={2}
+            rows={4}
             className="resize-none text-sm"
+            autoFocus
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-3">
             {canModerate && (
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Checkbox checked={pinIt} onCheckedChange={(v) => setPinIt(v === true)} />
-                Pin to top
+                Keep at the top
               </label>
             )}
             <span className="ml-auto text-xs text-muted-foreground">{draft.length}/{POST_MAX}</span>
-            <Button size="sm" onClick={submit} disabled={posting || !draft.trim()}>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNoteOpen(false)}>Cancel</Button>
+            <Button onClick={submitNote} disabled={posting || !draft.trim()}>
               {posting ? <Spinner className="mr-1.5 h-4 w-4" /> : null}
               Post
             </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
-        </div>
-      ) : pinned.length === 0 && posts.length === 0 ? (
-        <Card>
-          <CardContent className="py-6">
-            <Empty icon={MessagesSquare} title="Nothing here yet" description="Be the first to post something." />
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {[...pinned, ...posts].map((p) => (
-            <PostCard
-              key={p.id}
-              post={p}
-              familyId={familyId}
-              currentUserId={user?.id}
-              canModerate={canModerate}
-              onDelete={() => removePost(p.id)}
-              onPin={(v) => setPinned(p.id, v)}
-            />
-          ))}
-          {lastPage?.hasMore && (
-            <div className="flex justify-center">
-              <Button variant="outline" size="sm" onClick={() => setSize(size + 1)} disabled={!!loadingMore}>
-                {loadingMore ? <Spinner className="mr-1.5 h-4 w-4" /> : null}
-                Load more
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
-  )
-}
-
-function PostCard({
-  post,
-  familyId,
-  currentUserId,
-  canModerate,
-  onDelete,
-  onPin,
-}: {
-  post: BoardPost
-  familyId: string
-  currentUserId?: string | null
-  canModerate: boolean
-  onDelete: () => void
-  onPin: (pinned: boolean) => void
-}) {
-  const [showAll, setShowAll] = useState(false)
-  const mine = !!currentUserId && post.userId === currentUserId
-  const canDelete = mine || canModerate
-
-  return (
-    <Card className={`py-0 ${post.pinned ? 'border-primary/50 bg-primary/5' : ''}`}>
-      <CardContent className="space-y-3 p-3">
-        <div className="flex items-start gap-2.5">
-          <MemberAvatar name={post.authorName} avatarUrl={post.avatarUrl} color={post.color} emoji={post.emoji} className="h-9 w-9 text-sm" />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="truncate text-sm font-medium">{post.authorName}</span>
-              {post.pinned && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                  <Pin className="h-3 w-3" /> Pinned
-                </span>
-              )}
-              <span className="shrink-0 text-xs text-muted-foreground">{relativeTime(post.createdAt)}</span>
-              {(canDelete || canModerate) && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="ml-auto h-7 w-7" aria-label="Post options">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {canModerate && (
-                      <DropdownMenuItem onClick={() => onPin(!post.pinned)}>
-                        {post.pinned ? <PinOff className="mr-2 h-4 w-4" /> : <Pin className="mr-2 h-4 w-4" />}
-                        {post.pinned ? 'Unpin' : 'Pin to top'}
-                      </DropdownMenuItem>
-                    )}
-                    {canDelete && (
-                      <DropdownMenuItem className="text-destructive" onClick={onDelete}>
-                        <Trash2 className="mr-2 h-4 w-4" /> Delete
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
-            <p className="mt-0.5 whitespace-pre-wrap break-words text-sm">{post.body}</p>
-          </div>
-        </div>
-
-        {showAll ? (
-          <div className="border-t pt-3">
-            <CommentThread
-              baseUrl={`/api/families/${familyId}/board/${post.id}/comments`}
-              currentUserId={currentUserId}
-              canModerate={canModerate}
-              maxLength={300}
-              placeholder="Write a comment..."
-            />
-          </div>
-        ) : (
-          <div className="space-y-2 border-t pt-2">
-            {post.latestComments.map((c) => (
-              <div key={c.id} className="flex gap-2">
-                <MemberAvatar name={c.authorName} avatarUrl={c.avatarUrl} color={c.color} emoji={c.emoji} className="h-6 w-6 text-[10px]" />
-                <p className="min-w-0 text-sm">
-                  <span className="font-medium">{c.authorName}</span>{' '}
-                  <span className="break-words">{c.body}</span>
-                  <span className="ml-1.5 text-xs text-muted-foreground">{relativeTime(c.createdAt)}</span>
-                </p>
-              </div>
-            ))}
-            <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => setShowAll(true)}>
-              {post.commentCount > post.latestComments.length
-                ? `View all ${post.commentCount} comments`
-                : post.commentCount > 0
-                  ? 'Reply'
-                  : 'Comment'}
-            </button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
   )
 }
