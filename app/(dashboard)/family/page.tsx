@@ -89,6 +89,11 @@ export default function FamilyPage() {
   const primaryFamily = families[0]
   const { user } = useAuth()
   const { family, generateInviteCode, addChild, removeMember, isLoading: familyLoading, mutate: mutateFamily } = useFamily(primaryFamily?.id || null)
+  // The member cards come from member-activities: refresh them after changes
+  // to who is in the family (they stayed stale until a reload).
+  const refreshActivities = () => {
+    if (primaryFamily?.id) globalMutate(`/api/families/${primaryFamily.id}/member-activities`)
+  }
   const { access } = useSubscription(primaryFamily?.id || null)
   const viewerRole = (primaryFamily as unknown as { currentUserRole?: string; userRole?: string } | undefined)
   // Parents/guardians only (ADULT members are peers, not supervisors).
@@ -120,6 +125,7 @@ export default function FamilyPage() {
     const result = await removeMember(memberToRemove.id)
     setIsRemovingMember(false)
     if (result.success) {
+      refreshActivities()
       if (memberToRemove.isSelf) {
         toast.success('You have left the family')
         // Our membership is gone - refresh the family list so we fall back to another family.
@@ -292,6 +298,7 @@ export default function FamilyPage() {
         setSelectedMemberId('')
         setAddChildOpen(false)
         mutateUnassigned()
+        refreshActivities()
       } else {
         toast.error(result.error || 'Failed to assign member')
       }
@@ -311,6 +318,7 @@ export default function FamilyPage() {
 
     if (result.success) {
       toast.success('Child added successfully!')
+      refreshActivities()
       setChildName('')
       setChildBirthdate('')
       setAddChildOpen(false)

@@ -21,11 +21,25 @@ export function ensureLocationRequestsTable(): Promise<void> {
       `
       // The original table had a CHECK limiting status; the approval flow adds
       // AWAITING_APPROVAL / DENIED / EXPIRED, so replace it with a wider one.
-      await sql`ALTER TABLE location_requests DROP CONSTRAINT IF EXISTS location_requests_status_check`
-      await sql`
-        ALTER TABLE location_requests ADD CONSTRAINT location_requests_status_check
-        CHECK (status IN ('AWAITING_APPROVAL', 'PENDING', 'FULFILLED', 'EXPIRED', 'DENIED', 'CANCELLED'))
+      // Only when it isn't already the wide one: dropping and re-adding on
+      // every cold start let two instances race ("already exists" -> 500s).
+      const current = await sql`
+        SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+        WHERE conname = 'location_requests_status_check'
       `
+      const def = String(current[0]?.def ?? "")
+      if (!def.includes("AWAITING_APPROVAL") || !def.includes("CANCELLED")) {
+        try {
+          await sql`ALTER TABLE location_requests DROP CONSTRAINT IF EXISTS location_requests_status_check`
+          await sql`
+            ALTER TABLE location_requests ADD CONSTRAINT location_requests_status_check
+            CHECK (status IN ('AWAITING_APPROVAL', 'PENDING', 'FULFILLED', 'EXPIRED', 'DENIED', 'CANCELLED'))
+          `
+        } catch (err) {
+          // Another instance replaced it at the same moment: that's fine.
+          if (!/already exists/i.test(String((err as Error)?.message))) throw err
+        }
+      }
       await sql`CREATE INDEX IF NOT EXISTS idx_location_requests_target_user ON location_requests(target_user_id, status)`
       // One-time snapshot taken when the target approves, plus a flag so the
       // requester is told about an unanswered request only once.

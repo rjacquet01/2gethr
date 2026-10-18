@@ -102,10 +102,11 @@ export async function POST(request: NextRequest) {
         UPDATE payment_gateway_settings SET
           display_name = ${displayName},
           merchant_id = ${merchantId},
-          api_key_encrypted = ${apiKeyEncrypted},
-          api_secret_encrypted = ${apiSecretEncrypted},
+          -- Blank secret fields mean "unchanged" (GET never returns them)
+          api_key_encrypted = COALESCE(${apiKeyEncrypted}, api_key_encrypted),
+          api_secret_encrypted = COALESCE(${apiSecretEncrypted}, api_secret_encrypted),
           webhook_url = ${webhookUrl || null},
-          webhook_secret_encrypted = ${webhookSecretEncrypted},
+          webhook_secret_encrypted = COALESCE(${webhookSecretEncrypted}, webhook_secret_encrypted),
           is_active = ${isActive},
           settings = ${JSON.stringify({ ...settings, apiEndpoint })}::jsonb,
           updated_at = NOW(),

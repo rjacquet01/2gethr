@@ -34,11 +34,13 @@ export async function GET(request: NextRequest) {
 
     await ensureSyncSchema()
 
-    // One row per enabled connection, joined to that user's active family
-    // (same assumption the manual-sync routes make: one active family per
-    // user). A connection with no active family membership is skipped.
+    // One row per enabled connection, in the family it was connected for
+    // (cc.family_id). It used to join every membership, so a parent who is
+    // also a guest elsewhere could have their calendar imported into that
+    // family. Guest memberships never sync; older rows without a family use
+    // the earliest-joined one. No active membership: skipped.
     const connections = await sql`
-      SELECT
+      SELECT DISTINCT ON (cc.id)
         cc.id, cc.user_id, cc.provider,
         cc.access_token_encrypted, cc.refresh_token_encrypted, cc.token_expires_at,
         cc.external_calendar_id, cc.provider_account_email,
@@ -46,8 +48,10 @@ export async function GET(request: NextRequest) {
         cc.sync_tasks, cc.apple_task_calendar_url,
         fm.family_id
       FROM calendar_sync_connections cc
-      JOIN family_members fm ON fm.user_id = cc.user_id AND fm.is_active = true
+      JOIN family_members fm ON fm.user_id = cc.user_id AND fm.is_active = true AND fm.role <> 'GUEST'
       WHERE cc.sync_enabled = true
+        AND (cc.family_id IS NULL OR fm.family_id = cc.family_id)
+      ORDER BY cc.id, fm.joined_at ASC
     `
 
     let due = 0

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { isValidTimeZone } from "@/lib/recurrence"
 import { sql } from "@/lib/db"
-import { getUserFromRequest, hashPassword, logAuditEvent } from "@/lib/auth"
+import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 
 const updateProfileSchema = z.object({
@@ -156,90 +156,6 @@ export async function PATCH(request: NextRequest) {
     console.error("Update profile error:", error)
     return NextResponse.json(
       { success: false, error: "Failed to update profile" },
-      { status: 500 }
-    )
-  }
-}
-
-// Change password
-const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1, "Current password is required"),
-  newPassword: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-      "Password must contain uppercase, lowercase, and number"
-    ),
-})
-
-export async function PUT(request: NextRequest) {
-  try {
-    const { user, error } = await getUserFromRequest(request)
-
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: error || "Not authenticated" },
-        { status: 401 }
-      )
-    }
-
-    const body = await request.json()
-    const { currentPassword, newPassword } = changePasswordSchema.parse(body)
-
-    // Get current password hash
-    const users = await sql`
-      SELECT password_hash FROM users WHERE id = ${user.id}
-    `
-
-    if (users.length === 0) {
-      return NextResponse.json(
-        { success: false, error: "User not found" },
-        { status: 404 }
-      )
-    }
-
-    // Verify current password
-    const bcrypt = await import("bcryptjs")
-    const isValid = await bcrypt.compare(currentPassword, users[0].password_hash)
-
-    if (!isValid) {
-      return NextResponse.json(
-        { success: false, error: "Current password is incorrect" },
-        { status: 401 }
-      )
-    }
-
-    // Hash new password and update
-    const newPasswordHash = await hashPassword(newPassword)
-
-    await sql`
-      UPDATE users 
-      SET password_hash = ${newPasswordHash}, updated_at = NOW()
-      WHERE id = ${user.id}
-    `
-
-    // Audit log
-    await logAuditEvent(user.id, "UPDATE", "user_password", user.id, {
-      ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
-      userAgent: request.headers.get("user-agent") || undefined,
-    })
-
-    return NextResponse.json({
-      success: true,
-      message: "Password changed successfully",
-    })
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { success: false, error: error.errors[0].message },
-        { status: 400 }
-      )
-    }
-
-    console.error("Change password error:", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to change password" },
       { status: 500 }
     )
   }

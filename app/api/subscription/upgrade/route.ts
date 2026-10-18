@@ -40,6 +40,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'familyId required' }, { status: 400 })
     }
 
+    // Only that family's parents/guardians see its pending upgrade requests.
+    const member = await sql`
+      SELECT role FROM family_members
+      WHERE family_id = ${familyId} AND user_id = ${user.id} AND is_active = true
+      LIMIT 1
+    `
+    if (member.length === 0 || !['PARENT', 'GUARDIAN'].includes(member[0].role)) {
+      return NextResponse.json({ error: 'Not allowed' }, { status: 403 })
+    }
+
     const transactions = await sql`
       SELECT pt.*, s.tier as current_tier
       FROM payment_transactions pt

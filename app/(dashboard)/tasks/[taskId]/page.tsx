@@ -172,7 +172,11 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
   const taskFamily = families.find((f) => f.id === (task as unknown as { family_id?: string }).family_id)
   const myRole = taskFamily?.currentUserRole || taskFamily?.userRole
   const iAmAdult = myRole === 'PARENT' || myRole === 'GUARDIAN'
-  const iAmAssignee = !!currentUser && task.assigned_to_id === currentUser.id
+  // Assigned to me directly, or to my own child profile (a child's login).
+  const myChildIds = ((taskFamily as unknown as { children?: Array<{ id: string; isMe?: boolean }> } | undefined)?.children || [])
+    .filter((c) => c.isMe).map((c) => c.id)
+  const iAmAssignee = !!currentUser && (task.assigned_to_id === currentUser.id ||
+    (!!task.child_profile_id && myChildIds.includes(task.child_profile_id)))
   const canRespond =
     (assignmentStatus === 'PENDING_APPROVAL' && iAmAdult && task.created_by_id !== currentUser?.id) ||
     (assignmentStatus === 'PENDING_ACCEPTANCE' && iAmAssignee)
@@ -313,7 +317,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
             <label className="text-sm font-medium text-muted-foreground">Update Status</label>
             <div className="flex items-center gap-3">
               <Select 
-                value={task.status?.toLowerCase()} 
+                value={task.status?.toLowerCase() === 'approved' ? 'completed' : task.status?.toLowerCase()} 
                 onValueChange={handleStatusChange}
                 disabled={processing || task.status?.toLowerCase() === 'pending_approval'}
               >

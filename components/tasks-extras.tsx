@@ -139,7 +139,11 @@ export function QuickAdd({
 /* ------------------------------ Grouping ------------------------------ */
 
 export const ACTIVE = ['pending', 'in_progress', 'pending_approval']
-export const norm = (s?: string | null) => (s || '').toLowerCase()
+// An approved task (parent signed off) is a finished task.
+export const norm = (s?: string | null) => {
+  const v = (s || '').toLowerCase()
+  return v === 'approved' ? 'completed' : v
+}
 
 export type GroupKey = 'overdue' | 'today' | 'week' | 'later' | 'nodate' | 'closed'
 

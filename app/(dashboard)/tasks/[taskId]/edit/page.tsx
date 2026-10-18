@@ -27,7 +27,10 @@ export default function EditTaskPage({ params }: { params: Promise<{ taskId: str
   const router = useRouter()
   const { families, isLoading: familiesLoading } = useFamilies()
   const { task, isLoading: taskLoading, mutate } = useTask(taskId)
-  const primaryFamily = families[0]
+  // The task's own family, not whichever family the switcher has selected
+  // (a task opened from another family's notification showed the wrong people).
+  const taskFamilyId = (task as unknown as { family_id?: string } | undefined)?.family_id
+  const primaryFamily = families.find((f) => f.id === taskFamilyId) || families[0]
   
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')

@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
 
     console.error("[v0] Login error:", error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Login failed" },
+      { success: false, error: "Sign-in failed. Please try again." }, // details stay in the server log
       { status: 500 }
     )
   }

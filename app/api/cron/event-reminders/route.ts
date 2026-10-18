@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
 
       const tierRows = await sql`
         SELECT tier FROM subscriptions WHERE family_id = ${event.family_id} AND status IN ('ACTIVE', 'TRIALING')
+          AND NOT (status = 'TRIALING' AND trial_ends_at IS NOT NULL AND trial_ends_at < NOW()) -- ended trial
         ORDER BY created_at DESC LIMIT 1
       `
       const hasSms = tierHasFeature(tierRows.length > 0 ? tierRows[0].tier : "FREE", "smsNotifications")

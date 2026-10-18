@@ -578,12 +578,21 @@ export async function POST(request: NextRequest) {
     const mainStart = occurrenceStarts[0]
     const mainEnd = occurrenceEnds[0]
 
+    // A linked saved place must be this family's (its address is shown).
+    if (validatedData.savedPlaceId) {
+      const place = await sql`SELECT 1 FROM saved_places WHERE id = ${validatedData.savedPlaceId} AND family_id = ${calendar.family_id} LIMIT 1`
+      if (place.length === 0) {
+        return NextResponse.json({ success: false, error: "That place isn't in this family" }, { status: 400 })
+      }
+    }
+
     // Check for conflicts
     const conflicts = await checkEventConflicts(
       mainStart,
       mainEnd,
       participantUserIds.length > 0 ? participantUserIds : [user.id],
-      null
+      null,
+      calendar.family_id
     )
 
     if (conflicts.length > 0 && calendar.role !== "PARENT") {
@@ -849,9 +858,12 @@ async function checkEventConflicts(
   startTime: string,
   endTime: string,
   participantIds: string[],
-  excludeEventId: string | null
+  excludeEventId: string | null,
+  familyId: string
 ): Promise<Array<{ eventId: string; title: string; participantId: string }>> {
   if (participantIds.length === 0) return []
+  // Only this family's calendar counts: a co-parent's events in another
+  // family must neither block this event nor have their titles revealed.
 
   let conflicts
   if (excludeEventId) {
@@ -859,6 +871,7 @@ async function checkEventConflicts(
       SELECT DISTINCT e.id, e.title, ep.user_id as participant_id
       FROM events e
       JOIN event_participants ep ON e.id = ep.event_id
+      JOIN calendars c ON c.id = e.calendar_id AND c.family_id = ${familyId}
       WHERE ep.user_id::text = ANY(${participantIds}::text[])
       AND e.status = 'APPROVED'
       AND e.start_time < ${endTime}::timestamp
@@ -870,6 +883,7 @@ async function checkEventConflicts(
       SELECT DISTINCT e.id, e.title, ep.user_id as participant_id
       FROM events e
       JOIN event_participants ep ON e.id = ep.event_id
+      JOIN calendars c ON c.id = e.calendar_id AND c.family_id = ${familyId}
       WHERE ep.user_id::text = ANY(${participantIds}::text[])
       AND e.status = 'APPROVED'
       AND e.start_time < ${endTime}::timestamp

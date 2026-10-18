@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { isParentInOtherFamily, getRolePermissions } from "@/lib/family-invites"
+import { canManageFamily } from "@/lib/permissions"
 
 const updateMemberSchema = z.object({
   role: z.enum(["PARENT", "GUARDIAN", "ADULT", "CHILD", "GUEST"]).optional(),
@@ -36,7 +37,8 @@ export async function PATCH(
       WHERE family_id = ${familyId} AND user_id = ${user.id} AND is_active = true
     `
 
-    if (userMembership.length === 0 || userMembership[0].role !== "PARENT") {
+    // A parent, or the family owner whatever their role (canManageFamily).
+    if (userMembership.length === 0 || !(await canManageFamily(familyId, user.id))) {
       return NextResponse.json(
         { success: false, error: "Only parents can update member settings" },
         { status: 403 }

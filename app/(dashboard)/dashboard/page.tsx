@@ -168,7 +168,8 @@ export default function DashboardPage() {
     pending: tasks.filter(t => t.status?.toLowerCase() === 'pending' && isNotPastDue(t)).length,
     inProgress: tasks.filter(t => t.status?.toLowerCase() === 'in_progress' && isNotPastDue(t)).length,
     onHold: tasks.filter(t => t.status?.toLowerCase() === 'on_hold' && isNotPastDue(t)).length,
-    completed: tasks.filter(t => t.status?.toLowerCase() === 'completed').length, // Completed tasks always show
+    // Completed (and parent-approved) tasks always show
+    completed: tasks.filter(t => ['completed', 'approved'].includes(t.status?.toLowerCase() ?? '')).length,
   }
 
   // Show approved, active, and pending events (pending events are awaiting approval)

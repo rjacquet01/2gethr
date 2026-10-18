@@ -139,7 +139,10 @@ export async function smsQuotaForFamily(familyId: string): Promise<{ quota: numb
   if (s && s.status === 'TRIALING' && (!s.trial_ends_at || new Date(s.trial_ends_at).getTime() > Date.now())) {
     return { quota: TRIAL_SMS_QUOTA, trial: true }
   }
-  return { quota: getTierDefinition(s?.tier ?? 'FREE').limits.smsMonthlyQuota, trial: false }
+  // A trial that has ended (the daily cleanup hasn't flipped the row yet)
+  // gets the Free allowance, not the paid plan's.
+  const trialEnded = s?.status === 'TRIALING'
+  return { quota: getTierDefinition(trialEnded ? 'FREE' : s?.tier ?? 'FREE').limits.smsMonthlyQuota, trial: false }
 }
 
 /** Texts used and allowed this month, for Settings > Notifications. */

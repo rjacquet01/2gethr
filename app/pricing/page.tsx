@@ -52,7 +52,7 @@ export default function PricingPage() {
             Simple, transparent pricing
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Choose the plan that fits your family. New members get a {TRIAL_DAYS}-day free Premium trial.
+            Choose the plan that fits your family. New accounts get a {TRIAL_DAYS}-day free Premium trial for their family.
           </p>
         </div>
 
@@ -162,7 +162,7 @@ export default function PricingPage() {
             <div>
               <h3 className="font-semibold mb-2">Can I change my plan later?</h3>
               <p className="text-muted-foreground">
-                Yes! You can upgrade or downgrade your plan at any time. Changes take effect at the start of your next billing cycle.
+                Yes! You can upgrade or downgrade your plan at any time. Changes take effect right away, and the price difference is prorated on your next bill.
               </p>
             </div>
             <div>

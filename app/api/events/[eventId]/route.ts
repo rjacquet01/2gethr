@@ -255,6 +255,16 @@ export async function PATCH(
     if (newEnd < newStart) {
       return NextResponse.json({ success: false, error: "The event can't end before it starts" }, { status: 400 })
     }
+    // A linked saved place must belong to the event's family (its address is shown).
+    if (validatedData.savedPlaceId) {
+      const place = await sql`
+        SELECT 1 FROM saved_places sp JOIN calendars c ON c.family_id = sp.family_id
+        WHERE sp.id = ${validatedData.savedPlaceId} AND c.id = ${event.calendar_id} LIMIT 1
+      `
+      if (place.length === 0) {
+        return NextResponse.json({ success: false, error: "That place isn't in this family" }, { status: 400 })
+      }
+    }
 
     if (validatedData.reminderMinutes) {
       const cal = await sql`SELECT family_id FROM calendars WHERE id = ${event.calendar_id}`

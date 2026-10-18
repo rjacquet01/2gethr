@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
             cp.avatar_url, cp.created_at, fm.user_id AS member_user_id
           FROM child_profiles cp
           JOIN family_members fm ON cp.family_member_id = fm.id
-          WHERE fm.family_id = ${f.id} AND fm.role = 'CHILD'
+          WHERE fm.family_id = ${f.id} AND fm.role = 'CHILD' AND fm.is_active = true
         `
         
         return {
@@ -107,6 +107,8 @@ export async function GET(request: NextRequest) {
             age: f.user_role === 'GUEST' ? null : c.age,
             school: f.user_role === 'GUEST' ? null : c.school,
             hasAccount: !!c.member_user_id,
+            // This child profile is the signed-in user's own (a child's login).
+            isMe: !!c.member_user_id && c.member_user_id === user!.id,
             createdAt: c.created_at,
           })),
           subscription: {

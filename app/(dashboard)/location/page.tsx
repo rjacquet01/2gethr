@@ -286,18 +286,9 @@ function LocationPageContent() {
             shareWithFamily: familySettings.shareWithFamily ?? false,
             updateIntervalSec: familySettings.updateIntervalSec || 300,
           })
-        } else if (allSettings.length > 0) {
-          // Use first available member settings as fallback
-          const firstSettings = allSettings[0]
-          setMySettings({
-            id: firstSettings.id || '',
-            memberId: firstSettings.memberId,
-            familyId: firstSettings.familyId,
-            mode: firstSettings.mode || 'OFF',
-            shareWithFamily: firstSettings.shareWithFamily ?? false,
-            updateIntervalSec: firstSettings.updateIntervalSec || 300,
-          })
         } else {
+          // No settings for the selected family: don't borrow another
+          // family's (toggling here then changed sharing in that family).
           setMySettings(null)
         }
       }

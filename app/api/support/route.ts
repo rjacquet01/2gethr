@@ -49,7 +49,8 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { subject, description, category, priority = 'MEDIUM', familyId } = body
+    const { subject, description, category, priority = 'MEDIUM' } = body
+    let familyId: string | null = body.familyId ? String(body.familyId) : null
 
     if (!subject || !description || !category) {
       return NextResponse.json({ error: 'Subject, description, and category are required' }, { status: 400 })
@@ -67,6 +68,17 @@ export async function POST(request: NextRequest) {
     const normalizedPriority =
       PRIORITY_ALIASES[requestedPriority] ??
       (ALLOWED_PRIORITIES.includes(requestedPriority) ? requestedPriority : 'NORMAL')
+
+    // The ticket can only be linked to (and get priority from) a family the
+    // sender actually belongs to.
+    const familyOk = familyId
+      ? (await sql`
+          SELECT 1 FROM family_members
+          WHERE family_id = ${String(familyId)} AND user_id = ${user.id} AND is_active = true
+          LIMIT 1
+        `).length > 0
+      : false
+    if (familyId && !familyOk) familyId = null
 
     // Priority support: Plus and Premium families get their tickets bumped to HIGH.
     let finalPriority = normalizedPriority

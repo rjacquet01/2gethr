@@ -581,7 +581,8 @@ function RemindersPageContent() {
                     <SelectContent>
                       <SelectItem value="me">Myself</SelectItem>
                       {familyMembers
-                        .filter((m) => m.userId !== user?.id)
+                        // Only parents/guardians may set reminders for children (server rule).
+                        .filter((m) => m.userId !== user?.id && (isSupervisor || m.role !== 'CHILD'))
                         .map((m) => (
                           <SelectItem key={m.id} value={m.id}>
                             <span className="flex items-center gap-2">

@@ -96,7 +96,7 @@ export async function GET(
         fm.id as family_member_id, fm.user_id as member_user_id, fm.role, fm.color, fm.emoji
       FROM child_profiles cp
       JOIN family_members fm ON cp.family_member_id = fm.id
-      WHERE fm.family_id = ${familyId} AND fm.role = 'CHILD'
+      WHERE fm.family_id = ${familyId} AND fm.role = 'CHILD' AND fm.is_active = true
     `
 
     // Return { family } for SWR hook compatibility

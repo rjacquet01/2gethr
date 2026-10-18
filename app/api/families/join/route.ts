@@ -154,6 +154,12 @@ export async function POST(request: NextRequest) {
     const familyId = invite.family_id as string
     const displayName = (nickname || user.firstName || "Member") as string
 
+    // A deleted family has no active members left: its old codes are dead.
+    const live = await sql`SELECT 1 FROM family_members WHERE family_id = ${familyId} AND is_active = true LIMIT 1`
+    if (live.length === 0) {
+      return NextResponse.json({ success: false, error: "This family no longer exists." }, { status: 400 })
+    }
+
     const existing = await sql`SELECT is_active FROM family_members WHERE family_id = ${familyId} AND user_id = ${user.id} LIMIT 1`
     if (existing.length > 0 && existing[0].is_active) {
       return NextResponse.json({ success: false, error: "You are already a member of this family" }, { status: 400 })

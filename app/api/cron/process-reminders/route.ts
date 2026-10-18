@@ -45,8 +45,10 @@ export async function GET(request: NextRequest) {
       WHERE r.status = 'PENDING'
         AND r.remind_at <= NOW()
         AND r.sent_at IS NULL
+      -- Reminders waiting out quiet hours stay at the front; a larger batch
+      -- keeps them from crowding out newer due ones.
       ORDER BY r.remind_at ASC
-      LIMIT 200
+      LIMIT 500
     `
 
     let sent = 0

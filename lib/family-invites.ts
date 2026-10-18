@@ -63,7 +63,12 @@ export async function canManageInvites(familyId: string, userId: string): Promis
     SELECT 1 FROM families f
     WHERE f.id = ${familyId}
       AND (
-        f.owner_id = ${userId}
+        -- The owner must still be an active member: a deleted family keeps
+        -- owner_id but has no active members, and must not mint invites.
+        (f.owner_id = ${userId} AND EXISTS (
+          SELECT 1 FROM family_members om
+          WHERE om.family_id = f.id AND om.user_id = ${userId} AND om.is_active = true
+        ))
         OR EXISTS (
           SELECT 1 FROM family_members fm
           WHERE fm.family_id = f.id AND fm.user_id = ${userId} AND fm.is_active = true AND fm.role = 'PARENT'
