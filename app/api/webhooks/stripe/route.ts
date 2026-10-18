@@ -120,6 +120,18 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Stripe subscription status -> our subscriptions.status
+const STRIPE_STATUS_MAP: Record<string, string> = {
+  active: "ACTIVE",
+  trialing: "TRIALING",
+  past_due: "PAST_DUE",
+  canceled: "CANCELLED",
+  unpaid: "PAST_DUE",
+  incomplete: "PAST_DUE",
+  incomplete_expired: "CANCELLED",
+  paused: "CANCELLED",
+}
+
 async function activateSubscriptionFromSession(session: Stripe.Checkout.Session) {
   const familyId = session.metadata?.familyId
   const requestedTier = session.metadata?.requestedTier
@@ -131,7 +143,10 @@ async function activateSubscriptionFromSession(session: Stripe.Checkout.Session)
 
   const stripeSub = await stripe.subscriptions.retrieve(subscriptionId)
   const priceId = stripeSub.items.data[0]?.price.id
-  const tier = getTierFromPriceId(priceId) ?? requestedTier ?? "FREE"
+  // Use the subscription's live status: a checkout event redelivered after
+  // the subscription was cancelled must not put the family back on a paid plan.
+  const liveStatus = STRIPE_STATUS_MAP[stripeSub.status] ?? "ACTIVE"
+  const tier = liveStatus === "CANCELLED" ? "FREE" : getTierFromPriceId(priceId) ?? requestedTier ?? "FREE"
 
   const existing = await sql`SELECT * FROM subscriptions WHERE family_id = ${familyId}`
   const previousTier = existing[0]?.tier ?? "FREE"
@@ -140,7 +155,7 @@ async function activateSubscriptionFromSession(session: Stripe.Checkout.Session)
   await sql`
     UPDATE subscriptions
     SET tier = ${tier},
-        status = 'ACTIVE',
+        status = ${liveStatus},
         stripe_customer_id = ${customerId},
         stripe_subscription_id = ${subscriptionId},
         stripe_price_id = ${priceId ?? null},
@@ -187,17 +202,7 @@ async function syncSubscriptionFromStripe(sub: Stripe.Subscription) {
   const tier = getTierFromPriceId(priceId) ?? existing[0].tier
   const item = sub.items.data[0]
 
-  const statusMap: Record<string, string> = {
-    active: "ACTIVE",
-    trialing: "TRIALING",
-    past_due: "PAST_DUE",
-    canceled: "CANCELLED",
-    unpaid: "PAST_DUE",
-    incomplete: "PAST_DUE",
-    incomplete_expired: "CANCELLED",
-    paused: "CANCELLED",
-  }
-  const newStatus = statusMap[sub.status] ?? "ACTIVE"
+  const newStatus = STRIPE_STATUS_MAP[sub.status] ?? "ACTIVE"
   const previousStatus = existing[0].status
 
   await sql`
@@ -210,7 +215,7 @@ async function syncSubscriptionFromStripe(sub: Stripe.Subscription) {
         current_period_start = ${item ? new Date(item.current_period_start * 1000).toISOString() : null},
         current_period_end = ${item ? new Date(item.current_period_end * 1000).toISOString() : null},
         cancel_at_period_end = ${sub.cancel_at_period_end},
-        trial_ends_at = ${sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null},
+        trial_ends_at = COALESCE(${sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null}::timestamptz, trial_ends_at),
         updated_at = NOW()
     WHERE family_id = ${existing[0].family_id}
   `
@@ -276,6 +281,13 @@ async function handleSubscriptionCanceled(sub: Stripe.Subscription) {
 async function recordInvoicePayment(invoice: Stripe.Invoice, status: "COMPLETED" | "FAILED") {
   const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id
   if (!customerId) return
+
+  // A payment_failed event can arrive after a retry already succeeded: check
+  // the invoice's current state before marking the family past due.
+  if (status === "FAILED" && invoice.id) {
+    const live = await stripe.invoices.retrieve(invoice.id)
+    if (live.status === "paid") status = "COMPLETED"
+  }
 
   const existing = await sql`SELECT * FROM subscriptions WHERE stripe_customer_id = ${customerId}`
   if (existing.length === 0) return

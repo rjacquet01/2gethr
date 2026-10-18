@@ -128,6 +128,9 @@ export async function POST(request: NextRequest) {
               cancel_at_period_end: false,
               metadata: { familyId, requestedTier: tier.toUpperCase(), billingCycle },
             })
+          } else if (current.cancel_at_period_end) {
+            // Same plan, but set to end: subscribing again means "keep it".
+            await stripe.subscriptions.update(currentStripeSubId, { cancel_at_period_end: false })
           }
           return NextResponse.json({
             success: true,
@@ -136,7 +139,18 @@ export async function POST(request: NextRequest) {
           })
         }
       } catch (err) {
-        console.error("Existing subscription update failed, falling back to checkout:", err)
+        // Only a subscription that no longer exists in Stripe may fall through
+        // to a new Checkout. Any other error (network, rate limit) could leave
+        // the old one running, and a second Checkout would bill twice.
+        const code = (err as { code?: string })?.code
+        if (code !== "resource_missing") {
+          console.error("Existing subscription update failed:", err)
+          return NextResponse.json(
+            { success: false, error: "We couldn't change your plan right now. Please try again in a minute." },
+            { status: 502 }
+          )
+        }
+        console.warn("Stored Stripe subscription no longer exists; starting a new checkout")
       }
     }
 

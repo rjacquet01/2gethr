@@ -12,16 +12,22 @@ const STORAGE_KEY = 'togethr-android-app'
 const COOKIE = 'togethr_android'
 const EXTERNAL_LINKS_ENABLED = process.env.NEXT_PUBLIC_PLAY_EXTERNAL_LINKS === 'true'
 
-function detectAndroidApp(): boolean {
+// The flag lives in sessionStorage, which belongs to the app's own tab: the
+// TWA shares cookies and localStorage with the phone's browser, so a lasting
+// flag there hid every upgrade option on the normal website too. The cookie
+// (read by the server) is re-set by the app tab on each load and cleared by
+// any other tab.
+export function detectAndroidApp(): boolean {
   try {
+    localStorage.removeItem(STORAGE_KEY) // old, browser-wide flag
     if (document.referrer.startsWith('android-app://')) {
-      localStorage.setItem(STORAGE_KEY, '1')
+      sessionStorage.setItem(STORAGE_KEY, '1')
     }
-    const is = localStorage.getItem(STORAGE_KEY) === '1'
-    if (is) {
-      // Lets the server refuse checkout/portal requests from the Android app.
-      document.cookie = `${COOKIE}=1; path=/; max-age=31536000; SameSite=Lax; Secure`
-    }
+    const is = sessionStorage.getItem(STORAGE_KEY) === '1'
+    // Lets the server refuse checkout/portal requests from the Android app.
+    document.cookie = is
+      ? `${COOKIE}=1; path=/; SameSite=Lax; Secure`
+      : `${COOKIE}=; path=/; max-age=0; SameSite=Lax; Secure`
     return is
   } catch {
     return false

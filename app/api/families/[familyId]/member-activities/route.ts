@@ -85,7 +85,8 @@ export async function GET(
         t.category
       FROM tasks t
       WHERE t.family_id = ${familyId}
-      AND t.status NOT IN ('COMPLETED', 'CANCELLED')
+      -- Open tasks only: archived/approved ones were counted as open before.
+      AND UPPER(t.status) NOT IN ('COMPLETED', 'APPROVED', 'CANCELLED', 'ARCHIVED')
       ORDER BY t.due_date ASC NULLS LAST, t.priority DESC
     `
 
@@ -109,6 +110,10 @@ export async function GET(
       AND e.start_time >= NOW()
       AND e.start_time <= NOW() + INTERVAL '7 days'
       AND e.status != 'CANCELLED'
+      -- PRIVATE / SELECTED_MEMBERS events only for their creator and participants
+      AND (e.visibility IS NULL OR e.visibility = 'FAMILY' OR e.created_by_id = ${user.id}
+           OR (e.visibility = 'SELECTED_MEMBERS' AND EXISTS (
+                 SELECT 1 FROM event_participants me WHERE me.event_id = e.id AND me.user_id = ${user.id})))
       ORDER BY e.start_time ASC
     `
 

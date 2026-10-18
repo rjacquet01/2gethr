@@ -33,7 +33,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     if (action === "approve") {
       const subscription = await checkFamilySubscription(familyId)
-      const count = await sql`SELECT COUNT(*) AS count FROM family_members WHERE family_id = ${familyId} AND is_active = true`
+      // Children have their own limit; the member cap counts everyone else.
+      const count = await sql`SELECT COUNT(*) AS count FROM family_members WHERE family_id = ${familyId} AND is_active = true AND role != 'CHILD'`
       if (Number(count[0].count) >= subscription.features.maxFamilyMembers) {
         return NextResponse.json({ success: false, error: `This family has reached its member limit (${subscription.features.maxFamilyMembers}).` }, { status: 400 })
       }

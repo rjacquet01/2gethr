@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
-import { guestCanSeeEvent, taskInvolvesUser } from "@/lib/guest-scope"
+import { guestCanSeeEvent, taskInvolvesUser, canSeeEventVisibility } from "@/lib/guest-scope"
 
 type FavoriteScope = { userId: string; memberFamilyIds: string[]; guestFamilyIds: string[] }
 
@@ -29,10 +29,12 @@ async function resolveFavoriteItem(itemType: string, itemId: string, scope: Favo
   }
   if (itemType === "event") {
     const e = (await sql`
-      SELECT e.id, e.title, e.start_time, e.end_time, e.event_type, c.family_id
+      SELECT e.id, e.title, e.start_time, e.end_time, e.category AS event_type,
+             e.visibility, e.created_by_id, c.family_id
       FROM events e JOIN calendars c ON c.id = e.calendar_id WHERE e.id = ${itemId}
     `)[0]
     if (!e || !visibleFamily(e.family_id) || (guestIn(e.family_id) && !(await guestCanSeeEvent(scope.userId, e.id)))) return null
+    if (!(await canSeeEventVisibility(e as { id: string; visibility?: unknown; created_by_id?: unknown }, scope.userId))) return null
     return { id: e.id, title: e.title, start_time: e.start_time, end_time: e.end_time, event_type: e.event_type }
   }
   if (itemType === "place") {
