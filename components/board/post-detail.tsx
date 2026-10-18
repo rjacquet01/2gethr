@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
-import { ImageMinus, Pin, PinOff, RefreshCw, Trash2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ImageMinus, Magnet, Pin, PinOff, RefreshCw, Trash2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { MemberAvatar } from '@/components/member-avatar'
 import { CommentThread, relativeTime } from '@/components/comment-thread'
@@ -16,6 +17,7 @@ export function PostDetail({
   currentUserId,
   canModerate,
   canPinFlyers,
+  keepUp,
   onClose,
   onDelete,
   onPin,
@@ -28,6 +30,8 @@ export function PostDetail({
   currentUserId?: string | null
   canModerate: boolean
   canPinFlyers: boolean
+  /** Adults only: the Keep up switch and how many are used. */
+  keepUp?: { used: number; max: number; onChange: (post: BoardPost, value: boolean) => Promise<void> } | null
   onClose: () => void
   onDelete: (post: BoardPost) => void
   onPin: (post: BoardPost, pinned: boolean) => void
@@ -86,7 +90,13 @@ export function PostDetail({
 
             {post.body && <p className="whitespace-pre-wrap break-words text-sm">{post.body}</p>}
 
+            {post.expiresAt && !post.keepUp && (
+              <p className="text-xs text-muted-foreground">Comes down after {expiryLabel(post.expiresAt)}.</p>
+            )}
+
             {extra?.(post)}
+
+            {keepUp && <KeepUpRow post={post} {...keepUp} />}
 
             {(canModerate || canDelete || canEditPhoto) && (
               <div className="flex flex-wrap gap-2">
@@ -129,5 +139,48 @@ export function PostDetail({
         )}
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** expires_at is the start of the last day the flyer shows. */
+function expiryLabel(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+function KeepUpRow({
+  post,
+  used,
+  max,
+  onChange,
+}: {
+  post: BoardPost
+  used: number
+  max: number
+  onChange: (post: BoardPost, value: boolean) => Promise<void>
+}) {
+  const [busy, setBusy] = useState(false)
+  const full = !post.keepUp && used >= max
+  const id = `keep-up-${post.id}`
+  return (
+    <div className="flex items-start gap-3 rounded-md border bg-amber-50/60 p-3 dark:bg-amber-950/20">
+      <Magnet className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <label htmlFor={id} className="text-sm font-medium">Keep up</label>
+        <p className="text-xs text-muted-foreground">
+          {full
+            ? `All ${max} are in use. Turn off Keep up on another pin first.`
+            : `Never taken down to make room or after its date. ${used} of ${max} kept up.`}
+        </p>
+      </div>
+      <Switch
+        id={id}
+        checked={post.keepUp}
+        disabled={busy || full}
+        onCheckedChange={async (v) => {
+          setBusy(true)
+          try { await onChange(post, v) } finally { setBusy(false) }
+        }}
+      />
+    </div>
   )
 }

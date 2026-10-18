@@ -10,7 +10,8 @@ function hash(id: string): number {
   return h >>> 0
 }
 
-export const PIN_COLORS = ['#d93636', '#2f6fd6', '#2e9e57', '#e0a91b', '#8b4fd1'] as const
+// No yellow here: gold is reserved for kept-up pins (KEEP_UP_PIN).
+export const PIN_COLORS = ['#d93636', '#2f6fd6', '#2e9e57', '#e8702a', '#8b4fd1'] as const
 
 // Paper colors with dark text, readable in light and dark mode alike.
 export const NOTE_COLORS = ['#fff3a3', '#ffd6e0', '#cdeefd', '#d6f5c9', '#ffe2b8'] as const
@@ -28,3 +29,6 @@ export function boardLook(id: string) {
     tape: ((h >>> 16) % 4) === 0,
   }
 }
+
+/** Gold push pin for pins marked "Keep up" (not one of PIN_COLORS). */
+export const KEEP_UP_PIN = '#c99a06'

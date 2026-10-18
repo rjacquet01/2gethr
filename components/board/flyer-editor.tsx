@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { BOARD_FLYER } from '@/lib/constants'
@@ -15,6 +16,12 @@ type Rect = { x: number; y: number; w: number; h: number } // 0..1 of the rotate
 type Drag = { mode: 'move' | 'nw' | 'ne' | 'sw' | 'se'; startX: number; startY: number; start: Rect }
 const FULL: Rect = { x: 0, y: 0, w: 1, h: 1 }
 const MIN = 0.12
+
+/** Today as YYYY-MM-DD in the phone's own time zone (for the date picker's min). */
+function todayLocal(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 /** Decode a picked photo (phone rotation applied) and shrink it to CLIENT_MAX_PX. */
 async function loadWorkCanvas(file: File): Promise<HTMLCanvasElement> {
@@ -89,7 +96,8 @@ export function FlyerEditor({
   mode: 'new' | 'replace'
   canPinToTop: boolean
   onCancel: () => void
-  onSubmit: (jpeg: Blob, caption: string, pinned: boolean) => Promise<boolean>
+  /** expiresOn: YYYY-MM-DD to take it down after, or '' to leave it up */
+  onSubmit: (jpeg: Blob, caption: string, pinned: boolean, expiresOn: string) => Promise<boolean>
 }) {
   const [work, setWork] = useState<HTMLCanvasElement | null>(null)
   const [turns, setTurns] = useState(0)
@@ -97,13 +105,14 @@ export function FlyerEditor({
   const [bright, setBright] = useState(true)
   const [caption, setCaption] = useState('')
   const [pinned, setPinned] = useState(false)
+  const [expiresOn, setExpiresOn] = useState('')
   const [busy, setBusy] = useState(false)
   const preview = useRef<HTMLCanvasElement>(null)
   const box = useRef<HTMLDivElement>(null)
   const drag = useRef<Drag | null>(null)
 
   useEffect(() => {
-    setWork(null); setTurns(0); setCrop(FULL); setCaption(''); setPinned(false); setBright(true)
+    setWork(null); setTurns(0); setCrop(FULL); setCaption(''); setPinned(false); setExpiresOn(''); setBright(true)
     if (!file) return
     let live = true
     loadWorkCanvas(file)
@@ -177,7 +186,7 @@ export function FlyerEditor({
       if (bright) enhance(ctx, sw, sh)
       const blob = await new Promise<Blob | null>((res) => out.toBlob(res, 'image/jpeg', 0.88))
       if (!blob) throw new Error('encode')
-      await onSubmit(blob, caption.trim(), canPinToTop && pinned)
+      await onSubmit(blob, caption.trim(), canPinToTop && pinned, expiresOn)
     } catch {
       toast.error('Could not prepare the photo')
     } finally {
@@ -252,6 +261,22 @@ export function FlyerEditor({
               rows={2}
               className="resize-none text-sm"
             />
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor="flyer-expires-on" className="text-xs text-muted-foreground">
+                Take this down after (optional)
+              </label>
+              <Input
+                id="flyer-expires-on"
+                type="date"
+                min={todayLocal()}
+                value={expiresOn}
+                onChange={(e) => setExpiresOn(e.target.value)}
+                className="h-8 w-auto text-sm"
+              />
+              {expiresOn && (
+                <Button type="button" variant="ghost" size="sm" className="h-8" onClick={() => setExpiresOn('')}>Clear</Button>
+              )}
+            </div>
             {canPinToTop && (
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Checkbox checked={pinned} onCheckedChange={(v) => setPinned(v === true)} />

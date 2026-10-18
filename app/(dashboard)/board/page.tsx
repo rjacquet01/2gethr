@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'
 import useSWRInfinite from 'swr/infinite'
 import { toast } from 'sonner'
-import { Camera, Images, StickyNote } from 'lucide-react'
+import { AlertTriangle, Archive, Camera, Images, StickyNote } from 'lucide-react'
 import { authFetch, useAuth } from '@/hooks/use-auth'
 import { useMyRole } from '@/hooks/use-my-role'
 import { Button } from '@/components/ui/button'
@@ -20,7 +20,9 @@ import { BoardSurface } from '@/components/board/board-surface'
 import { BoardItem } from '@/components/board/board-item'
 import { PostDetail } from '@/components/board/post-detail'
 import { FlyerEditor } from '@/components/board/flyer-editor'
-import type { BoardPage, BoardPost } from '@/components/board/types'
+import { TakenDownSheet } from '@/components/board/taken-down-sheet'
+import { rolledOffMessage, type BoardPage, type BoardPost, type RolledOff } from '@/components/board/types'
+import { BOARD_LIMITS } from '@/lib/constants'
 
 const POST_MAX = 500
 const POLL_MS = 45_000
@@ -66,7 +68,16 @@ function FamilyBoard({ familyId }: { familyId: string }) {
   const posts = useMemo(() => (data || []).flatMap((p) => p.posts), [data])
   const canModerate = !!first?.canModerate
   const canPinFlyers = !!first?.canPinFlyers
+  const canManagePins = !!first?.canManagePins
+  const counts = first?.counts || null
   const all = useMemo(() => [...pinned, ...posts], [pinned, posts])
+  const [takenDownOpen, setTakenDownOpen] = useState(false)
+
+  // After a post or restore: say what came down to make room, if anything.
+  const announceRolledOff = (rolledOff: RolledOff[] | undefined) => {
+    const msg = rolledOffMessage(rolledOff || [], BOARD_LIMITS.RESTORE_DAYS)
+    if (msg) toast(msg, { duration: 8000 })
+  }
   const newest = useMemo(() => {
     const times = all.map((p) => p.createdAt as string)
     return times.length ? times.reduce((a, b) => (a > b ? a : b)) : null
@@ -119,6 +130,7 @@ function FamilyBoard({ familyId }: { familyId: string }) {
       setDraft('')
       setPinIt(false)
       setNoteOpen(false)
+      announceRolledOff(json.rolledOff)
       mutate()
     } finally {
       setPosting(false)
@@ -145,13 +157,14 @@ function FamilyBoard({ familyId }: { familyId: string }) {
     setReplaceFor(null)
   }, [])
 
-  const uploadFlyer = async (jpeg: Blob, caption: string, pinTop: boolean): Promise<boolean> => {
+  const uploadFlyer = async (jpeg: Blob, caption: string, pinTop: boolean, expiresOn: string): Promise<boolean> => {
     const form = new FormData()
     form.append('file', jpeg, 'flyer.jpg')
     const target = replaceFor
     if (!target) {
       if (caption) form.append('body', caption)
       if (pinTop) form.append('pinned', 'true')
+      if (expiresOn) form.append('expiresOn', expiresOn)
     }
     const res = await authFetch(target ? `${base}/${target.id}/flyer` : `${base}/flyers`, {
       method: target ? 'PUT' : 'POST',
@@ -163,6 +176,7 @@ function FamilyBoard({ familyId }: { familyId: string }) {
       return false
     }
     toast.success(target ? 'Photo replaced' : 'Flyer pinned')
+    announceRolledOff(json.rolledOff)
     closeEditor()
     mutate()
     return true
@@ -207,6 +221,21 @@ function FamilyBoard({ familyId }: { familyId: string }) {
     }
   }
 
+  const setKeepUp = async (post: BoardPost, value: boolean) => {
+    const res = await authFetch(`${base}/${post.id}/keep-up`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keepUp: value }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) toast.error(json.error || 'Could not update the pin')
+    else toast.success(value ? 'This pin stays up' : 'Keep up turned off')
+    mutate()
+  }
+
+  const pinCount = counts?.pins ?? all.length
+  const almostFull = pinCount >= BOARD_LIMITS.WARN_AT
+
   const lastPage = data?.[data.length - 1]
   const loadingMore = size > 0 && data && typeof data[size - 1] === 'undefined'
 
@@ -215,8 +244,20 @@ function FamilyBoard({ familyId }: { familyId: string }) {
       <div className="flex flex-wrap items-end gap-3">
         <div className="mr-auto">
           <h1 className="text-xl font-bold sm:text-2xl">Family board</h1>
-          <p className="text-sm text-muted-foreground">Flyers and notes for the whole family.</p>
+          <p className="text-sm text-muted-foreground">
+            Flyers and notes for the whole family.
+            {counts && (
+              <span className="ml-1.5 whitespace-nowrap font-medium text-foreground">
+                · {pinCount} of {BOARD_LIMITS.MAX_PINS} pins
+              </span>
+            )}
+          </p>
         </div>
+        {canManagePins && (
+          <Button variant="ghost" onClick={() => setTakenDownOpen(true)}>
+            <Archive className="mr-1.5 h-4 w-4" /> Taken down{counts?.takenDown ? ` (${counts.takenDown})` : ''}
+          </Button>
+        )}
         <Button variant="outline" onClick={() => setNoteOpen(true)}>
           <StickyNote className="mr-1.5 h-4 w-4" /> Write a note
         </Button>
@@ -238,6 +279,13 @@ function FamilyBoard({ familyId }: { familyId: string }) {
           </DropdownMenu>
         )}
       </div>
+
+      {almostFull && (
+        <p role="status" className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          Board is almost full. The oldest pins will come down.
+        </p>
+      )}
 
       {/* Hidden pickers: one opens the camera, the other the gallery. */}
       <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPicked} />
@@ -278,6 +326,7 @@ function FamilyBoard({ familyId }: { familyId: string }) {
         currentUserId={user?.id}
         canModerate={canModerate}
         canPinFlyers={canPinFlyers}
+        keepUp={canManagePins ? { used: counts?.keptUp ?? 0, max: BOARD_LIMITS.MAX_KEEP_UP, onChange: setKeepUp } : null}
         onClose={() => setOpenId(null)}
         onDelete={removePost}
         onPin={setPinned}
@@ -292,6 +341,16 @@ function FamilyBoard({ familyId }: { familyId: string }) {
         onCancel={closeEditor}
         onSubmit={uploadFlyer}
       />
+
+      {canManagePins && (
+        <TakenDownSheet
+          familyId={familyId}
+          open={takenDownOpen}
+          restoreDays={BOARD_LIMITS.RESTORE_DAYS}
+          onOpenChange={setTakenDownOpen}
+          onRestored={() => mutate()}
+        />
+      )}
 
       {/* Note composer */}
       <Dialog open={noteOpen} onOpenChange={setNoteOpen}>

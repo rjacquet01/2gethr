@@ -1,8 +1,8 @@
 'use client'
 
-import { MessageCircle, Pin } from 'lucide-react'
+import { Magnet, MessageCircle, Pin } from 'lucide-react'
 import { relativeTime } from '@/components/comment-thread'
-import { boardLook } from './board-look'
+import { KEEP_UP_PIN, boardLook } from './board-look'
 import { PushPin, Tape } from './push-pin'
 import { flyerAlt, type BoardPost } from './types'
 
@@ -14,6 +14,7 @@ export function BoardItem({ post, onOpen }: { post: BoardPost; onOpen: () => voi
   const label = post.flyer
     ? `${flyerAlt(post)}${post.body ? `: ${post.body.slice(0, 80)}` : ''}`
     : `Note from ${post.authorName}: ${post.body.slice(0, 80)}`
+  const kept = post.keepUp ? '. Kept up' : ''
 
   return (
     <div
@@ -24,12 +25,18 @@ export function BoardItem({ post, onOpen }: { post: BoardPost; onOpen: () => voi
       <button
         type="button"
         onClick={onOpen}
-        aria-label={`${label}. ${replies} ${replies === 1 ? 'reply' : 'replies'}. Open`}
+        aria-label={`${label}${kept}. ${replies} ${replies === 1 ? 'reply' : 'replies'}. Open`}
         className="group relative block w-full text-left outline-none focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded-[3px] motion-safe:transition-transform motion-safe:duration-150 motion-safe:hover:-translate-y-0.5"
       >
-        {/* pin or tape, centered on the top edge */}
+        {/* pin or tape, centered on the top edge; kept-up pins get a gold pin */}
         <span className="absolute -top-3 left-1/2 z-10 -translate-x-1/2">
-          {!post.flyer && look.tape ? <Tape className="rotate-[-4deg]" /> : <PushPin color={look.pin} />}
+          {post.keepUp ? (
+            <PushPin color={KEEP_UP_PIN} />
+          ) : !post.flyer && look.tape ? (
+            <Tape className="rotate-[-4deg]" />
+          ) : (
+            <PushPin color={look.pin} />
+          )}
         </span>
 
         {post.flyer ? (
@@ -72,6 +79,12 @@ function Meta({ post }: { post: BoardPost }) {
         <span className="inline-flex items-center gap-0.5 font-semibold text-red-700">
           <Pin className="h-3 w-3" aria-hidden="true" />
           Top
+        </span>
+      )}
+      {post.keepUp && (
+        <span className="inline-flex items-center gap-0.5 font-semibold text-amber-800">
+          <Magnet className="h-3 w-3" aria-hidden="true" />
+          Kept up
         </span>
       )}
       <span className="min-w-0 truncate font-medium">{post.authorName}</span>
