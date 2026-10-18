@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 import bcrypt from 'bcryptjs'
+import { verifyAdminMfaCode } from './admin-mfa'
 import { sql } from '@/lib/db'
 
 // Admin JWT configuration (separate from consumer)
@@ -220,8 +221,9 @@ export async function loginAdmin(
   email: string,
   password: string,
   ipAddress: string,
-  userAgent: string
-): Promise<{ admin: AdminUser; accessToken: string; refreshToken: string } | { error: string }> {
+  userAgent: string,
+  mfaCode?: string
+): Promise<{ admin: AdminUser; accessToken: string; refreshToken: string } | { error: string } | { mfaRequired: true }> {
   // Find admin
   const adminResult = await sql`
     SELECT id, email, first_name, last_name, status, password_hash, mfa_enabled,
@@ -264,6 +266,23 @@ export async function loginAdmin(
     `
     
     return { error: 'Invalid credentials' }
+  }
+
+  // Two-step sign-in (lib/admin-mfa.ts): once an admin has turned it on, the
+  // password alone is not enough. Wrong codes count toward the same lockout.
+  if (admin.mfa_enabled) {
+    if (!mfaCode) return { mfaRequired: true }
+    if (!(await verifyAdminMfaCode(admin.id, mfaCode))) {
+      const newAttempts = (admin.failed_login_attempts || 0) + 1
+      const lockUntil = newAttempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null
+      await sql`
+        UPDATE admin_users
+        SET failed_login_attempts = ${newAttempts},
+            locked_until = ${lockUntil}
+        WHERE id = ${admin.id}
+      `
+      return { error: 'Invalid code' }
+    }
   }
   
   // Get roles and permissions

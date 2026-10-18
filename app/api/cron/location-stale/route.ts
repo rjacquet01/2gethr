@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { alertFamilyAdults } from "@/lib/family-alerts"
+import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
 
 // Every 30 minutes (see vercel.json): a child whose sharing is still switched
 // ON but whose phone hasn't reported a location for STALE_HOURS gets ONE quiet
@@ -11,6 +12,9 @@ import { alertFamilyAdults } from "@/lib/family-alerts"
 const STALE_HOURS = 3
 const QUIET_START_HOUR = 22
 const QUIET_END_HOUR = 7
+// The Android app's background service polls every 45 s with its device
+// token; this long without one while sharing is on means Android stopped it.
+const BG_STOPPED_MINUTES = 15
 
 function verifyCronRequest(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET
@@ -73,7 +77,69 @@ export async function GET(request: NextRequest) {
       })
       alerted++
     }
-    return NextResponse.json({ success: true, checked: rows.length, alerted })
+    // "Tap to resume": tell the person themselves when the Android app's
+    // background sharing has stopped (battery saver, force stop, update) while
+    // sharing is still on. Tapping opens /location?resume=1, which offers a
+    // one-tap restart. Once per outage; never overnight.
+    const stopped = await sql`
+      SELECT DISTINCT ON (t.user_id) t.id AS token_id, t.user_id, t.last_used_at, u.timezone
+      FROM location_device_tokens t
+      JOIN location_settings ls ON ls.family_member_id = t.family_member_id
+      JOIN family_members fm ON fm.id = t.family_member_id AND fm.is_active = true
+      JOIN users u ON u.id = t.user_id
+      WHERE t.revoked_at IS NULL
+        AND t.last_used_at < NOW() - make_interval(mins => ${BG_STOPPED_MINUTES}::int)
+        AND t.last_used_at > NOW() - INTERVAL '7 days'
+        AND ls.mode = 'ACTIVE' AND ls.share_with_family = true
+      ORDER BY t.user_id, t.last_used_at DESC
+    `
+    let resumeNudges = 0
+    for (const r of stopped) {
+      // A newer token (sharing re-enabled on this or another phone) that is
+      // working means nothing has stopped.
+      const working = await sql`
+        SELECT 1 FROM location_device_tokens
+        WHERE user_id = ${r.user_id} AND revoked_at IS NULL
+          AND last_used_at >= NOW() - make_interval(mins => ${BG_STOPPED_MINUTES}::int)
+        LIMIT 1
+      `
+      if (working.length > 0) continue
+      const h = localHour(r.timezone as string | null)
+      if (h >= QUIET_START_HOUR || h < QUIET_END_HOUR) continue
+      const already = await sql`
+        SELECT 1 FROM notifications n
+        WHERE n.user_id = ${r.user_id} AND n.data->>'subType' = 'BG_SHARING_STOPPED'
+          AND n.created_at > ${r.last_used_at}
+        LIMIT 1
+      `
+      if (already.length > 0) continue
+
+      const title = "Location sharing stopped"
+      const body = "Your phone stopped sharing your location in the background. Tap to turn it back on."
+      await sql`
+        INSERT INTO notifications (id, user_id, type, title, body, data, created_at)
+        VALUES (
+          ${`notif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`},
+          ${r.user_id}, 'LOCATION_ALERT', ${title}, ${body},
+          ${JSON.stringify({ subType: "BG_SHARING_STOPPED", tokenId: r.token_id })}::jsonb, NOW()
+        )
+      `
+      if (isFirebaseConfigured()) {
+        try {
+          await sendPushToUser(r.user_id as string, {
+            title,
+            body,
+            data: { type: "LOCATION_ALERT", subType: "BG_SHARING_STOPPED" },
+            clickAction: "/location?resume=1",
+          })
+        } catch (err) {
+          console.error("tap-to-resume push failed:", err)
+        }
+      }
+      resumeNudges++
+    }
+
+    return NextResponse.json({ success: true, checked: rows.length, alerted, resumeNudges })
   } catch (error) {
     console.error("location-stale cron error:", error)
     return NextResponse.json({ success: false, error: "Failed" }, { status: 500 })

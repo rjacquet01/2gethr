@@ -4,7 +4,7 @@ import { loginAdmin } from '@/lib/admin-auth'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, password } = body
+    const { email, password, mfaCode } = body
     
     if (!email || !password) {
       return NextResponse.json(
@@ -18,7 +18,12 @@ export async function POST(request: NextRequest) {
                       'unknown'
     const userAgent = request.headers.get('user-agent') || 'unknown'
     
-    const result = await loginAdmin(email, password, ipAddress, userAgent)
+    const result = await loginAdmin(email, password, ipAddress, userAgent, typeof mfaCode === 'string' ? mfaCode : undefined)
+
+    // Password was right; the account needs its authenticator code too.
+    if ('mfaRequired' in result) {
+      return NextResponse.json({ mfaRequired: true })
+    }
     
     if ('error' in result) {
       return NextResponse.json({ error: result.error }, { status: 401 })
@@ -40,7 +45,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[v0] Admin login error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Login failed' },
+      { error: 'Login failed' },
       { status: 500 }
     )
   }

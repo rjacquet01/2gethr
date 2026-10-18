@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { getAdminAccessToken } from '@/hooks/use-admin-auth'
+import { AdminMfaCard } from '@/components/admin-mfa-card'
 
 interface AdminUser {
   id: string
@@ -534,6 +535,7 @@ export default function AdminSettingsPage() {
               </form>
             </CardContent>
           </Card>
+          <AdminMfaCard />
         </TabsContent>
 
         <TabsContent value="activity">

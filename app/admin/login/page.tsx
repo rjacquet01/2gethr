@@ -15,6 +15,9 @@ export default function AdminLoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  // Set once the password was right but the account uses two-step sign-in.
+  const [needsCode, setNeedsCode] = useState(false)
+  const [mfaCode, setMfaCode] = useState('')
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -25,13 +28,18 @@ export default function AdminLoginPage() {
       const res = await fetch('/api/admin/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, ...(needsCode ? { mfaCode } : {}) }),
       })
 
       const data = await res.json()
 
       if (!res.ok) {
         toast.error(data.error || 'Login failed')
+        return
+      }
+
+      if (data.mfaRequired) {
+        setNeedsCode(true)
         return
       }
 
@@ -80,9 +88,24 @@ export default function AdminLoginPage() {
                 required
               />
             </div>
+            {needsCode && (
+              <div className="space-y-2">
+                <Label htmlFor="mfa-code">Authenticator code</Label>
+                <Input
+                  id="mfa-code"
+                  inputMode="text"
+                  autoComplete="one-time-code"
+                  placeholder="6-digit code or a backup code"
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
+                  autoFocus
+                  required
+                />
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Sign In
+              {needsCode ? 'Verify' : 'Sign In'}
             </Button>
           </form>
         </CardContent>
