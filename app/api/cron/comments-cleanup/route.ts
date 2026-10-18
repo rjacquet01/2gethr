@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { ensureSocialTables } from "@/lib/social"
+import { markExpiredPins } from "@/lib/board-limits"
 import { HISTORY_CAP_DAYS, MAX_ROWS_PER_TABLE, isHistoryPurgeEnabled, heldUserIds, heldFamilyIds, purgeBoardPosts } from "@/lib/retention"
 
 // Daily (see vercel.json). Retention for event comments and the family board:
@@ -10,6 +11,8 @@ import { HISTORY_CAP_DAYS, MAX_ROWS_PER_TABLE, isHistoryPurgeEnabled, heldUserId
 //    old 365-day limit and only reports the 90-day count.
 //  - at most MAX_ROWS_PER_TABLE rows per table per run (a warning is logged
 //    when that cap is hit; the rest goes on the next run)
+//  - board pins taken down more than BOARD_LIMITS.RESTORE_DAYS ago are removed,
+//    and event flyers past their date are first recorded as taken down
 //  - push-coalescing rows older than a day are dropped
 // Posts and comments by someone under a legal case or hold, or in a held
 // family, are never removed. A board post that goes takes its comments with
@@ -68,6 +71,9 @@ export async function GET(request: NextRequest) {
       )
       RETURNING id
     `
+    // Event flyers past their date are recorded as taken down (reads already
+    // hide them), so they show in Taken down and are purged on schedule.
+    const pinsExpired = await markExpiredPins()
     // Posts take their remaining comments with them, and flyer photos are
     // deleted from storage first (lib/retention.ts purgeBoardPosts).
     const board = await purgeBoardPosts({ dryRun: false, ageDays, maxRows: cap, commentsAlreadyDeleted: postComments.length })
@@ -78,7 +84,7 @@ export async function GET(request: NextRequest) {
     if (capped) {
       console.warn(`[comments-cleanup] per-table cap of ${cap} rows reached; the rest is left for the next run`)
     }
-    console.log("[comments-cleanup]", { ageDays, eventComments: eventComments.length, postComments: postComments.length + orphanComments, posts: postsDeleted, flyerFiles: board.flyerFiles, flyersKeptForRetry: board.keptForRetry, capped })
+    console.log("[comments-cleanup]", { ageDays, pinsExpired, eventComments: eventComments.length, postComments: postComments.length + orphanComments, posts: postsDeleted, flyerFiles: board.flyerFiles, flyersKeptForRetry: board.keptForRetry, capped })
     const pushLog = await sql`DELETE FROM social_push_log WHERE last_push_at < NOW() - INTERVAL '1 day' RETURNING user_id`
 
     return NextResponse.json({
@@ -87,6 +93,7 @@ export async function GET(request: NextRequest) {
         eventComments: eventComments.length,
         postComments: postComments.length + orphanComments,
         posts: postsDeleted,
+        pinsExpired,
         flyerFiles: board.flyerFiles,
         pushLog: pushLog.length,
         ageDays,

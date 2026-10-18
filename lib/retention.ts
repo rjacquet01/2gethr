@@ -1,5 +1,6 @@
 import { sql } from "./db"
 import { ensureLegalTables } from "./legal"
+import { BOARD_LIMITS } from "./constants"
 
 // Stored-history cap for every plan. Archived tasks, events and reminders,
 // board posts and comments older than this are deleted for good (location
@@ -277,8 +278,9 @@ export interface BoardPurgeResult {
 }
 
 /**
- * Board posts past the cap (or soft-deleted more than 30 days ago), never for
- * a held user or family. A post takes its comments with it, and a flyer's
+ * Board posts past the cap (or soft-deleted more than 30 days ago, or taken
+ * down more than BOARD_LIMITS.RESTORE_DAYS ago), never for a held user or
+ * family. A post takes its comments with it, and a flyer's
  * Blob files (full + thumbnail) are deleted FIRST: a post whose files can't be
  * deleted is kept for the next run, so no file is ever orphaned. Both tables
  * stay within `maxRows` (minus `commentsAlreadyDeleted`). With dryRun nothing
@@ -298,8 +300,9 @@ export async function purgeBoardPosts({
   maxRows?: number
   commentsAlreadyDeleted?: number
 }): Promise<BoardPurgeResult> {
-  const { ensureBoardFlyerColumns, deleteFlyerFiles } = await import("./board-flyers")
-  await ensureBoardFlyerColumns()
+  const { deleteFlyerFiles } = await import("./board-flyers")
+  const { ensureBoardLimitColumns } = await import("./board-limits")
+  await ensureBoardLimitColumns()
   const cap = Math.min(maxRows, MAX_ROWS_PER_TABLE_LIMIT)
   const held = await heldScope()
   const scoped = Array.isArray(familyIds)
@@ -309,6 +312,7 @@ export async function purgeBoardPosts({
       (SELECT count(*)::int FROM family_post_comments c WHERE c.post_id = p.id) AS comments
     FROM family_posts p
     WHERE ((p.deleted_at IS NOT NULL AND p.deleted_at < NOW() - INTERVAL '30 days')
+       OR (p.taken_down_at IS NOT NULL AND p.taken_down_at < NOW() - make_interval(days => ${BOARD_LIMITS.RESTORE_DAYS}::int))
        OR p.created_at < NOW() - make_interval(days => ${ageDays}::int))
       AND NOT (p.user_id = ANY(${held.users}::text[]))
       AND NOT (p.family_id = ANY(${held.families}::text[]))
