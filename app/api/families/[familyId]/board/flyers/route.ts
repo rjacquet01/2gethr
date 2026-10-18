@@ -2,30 +2,24 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { boardAccess, notifyNewPost, shapePosts } from "@/lib/board"
-import {
-  FLYER_LIMIT_MESSAGE,
-  activeFlyerCount,
-  deleteBlobUrls,
-  ensureBoardFlyerColumns,
-  processFlyerImage,
-  readFlyerUpload,
-  storeFlyer,
-} from "@/lib/board-flyers"
-import { BOARD_FLYER } from "@/lib/constants"
+import { deleteBlobUrls, processFlyerImage, readFlyerUpload, storeFlyer } from "@/lib/board-flyers"
+import { ensureBoardLimitColumns, expiryFromDate, placePin } from "@/lib/board-limits"
 import { POST_MAX, RATE_LIMIT_MESSAGE, ensureSocialTables, overRateLimit } from "@/lib/social"
 
 export const runtime = "nodejs"
 
-// POST - pin a photo flyer: multipart { file, body? (caption), pinned? }.
-// Parents, guardians and adults only; at most BOARD_FLYER.MAX_ACTIVE_PER_FAMILY
-// live flyers per family.
+// POST - pin a photo flyer: multipart { file, body? (caption), pinned?,
+// expiresOn? (YYYY-MM-DD: take it down after that day) }. Parents, guardians
+// and adults only. At BOARD_LIMITS.MAX_FLYERS flyers (or MAX_PINS pins) the
+// oldest unprotected one is taken down to make room; the response lists
+// what came down (rolledOff).
 export async function POST(request: NextRequest, { params }: { params: Promise<{ familyId: string }> }) {
   try {
     const { familyId } = await params
     const { user } = await getUserFromRequest(request)
     if (!user) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 })
     await ensureSocialTables()
-    await ensureBoardFlyerColumns()
+    await ensureBoardLimitColumns()
     const access = await boardAccess(familyId, user.id)
     if (access instanceof NextResponse) return access
     if (!access.canPinFlyers) {
@@ -33,9 +27,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     if (await overRateLimit(user.id, "board")) {
       return NextResponse.json({ success: false, error: RATE_LIMIT_MESSAGE }, { status: 429 })
-    }
-    if ((await activeFlyerCount(familyId)) >= BOARD_FLYER.MAX_ACTIVE_PER_FAMILY) {
-      return NextResponse.json({ success: false, error: FLYER_LIMIT_MESSAGE }, { status: 400 })
     }
 
     const form = await request.formData().catch(() => null)
@@ -47,35 +38,40 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: false, error: `Keep it to ${POST_MAX} characters` }, { status: 400 })
     }
     const pinned = form.get("pinned") === "true" && access.canModerate
+    const expiresOn = typeof form.get("expiresOn") === "string" ? (form.get("expiresOn") as string).trim() : ""
+    let expiresAt: string | null = null
+    if (expiresOn) {
+      const expiry = await expiryFromDate(familyId, expiresOn)
+      if (!expiry) return NextResponse.json({ success: false, error: "That date doesn't look right" }, { status: 400 })
+      if (expiry.past) return NextResponse.json({ success: false, error: "Pick today or a later date" }, { status: 400 })
+      expiresAt = expiry.expiresAt
+    }
 
     const img = await processFlyerImage(upload.input)
     const id = crypto.randomUUID()
     const stored = await storeFlyer(familyId, id, img)
 
-    // The cap check and insert run under a per-family lock, so two uploads at
-    // the same moment can't both slip in as flyer number 20.
-    const [, ins] = await sql.transaction([
-      sql`SELECT pg_advisory_xact_lock(hashtext(${`board-flyers:${familyId}`}))`,
+    // Insert and make room in one transaction under the family lock
+    // (lib/board-limits.ts), so parallel uploads can't overfill the board.
+    const { rows: ins, rolledOff } = await placePin(
+      familyId,
+      id,
       sql`
         INSERT INTO family_posts (
-          id, family_id, user_id, body, pinned,
+          id, family_id, user_id, body, pinned, expires_at,
           flyer_full_path, flyer_full_url, flyer_thumb_path, flyer_thumb_url,
           flyer_width, flyer_height, flyer_uploaded_at
         )
-        SELECT ${id}, ${familyId}, ${user.id}, ${caption}, ${pinned},
+        VALUES (${id}, ${familyId}, ${user.id}, ${caption}, ${pinned}, ${expiresAt}::timestamptz,
           ${stored.fullPath}, ${stored.fullUrl}, ${stored.thumbPath}, ${stored.thumbUrl},
-          ${img.width}, ${img.height}, NOW()
-        WHERE (
-          SELECT count(*) FROM family_posts
-          WHERE family_id = ${familyId} AND flyer_full_path IS NOT NULL AND deleted_at IS NULL
-        ) < ${BOARD_FLYER.MAX_ACTIVE_PER_FAMILY}
-        RETURNING id, user_id, body, pinned, created_at, flyer_thumb_path, flyer_width, flyer_height, flyer_uploaded_at
-      `,
-    ])
-    if (ins.length === 0) {
+          ${img.width}, ${img.height}, NOW())
+        RETURNING id, user_id, body, pinned, keep_up, expires_at, created_at, flyer_thumb_path, flyer_width, flyer_height, flyer_uploaded_at
+      `
+    ).catch(async (err) => {
+      // Nothing was saved: don't leave the uploaded files behind.
       await deleteBlobUrls([stored.fullUrl, stored.thumbUrl]).catch(() => {})
-      return NextResponse.json({ success: false, error: FLYER_LIMIT_MESSAGE }, { status: 400 })
-    }
+      throw err
+    })
 
     await logAuditEvent(user.id, "CREATE", "board_flyer", id, {
       newValue: { familyId, flyerPath: stored.fullPath },
@@ -85,7 +81,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await notifyNewPost({ familyId, postId: id, user, role: access.role, pinned, body: caption, flyer: true })
 
     const [shaped] = await shapePosts(familyId, ins)
-    return NextResponse.json({ success: true, data: shaped }, { status: 201 })
+    return NextResponse.json({ success: true, data: shaped, rolledOff }, { status: 201 })
   } catch (error) {
     console.error("Board flyer POST error:", error)
     return NextResponse.json({ success: false, error: "Could not pin the flyer" }, { status: 500 })

@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { boardAccess, notifyNewPost, shapePosts } from "@/lib/board"
-import { ensureBoardFlyerColumns } from "@/lib/board-flyers"
+import { boardCounts, ensureBoardLimitColumns, expiryCutoff, placePin } from "@/lib/board-limits"
+import { BOARD_LIMITS } from "@/lib/constants"
 import {
-  PAGE_SIZE_POSTS,
   POST_MAX,
   RATE_LIMIT_MESSAGE,
   cleanBody,
@@ -14,9 +14,13 @@ import {
 } from "@/lib/social"
 
 const MAX_PINNED = 10
+// A full board fits on one page; older boards that were over the limit
+// before it existed page with ?before= until their next post trims them.
+const PAGE_SIZE = BOARD_LIMITS.MAX_PINS
 
-// GET - the family board, newest first, 20 per page.
-//   page one (no cursor): pinned posts first, then the latest unpinned posts
+// GET - the visible pins (lib/board-limits.ts), newest first.
+//   page one (no cursor): pinned posts first, then the latest unpinned posts,
+//     plus the pin counts for the header
 //   ?before=<created_at>: the next page of unpinned posts
 //   ?since=<created_at>:  only posts newer than that (tiny when nothing is new)
 export async function GET(request: NextRequest, { params }: { params: Promise<{ familyId: string }> }) {
@@ -25,17 +29,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { user } = await getUserFromRequest(request)
     if (!user) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 })
     await ensureSocialTables()
-    await ensureBoardFlyerColumns()
+    await ensureBoardLimitColumns()
     const access = await boardAccess(familyId, user.id)
     if (access instanceof NextResponse) return access
+    const cutoff = await expiryCutoff(familyId)
 
     const since = parseCursor(request.nextUrl.searchParams.get("since"))
     if (since) {
       const fresh = await sql`
-        SELECT id, user_id, body, pinned, created_at, flyer_thumb_path, flyer_width, flyer_height, flyer_uploaded_at FROM family_posts
+        SELECT id, user_id, body, pinned, keep_up, expires_at, created_at, flyer_thumb_path, flyer_width, flyer_height, flyer_uploaded_at FROM family_posts
         WHERE family_id = ${familyId} AND deleted_at IS NULL AND created_at > ${since}::timestamptz
+          AND taken_down_at IS NULL AND (keep_up OR expires_at IS NULL OR expires_at >= ${cutoff}::timestamptz)
         ORDER BY created_at DESC
-        LIMIT ${PAGE_SIZE_POSTS}
+        LIMIT ${PAGE_SIZE}
       `
       return NextResponse.json({ success: true, data: { posts: fresh.length ? await shapePosts(familyId, fresh) : [] } })
     }
@@ -44,21 +50,24 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const pinned = before
       ? []
       : await sql`
-          SELECT id, user_id, body, pinned, created_at, flyer_thumb_path, flyer_width, flyer_height, flyer_uploaded_at FROM family_posts
+          SELECT id, user_id, body, pinned, keep_up, expires_at, created_at, flyer_thumb_path, flyer_width, flyer_height, flyer_uploaded_at FROM family_posts
           WHERE family_id = ${familyId} AND deleted_at IS NULL AND pinned = true
+            AND taken_down_at IS NULL AND (keep_up OR expires_at IS NULL OR expires_at >= ${cutoff}::timestamptz)
           ORDER BY created_at DESC
           LIMIT ${MAX_PINNED}
         `
     const rows = await sql`
-      SELECT id, user_id, body, pinned, created_at, flyer_thumb_path, flyer_width, flyer_height, flyer_uploaded_at FROM family_posts
+      SELECT id, user_id, body, pinned, keep_up, expires_at, created_at, flyer_thumb_path, flyer_width, flyer_height, flyer_uploaded_at FROM family_posts
       WHERE family_id = ${familyId} AND deleted_at IS NULL AND pinned = false
+        AND taken_down_at IS NULL AND (keep_up OR expires_at IS NULL OR expires_at >= ${cutoff}::timestamptz)
         AND (${before}::timestamptz IS NULL OR created_at < ${before}::timestamptz)
       ORDER BY created_at DESC
-      LIMIT ${PAGE_SIZE_POSTS + 1}
+      LIMIT ${PAGE_SIZE + 1}
     `
-    const hasMore = rows.length > PAGE_SIZE_POSTS
-    const page = rows.slice(0, PAGE_SIZE_POSTS)
+    const hasMore = rows.length > PAGE_SIZE
+    const page = rows.slice(0, PAGE_SIZE)
     const shaped = await shapePosts(familyId, [...pinned, ...page])
+    const counts = before ? null : await boardCounts(familyId, cutoff)
     return NextResponse.json({
       success: true,
       data: {
@@ -68,6 +77,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         nextBefore: hasMore ? page[page.length - 1].created_at : null,
         canModerate: access.canModerate,
         canPinFlyers: access.canPinFlyers,
+        canManagePins: access.canManagePins,
+        // Kids never learn what was taken down.
+        counts: counts && { ...counts, takenDown: access.canManagePins ? counts.takenDown : null },
       },
     })
   } catch (error) {
@@ -77,13 +89,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 // POST - new post { body, pinned? }. Only a PARENT/owner may post it pinned.
+// A full board takes down its oldest unprotected pin to make room; the
+// response lists what came down (rolledOff).
 export async function POST(request: NextRequest, { params }: { params: Promise<{ familyId: string }> }) {
   try {
     const { familyId } = await params
     const { user } = await getUserFromRequest(request)
     if (!user) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 })
     await ensureSocialTables()
-    await ensureBoardFlyerColumns()
+    await ensureBoardLimitColumns()
     const access = await boardAccess(familyId, user.id)
     if (access instanceof NextResponse) return access
 
@@ -96,16 +110,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const pinned = payload.pinned === true && access.canModerate
 
     const id = crypto.randomUUID()
-    const ins = await sql`
-      INSERT INTO family_posts (id, family_id, user_id, body, pinned)
-      VALUES (${id}, ${familyId}, ${user.id}, ${cleaned.body}, ${pinned})
-      RETURNING id, user_id, body, pinned, created_at, flyer_thumb_path, flyer_width, flyer_height, flyer_uploaded_at
-    `
+    const { rows: ins, rolledOff } = await placePin(
+      familyId,
+      id,
+      sql`
+        INSERT INTO family_posts (id, family_id, user_id, body, pinned)
+        VALUES (${id}, ${familyId}, ${user.id}, ${cleaned.body}, ${pinned})
+        RETURNING id, user_id, body, pinned, keep_up, expires_at, created_at, flyer_thumb_path, flyer_width, flyer_height, flyer_uploaded_at
+      `
+    )
 
     await notifyNewPost({ familyId, postId: id, user, role: access.role, pinned, body: cleaned.body })
 
     const [shaped] = await shapePosts(familyId, ins)
-    return NextResponse.json({ success: true, data: shaped }, { status: 201 })
+    return NextResponse.json({ success: true, data: shaped, rolledOff }, { status: 201 })
   } catch (error) {
     console.error("Board POST error:", error)
     return NextResponse.json({ success: false, error: "Failed to post" }, { status: 500 })

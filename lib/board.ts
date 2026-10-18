@@ -10,6 +10,8 @@ export interface BoardAccess {
   canModerate: boolean
   /** PARENT / GUARDIAN / ADULT: may pin photo flyers (kids post notes only) */
   canPinFlyers: boolean
+  /** The same adults: may set Keep up and see / restore taken-down pins */
+  canManagePins: boolean
 }
 
 /** Non-guest active members only. Returns the access or the response to send. */
@@ -17,7 +19,7 @@ export async function boardAccess(familyId: string, userId: string): Promise<Boa
   const access = await getMemberAccess(familyId, userId)
   if (!access) return NextResponse.json({ success: false, error: "Not a member of this family" }, { status: 403 })
   if (access.isGuest) return guestForbidden()
-  return { role: access.role, canModerate: access.isParent || access.isOwner, canPinFlyers: canPinFlyers(access.role) }
+  return { role: access.role, canModerate: access.isParent || access.isOwner, canPinFlyers: canPinFlyers(access.role), canManagePins: canPinFlyers(access.role) }
 }
 
 const FALLBACK_AUTHOR: AuthorInfo = { authorName: "Family member", avatarUrl: null, color: null, emoji: null }
@@ -65,6 +67,8 @@ export async function shapePosts(familyId: string, posts: Record<string, unknown
   return posts.map((p) => ({
     ...shapeComment(p, authors),
     pinned: p.pinned === true,
+    keepUp: p.keep_up === true,
+    expiresAt: (p.expires_at as unknown) ?? null,
     // Images are served by our own family-checked route, never by blob URL.
     flyer: p.flyer_thumb_path
       ? {

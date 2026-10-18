@@ -6,12 +6,12 @@ import {
   clearFlyerColumns,
   deleteBlobUrls,
   deleteFlyerFiles,
-  ensureBoardFlyerColumns,
   flyerStore,
   processFlyerImage,
   readFlyerUpload,
   storeFlyer,
 } from "@/lib/board-flyers"
+import { ensureBoardLimitColumns, expiryCutoff, isVisibleRow } from "@/lib/board-limits"
 import { BOARD_FLYER } from "@/lib/constants"
 import { ensureSocialTables } from "@/lib/social"
 
@@ -23,7 +23,7 @@ async function setup(request: NextRequest, familyId: string) {
   const { user } = await getUserFromRequest(request)
   if (!user) return { response: NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 }), user: null, access: null } as const
   await ensureSocialTables()
-  await ensureBoardFlyerColumns()
+  await ensureBoardLimitColumns()
   const access = await boardAccess(familyId, user.id)
   if (access instanceof NextResponse) return { response: access, user: null, access: null } as const
   return { response: null, user, access } as const
@@ -31,7 +31,8 @@ async function setup(request: NextRequest, familyId: string) {
 
 async function loadFlyerPost(familyId: string, postId: string) {
   const rows = await sql`
-    SELECT id, user_id, body, flyer_full_path, flyer_full_url, flyer_thumb_path, flyer_thumb_url
+    SELECT id, user_id, body, flyer_full_path, flyer_full_url, flyer_thumb_path, flyer_thumb_url,
+      taken_down_at, keep_up, expires_at
     FROM family_posts
     WHERE id = ${postId} AND family_id = ${familyId} AND deleted_at IS NULL AND flyer_full_path IS NOT NULL
     LIMIT 1
@@ -51,6 +52,8 @@ export async function GET(request: NextRequest, { params }: Params) {
     if (ctx.response) return ctx.response
     const post = await loadFlyerPost(familyId, postId)
     if (!post) return notFound()
+    // A taken-down flyer is shown only to adults (in the Taken down list).
+    if (!ctx.access.canManagePins && !isVisibleRow(post, await expiryCutoff(familyId))) return notFound()
     const size = request.nextUrl.searchParams.get("size") === "full" ? "full" : "thumb"
     const path = (size === "full" ? post.flyer_full_path : post.flyer_thumb_path) as string | null
     if (!path) return notFound()

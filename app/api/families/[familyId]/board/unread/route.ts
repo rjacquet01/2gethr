@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { boardAccess } from "@/lib/board"
+import { ensureBoardLimitColumns } from "@/lib/board-limits"
 import { ensureSocialTables } from "@/lib/social"
 
 const CAP = 99
@@ -14,13 +15,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { user } = await getUserFromRequest(request)
     if (!user) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 })
     await ensureSocialTables()
+    await ensureBoardLimitColumns()
     const access = await boardAccess(familyId, user.id)
     if (access instanceof NextResponse) return access
 
     const rows = await sql`
       SELECT COUNT(*)::int AS n FROM (
         SELECT 1 FROM family_posts p
-        WHERE p.family_id = ${familyId} AND p.deleted_at IS NULL AND p.user_id <> ${user.id}
+        WHERE p.family_id = ${familyId} AND p.deleted_at IS NULL AND p.taken_down_at IS NULL AND p.user_id <> ${user.id}
           AND p.created_at > COALESCE(
             (SELECT board_last_seen_at FROM family_members WHERE family_id = ${familyId} AND user_id = ${user.id} AND is_active = true LIMIT 1),
             '-infinity'::timestamptz

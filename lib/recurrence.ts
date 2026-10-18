@@ -39,7 +39,7 @@ export function isValidTimeZone(tz: string | null | undefined): tz is string {
   }
 }
 
-interface Parts {
+export interface Parts {
   y: number
   mo: number
   d: number
@@ -48,7 +48,7 @@ interface Parts {
   s: number
 }
 
-function getParts(date: Date, tz: string): Parts {
+export function getParts(date: Date, tz: string): Parts {
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: tz,
     hourCycle: 'h23',
@@ -73,7 +73,7 @@ function tzOffsetMs(date: Date, tz: string): number {
   return asUtc - wholeSecond
 }
 
-function zonedToUtc(y: number, mo: number, d: number, h: number, mi: number, s: number, tz: string): Date {
+export function zonedToUtc(y: number, mo: number, d: number, h: number, mi: number, s: number, tz: string): Date {
   const guess = Date.UTC(y, mo - 1, d, h, mi, s)
   const offset1 = tzOffsetMs(new Date(guess), tz)
   let utc = guess - offset1

@@ -164,18 +164,6 @@ export function flyerImageUrl(familyId: string, postId: string, size: "thumb" | 
   return `/api/families/${familyId}/board/${postId}/flyer?size=${size}&v=${v}`
 }
 
-/** Live flyer posts in a family (for the per-family cap). */
-export async function activeFlyerCount(familyId: string): Promise<number> {
-  await ensureBoardFlyerColumns()
-  const r = await sql`
-    SELECT count(*)::int AS n FROM family_posts
-    WHERE family_id = ${familyId} AND flyer_full_path IS NOT NULL AND deleted_at IS NULL
-  `
-  return Number(r[0]?.n ?? 0)
-}
-
-export const FLYER_LIMIT_MESSAGE = `Your board already has ${BOARD_FLYER.MAX_ACTIVE_PER_FAMILY} flyers. Remove an old one to pin a new one.`
-
 /**
  * Validate an uploaded flyer from multipart form data: allowed type, size,
  * and that the bytes really are a JPEG/PNG/WebP image (not just the label).

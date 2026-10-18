@@ -6,7 +6,7 @@
 // storage is ever touched. Everything created here is deleted in `finally`.
 //
 // Covers: permission matrix (adults pin, child photo 403, guest 403,
-// non-member 403, poster/parent delete), limits (20 per family incl. a
+// non-member 403, poster/parent delete), limits (the 21st flyer rolls off the oldest, incl. a
 // parallel race, oversize, wrong type, fake image), image route authz and
 // caching, /api/files refusing flyer paths, the 90-day purge deleting both
 // blobs first (dry run deletes nothing, legal hold skipped), and account
@@ -34,7 +34,7 @@ async function main() {
   const { sql } = await import('../lib/db')
   const { generateAccessToken } = await import('../lib/auth')
   const flyers = await import('../lib/board-flyers')
-  const { BOARD_FLYER } = await import('../lib/constants')
+  const { BOARD_FLYER, BOARD_LIMITS } = await import('../lib/constants')
   const { purgeBoardPosts } = await import('../lib/retention')
   const { closeUserAccount } = await import('../lib/account-closure')
   const { NextRequest } = await import('next/server')
@@ -196,20 +196,33 @@ async function main() {
     r = await pin('C', F1, jpeg, 'image/gif'); assert.strictEqual(r.status, 400); ok('disallowed type rejected')
     r = await pin('C', F1, Buffer.from('definitely not an image'), 'image/jpeg'); assert.strictEqual(r.status, 400); ok('fake image bytes rejected')
 
-    // 2 live flyers now; fill to 19 with backdated rows, then race three uploads.
+    // 2 visible flyers now; fill to 19 with backdated rows, then race three
+    // uploads. All three go up and the two oldest flyers come down to make
+    // room (lib/board-limits.ts); nothing is rejected any more.
+    const visibleFlyers = async (family: string) => Number((await sql`
+      SELECT count(*)::int AS n FROM family_posts
+      WHERE family_id = ${family} AND flyer_full_path IS NOT NULL AND deleted_at IS NULL AND taken_down_at IS NULL`)[0].n)
     for (let i = 0; i < 17; i++) await fillerFlyer(F1, ago(1 / 24))
-    assert.strictEqual(await flyers.activeFlyerCount(F1), 19)
+    assert.strictEqual(await visibleFlyers(F1), 19)
     const putsBefore = putCalls.length
     const delsBefore = delCalls.length
     const race = await Promise.all([pin('A'), pin('B'), pin('C')])
     const codes = race.map((x) => x.status).sort()
-    assert.deepStrictEqual(codes, [201, 400, 400], `parallel uploads: ${codes}`)
-    assert.strictEqual(await flyers.activeFlyerCount(F1), BOARD_FLYER.MAX_ACTIVE_PER_FAMILY)
-    assert.strictEqual(putCalls.length - putsBefore, 6, 'all three uploads stored their two files first')
-    assert.strictEqual(delCalls.length - delsBefore, 4, 'both files of each rejected upload deleted')
-    ok('parallel uploads at 19 never exceed 20; rejected uploads leave no files')
-    r = await pin('A'); assert.strictEqual(r.status, 400); assert.match((await r.json()).error, /20 flyers/)
-    ok('21st flyer rejected with a clear message')
+    assert.deepStrictEqual(codes, [201, 201, 201], `parallel uploads: ${codes}`)
+    assert.strictEqual(await visibleFlyers(F1), BOARD_LIMITS.MAX_FLYERS)
+    const raceOff = (await Promise.all(race.map((x) => x.json()))).flatMap((j) => j.rolledOff)
+    assert.strictEqual(raceOff.length, 2, 'exactly two flyers came down')
+    assert.strictEqual(putCalls.length - putsBefore, 6, 'all three uploads stored their two files')
+    assert.strictEqual(delCalls.length - delsBefore, 0, 'rolled-off flyers keep their files (restorable)')
+    ok('parallel uploads at 19 end at exactly 20 visible; the oldest roll off, files kept')
+    r = await pin('A'); assert.strictEqual(r.status, 201)
+    const twentyFirst = await r.json()
+    assert.strictEqual(twentyFirst.rolledOff.length, 1)
+    const [offRow] = await sql`SELECT flyer_full_path, taken_down_reason FROM family_posts WHERE id = ${twentyFirst.rolledOff[0].id}`
+    assert.ok(offRow.flyer_full_path, 'a flyer came down, not a note')
+    assert.strictEqual(offRow.taken_down_reason, 'roll_off')
+    assert.strictEqual(await visibleFlyers(F1), BOARD_LIMITS.MAX_FLYERS)
+    ok('21st flyer goes up and the oldest flyer is taken down')
 
     // --- delete permissions ----------------------------------------------------
     console.log('delete')

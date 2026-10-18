@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
-import { boardAccess, shapeComment } from "@/lib/board"
+import { boardAccess, shapeComment, type BoardAccess } from "@/lib/board"
+import { ensureBoardLimitColumns, expiryCutoff, isVisibleRow } from "@/lib/board-limits"
 import {
   PAGE_SIZE_COMMENTS,
   POST_COMMENT_MAX,
@@ -13,11 +14,15 @@ import {
   parseCursor,
 } from "@/lib/social"
 
-async function postExists(familyId: string, postId: string) {
+// A taken-down pin's replies are for adults only (kids never see it).
+async function postExists(familyId: string, postId: string, access: BoardAccess) {
+  await ensureBoardLimitColumns()
   const rows = await sql`
-    SELECT 1 FROM family_posts WHERE id = ${postId} AND family_id = ${familyId} AND deleted_at IS NULL LIMIT 1
+    SELECT taken_down_at, keep_up, expires_at FROM family_posts
+    WHERE id = ${postId} AND family_id = ${familyId} AND deleted_at IS NULL LIMIT 1
   `
-  return rows.length > 0
+  if (!rows[0]) return false
+  return access.canManagePins || isVisibleRow(rows[0], await expiryCutoff(familyId))
 }
 
 // GET - comments on a post, oldest first: latest 50, ?before= pages back,
@@ -30,7 +35,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     await ensureSocialTables()
     const access = await boardAccess(familyId, user.id)
     if (access instanceof NextResponse) return access
-    if (!(await postExists(familyId, postId))) return NextResponse.json({ success: false, error: "Post not found" }, { status: 404 })
+    if (!(await postExists(familyId, postId, access))) return NextResponse.json({ success: false, error: "Post not found" }, { status: 404 })
 
     const before = parseCursor(request.nextUrl.searchParams.get("before"))
     const since = parseCursor(request.nextUrl.searchParams.get("since"))
@@ -61,7 +66,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await ensureSocialTables()
     const access = await boardAccess(familyId, user.id)
     if (access instanceof NextResponse) return access
-    if (!(await postExists(familyId, postId))) return NextResponse.json({ success: false, error: "Post not found" }, { status: 404 })
+    if (!(await postExists(familyId, postId, access))) return NextResponse.json({ success: false, error: "Post not found" }, { status: 404 })
 
     const payload = await request.json().catch(() => ({}))
     const cleaned = cleanBody(payload.body, POST_COMMENT_MAX)

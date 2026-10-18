@@ -130,11 +130,10 @@ export const UPLOAD = {
 // FAMILY BOARD FLYERS
 // ============================================
 
-// Photo flyers pinned to the family board. Limits bound storage cost; images
-// are deleted with their post (and by the 90-day board purge).
+// Photo flyers pinned to the family board. Images are deleted with their
+// post (and by the 90-day board purge). How many may be up at once is
+// BOARD_LIMITS.MAX_FLYERS.
 export const BOARD_FLYER = {
-  /** Live (not deleted) flyer posts per family. */
-  MAX_ACTIVE_PER_FAMILY: 20,
   /** Largest upload the server accepts (Vercel itself caps request bodies at ~4.5 MB). */
   MAX_UPLOAD_BYTES: 8 * 1024 * 1024,
   ALLOWED_TYPES: ["image/jpeg", "image/png", "image/webp"],
@@ -147,6 +146,26 @@ export const BOARD_FLYER = {
   /** Browser cache for served flyer images (private, per viewer). */
   IMAGE_CACHE_SECONDS: 86400,
   PATH_PREFIX: "board-flyers",
+} as const
+
+// ============================================
+// FAMILY BOARD LIMITS
+// ============================================
+
+// How full the board may get. Posting at a limit takes down the oldest pin
+// that isn't kept up (lib/board-limits.ts); taken-down pins can be restored
+// for RESTORE_DAYS, then they are purged with their image files.
+export const BOARD_LIMITS = {
+  /** Visible pins in total (flyers + notes). */
+  MAX_PINS: 30,
+  /** Of those, photo flyers. */
+  MAX_FLYERS: 20,
+  /** Pins per family an adult can mark "Keep up" (never roll off or expire). */
+  MAX_KEEP_UP: 5,
+  /** Show the "almost full" warning from this many visible pins. */
+  WARN_AT: 27,
+  /** Days a taken-down pin can be restored before it is deleted for good. */
+  RESTORE_DAYS: 30,
 } as const
 
 // ============================================
