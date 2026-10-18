@@ -127,6 +127,29 @@ export const UPLOAD = {
 } as const
 
 // ============================================
+// FAMILY BOARD FLYERS
+// ============================================
+
+// Photo flyers pinned to the family board. Limits bound storage cost; images
+// are deleted with their post (and by the 90-day board purge).
+export const BOARD_FLYER = {
+  /** Live (not deleted) flyer posts per family. */
+  MAX_ACTIVE_PER_FAMILY: 20,
+  /** Largest upload the server accepts (Vercel itself caps request bodies at ~4.5 MB). */
+  MAX_UPLOAD_BYTES: 8 * 1024 * 1024,
+  ALLOWED_TYPES: ["image/jpeg", "image/png", "image/webp"],
+  /** The phone shrinks the photo to this long side before uploading. */
+  CLIENT_MAX_PX: 2000,
+  /** Stored sizes (long side) and JPEG quality. */
+  FULL_MAX_PX: 1600,
+  THUMB_MAX_PX: 480,
+  JPEG_QUALITY: 80,
+  /** Browser cache for served flyer images (private, per viewer). */
+  IMAGE_CACHE_SECONDS: 86400,
+  PATH_PREFIX: "board-flyers",
+} as const
+
+// ============================================
 // API CONSTANTS
 // ============================================
 

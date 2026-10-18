@@ -15,13 +15,32 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const pathname = request.nextUrl.searchParams.get("pathname")
+    const raw = request.nextUrl.searchParams.get("pathname")
+    // Profile photos are stored as full blob URLs; reduce those to their
+    // pathname so the folder checks below apply to them too.
+    let pathname = raw
+    if (raw && /^https?:\/\//i.test(raw)) {
+      try {
+        const u = new URL(raw)
+        pathname = u.hostname.endsWith(".blob.vercel-storage.com") ? decodeURIComponent(u.pathname.replace(/^\/+/, "")) : null
+      } catch {
+        pathname = null
+      }
+      if (!pathname) return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
+    }
 
     if (!pathname) {
       return NextResponse.json(
         { success: false, error: "Missing pathname" },
         { status: 400 }
       )
+    }
+
+    // Only the folders checked below are served here. Anything else (e.g.
+    // board-flyers/, served by its own family-checked route) was readable by
+    // any signed-in user who knew the path.
+    if (!/^(profile-photos|place-photos|member-photos)\//.test(pathname) || pathname.includes("..")) {
+      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
     }
 
     // For profile photos, verify the user can access this file
