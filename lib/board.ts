@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server"
 import { sql } from "./db"
 import { getMemberAccess, guestForbidden } from "./permissions"
-import { authorInfo, type AuthorInfo } from "./social"
+import { authorInfo, notifySocial, type AuthorInfo } from "./social"
+import { canPinFlyers, flyerImageUrl } from "./board-flyers"
 
 export interface BoardAccess {
   role: string
   /** PARENT or the family owner: may pin and delete anyone's posts/comments */
   canModerate: boolean
+  /** PARENT / GUARDIAN / ADULT: may pin photo flyers (kids post notes only) */
+  canPinFlyers: boolean
 }
 
 /** Non-guest active members only. Returns the access or the response to send. */
@@ -14,7 +17,7 @@ export async function boardAccess(familyId: string, userId: string): Promise<Boa
   const access = await getMemberAccess(familyId, userId)
   if (!access) return NextResponse.json({ success: false, error: "Not a member of this family" }, { status: 403 })
   if (access.isGuest) return guestForbidden()
-  return { role: access.role, canModerate: access.isParent || access.isOwner }
+  return { role: access.role, canModerate: access.isParent || access.isOwner, canPinFlyers: canPinFlyers(access.role) }
 }
 
 const FALLBACK_AUTHOR: AuthorInfo = { authorName: "Family member", avatarUrl: null, color: null, emoji: null }
@@ -62,7 +65,52 @@ export async function shapePosts(familyId: string, posts: Record<string, unknown
   return posts.map((p) => ({
     ...shapeComment(p, authors),
     pinned: p.pinned === true,
+    // Images are served by our own family-checked route, never by blob URL.
+    flyer: p.flyer_thumb_path
+      ? {
+          thumbUrl: flyerImageUrl(familyId, p.id as string, "thumb", p.flyer_uploaded_at),
+          fullUrl: flyerImageUrl(familyId, p.id as string, "full", p.flyer_uploaded_at),
+          width: (p.flyer_width as number | null) ?? null,
+          height: (p.flyer_height as number | null) ?? null,
+        }
+      : null,
     commentCount: counts.get(p.id as string) || 0,
     latestComments: latest.filter((c) => c.post_id === p.id).map((c) => shapeComment(c, authors)),
   }))
+}
+
+/**
+ * Tell the other non-guest members about a new post: in-app always; push only
+ * for pinned posts or posts from a PARENT, at most one board push per person
+ * per 10 minutes.
+ */
+export async function notifyNewPost(opts: {
+  familyId: string
+  postId: string
+  user: { id: string; firstName?: string | null; lastName?: string | null }
+  role: string
+  pinned: boolean
+  body: string
+  flyer?: boolean
+}) {
+  const recipients = await sql`
+    SELECT user_id FROM family_members
+    WHERE family_id = ${opts.familyId} AND is_active = true AND user_id IS NOT NULL
+      AND role <> 'GUEST' AND user_id <> ${opts.user.id}
+  `
+  const name = opts.user.firstName ? `${opts.user.firstName} ${opts.user.lastName || ""}`.trim() : "Someone"
+  await notifySocial({
+    recipientIds: recipients.map((r) => r.user_id as string),
+    type: "SYSTEM",
+    title: opts.flyer
+      ? `${name} pinned a flyer`
+      : opts.pinned
+        ? `${name} pinned a post`
+        : `${name} posted on the family board`,
+    body: (opts.body || (opts.flyer ? "New flyer on the family board" : "")).slice(0, 140),
+    data: { subType: "BOARD_POST", postId: opts.postId, familyId: opts.familyId },
+    push: opts.pinned || opts.role === "PARENT",
+    scope: `board:${opts.familyId}`,
+    clickAction: "/board",
+  })
 }

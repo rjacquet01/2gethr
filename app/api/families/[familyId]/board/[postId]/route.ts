@@ -4,10 +4,11 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { boardAccess } from "@/lib/board"
 import { ensureSocialTables } from "@/lib/social"
+import { clearFlyerColumns, deleteFlyerFiles, ensureBoardFlyerColumns } from "@/lib/board-flyers"
 
 async function loadPost(familyId: string, postId: string) {
   const rows = await sql`
-    SELECT id, user_id FROM family_posts
+    SELECT id, user_id, flyer_full_url, flyer_thumb_url FROM family_posts
     WHERE id = ${postId} AND family_id = ${familyId} AND deleted_at IS NULL
     LIMIT 1
   `
@@ -21,6 +22,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const { user } = await getUserFromRequest(request)
     if (!user) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 })
     await ensureSocialTables()
+    await ensureBoardFlyerColumns()
     const access = await boardAccess(familyId, user.id)
     if (access instanceof NextResponse) return access
 
@@ -30,6 +32,12 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       return NextResponse.json({ success: false, error: "You can only delete your own posts" }, { status: 403 })
     }
     await sql`UPDATE family_posts SET deleted_at = NOW() WHERE id = ${postId}`
+    // The flyer's files go now; the row itself is purged after 30 days.
+    // (Photos are never disclosed in legal requests, so a hold doesn't keep them.)
+    if (post.flyer_full_url) {
+      const done = await deleteFlyerFiles([post as { id: string; flyer_full_url: string; flyer_thumb_url: string | null }])
+      await clearFlyerColumns([...done])
+    }
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("Board post DELETE error:", error)
@@ -46,6 +54,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { user } = await getUserFromRequest(request)
     if (!user) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 })
     await ensureSocialTables()
+    await ensureBoardFlyerColumns()
     const access = await boardAccess(familyId, user.id)
     if (access instanceof NextResponse) return access
     if (!access.canModerate) {

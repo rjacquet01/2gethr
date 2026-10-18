@@ -175,3 +175,30 @@ export async function activeFlyerCount(familyId: string): Promise<number> {
 }
 
 export const FLYER_LIMIT_MESSAGE = `Your board already has ${BOARD_FLYER.MAX_ACTIVE_PER_FAMILY} flyers. Remove an old one to pin a new one.`
+
+/**
+ * Validate an uploaded flyer from multipart form data: allowed type, size,
+ * and that the bytes really are a JPEG/PNG/WebP image (not just the label).
+ */
+export async function readFlyerUpload(
+  form: FormData
+): Promise<{ input: Buffer } | { error: string; status: number }> {
+  const file = form.get("file")
+  if (!file || typeof file === "string") return { error: "Choose a photo first", status: 400 }
+  if (!(BOARD_FLYER.ALLOWED_TYPES as readonly string[]).includes(file.type)) {
+    return { error: "Use a JPEG, PNG or WebP photo", status: 400 }
+  }
+  if (file.size > BOARD_FLYER.MAX_UPLOAD_BYTES) {
+    return { error: `That photo is too large (max ${BOARD_FLYER.MAX_UPLOAD_BYTES / 1024 / 1024} MB)`, status: 400 }
+  }
+  const input = Buffer.from(await file.arrayBuffer())
+  try {
+    const meta = await sharp(input).metadata()
+    if (!meta.format || !["jpeg", "png", "webp"].includes(meta.format)) {
+      return { error: "Use a JPEG, PNG or WebP photo", status: 400 }
+    }
+  } catch {
+    return { error: "That file isn't a readable photo", status: 400 }
+  }
+  return { input }
+}

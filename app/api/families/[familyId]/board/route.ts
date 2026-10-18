@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
-import { boardAccess, shapePosts } from "@/lib/board"
+import { boardAccess, notifyNewPost, shapePosts } from "@/lib/board"
+import { ensureBoardFlyerColumns } from "@/lib/board-flyers"
 import {
   PAGE_SIZE_POSTS,
   POST_MAX,
   RATE_LIMIT_MESSAGE,
   cleanBody,
   ensureSocialTables,
-  notifySocial,
   overRateLimit,
   parseCursor,
 } from "@/lib/social"
@@ -25,13 +25,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { user } = await getUserFromRequest(request)
     if (!user) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 })
     await ensureSocialTables()
+    await ensureBoardFlyerColumns()
     const access = await boardAccess(familyId, user.id)
     if (access instanceof NextResponse) return access
 
     const since = parseCursor(request.nextUrl.searchParams.get("since"))
     if (since) {
       const fresh = await sql`
-        SELECT id, user_id, body, pinned, created_at FROM family_posts
+        SELECT id, user_id, body, pinned, created_at, flyer_thumb_path, flyer_width, flyer_height, flyer_uploaded_at FROM family_posts
         WHERE family_id = ${familyId} AND deleted_at IS NULL AND created_at > ${since}::timestamptz
         ORDER BY created_at DESC
         LIMIT ${PAGE_SIZE_POSTS}
@@ -43,13 +44,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const pinned = before
       ? []
       : await sql`
-          SELECT id, user_id, body, pinned, created_at FROM family_posts
+          SELECT id, user_id, body, pinned, created_at, flyer_thumb_path, flyer_width, flyer_height, flyer_uploaded_at FROM family_posts
           WHERE family_id = ${familyId} AND deleted_at IS NULL AND pinned = true
           ORDER BY created_at DESC
           LIMIT ${MAX_PINNED}
         `
     const rows = await sql`
-      SELECT id, user_id, body, pinned, created_at FROM family_posts
+      SELECT id, user_id, body, pinned, created_at, flyer_thumb_path, flyer_width, flyer_height, flyer_uploaded_at FROM family_posts
       WHERE family_id = ${familyId} AND deleted_at IS NULL AND pinned = false
         AND (${before}::timestamptz IS NULL OR created_at < ${before}::timestamptz)
       ORDER BY created_at DESC
@@ -66,6 +67,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         hasMore,
         nextBefore: hasMore ? page[page.length - 1].created_at : null,
         canModerate: access.canModerate,
+        canPinFlyers: access.canPinFlyers,
       },
     })
   } catch (error) {
@@ -81,6 +83,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { user } = await getUserFromRequest(request)
     if (!user) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 })
     await ensureSocialTables()
+    await ensureBoardFlyerColumns()
     const access = await boardAccess(familyId, user.id)
     if (access instanceof NextResponse) return access
 
@@ -96,27 +99,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const ins = await sql`
       INSERT INTO family_posts (id, family_id, user_id, body, pinned)
       VALUES (${id}, ${familyId}, ${user.id}, ${cleaned.body}, ${pinned})
-      RETURNING id, user_id, body, pinned, created_at
+      RETURNING id, user_id, body, pinned, created_at, flyer_thumb_path, flyer_width, flyer_height, flyer_uploaded_at
     `
 
-    // Other non-guest members: in-app always; push only for pinned posts or
-    // posts from a PARENT, at most one board push per person per 10 minutes.
-    const recipients = await sql`
-      SELECT user_id FROM family_members
-      WHERE family_id = ${familyId} AND is_active = true AND user_id IS NOT NULL
-        AND role <> 'GUEST' AND user_id <> ${user.id}
-    `
-    const name = user.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Someone"
-    await notifySocial({
-      recipientIds: recipients.map((r) => r.user_id as string),
-      type: "SYSTEM",
-      title: pinned ? `${name} pinned a post` : `${name} posted on the family board`,
-      body: cleaned.body.slice(0, 140),
-      data: { subType: "BOARD_POST", postId: id, familyId },
-      push: pinned || access.role === "PARENT",
-      scope: `board:${familyId}`,
-      clickAction: "/board",
-    })
+    await notifyNewPost({ familyId, postId: id, user, role: access.role, pinned, body: cleaned.body })
 
     const [shaped] = await shapePosts(familyId, ins)
     return NextResponse.json({ success: true, data: shaped }, { status: 201 })
