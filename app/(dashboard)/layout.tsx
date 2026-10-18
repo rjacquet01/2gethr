@@ -253,8 +253,11 @@ export default function DashboardLayout({
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-30 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileMenuOpen(false)} />
-          <nav className="absolute left-0 top-16 bottom-0 w-64 bg-background border-r border-border p-4 space-y-1">
-            {visibleNavItems.map((item) => {
+          {/* Scrolls when it doesn't fit, so Settings / Sign out at the bottom
+              are never cut off on short screens. */}
+          <nav className="absolute left-0 top-16 bottom-0 w-64 overflow-y-auto overscroll-contain bg-background border-r border-border p-4 pb-24 space-y-1">
+            {/* Notifications: phones have the bell in the header instead. */}
+            {visibleNavItems.filter((item) => item.href !== '/notifications').map((item) => {
               const isActive = isNavItemActive(pathname, item.href)
               return (
                 <Link
