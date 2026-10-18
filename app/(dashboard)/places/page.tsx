@@ -47,6 +47,7 @@ import {
   MessageSquare,
   ImagePlus,
   Navigation,
+  Users,
 } from 'lucide-react'
 import { useFavorites } from '@/components/favorites-dropdown'
 import useSWR from 'swr'
@@ -217,6 +218,10 @@ interface SavedPlace {
   photoPath?: string | null
   canManage?: boolean
   notifyChannels: NotifyChannel[] | null
+  /** Kids this place applies to (managers see all; others only themselves). */
+  assignedMemberIds?: string[]
+  /** Limited to specific kids (true even when the viewer can't see which). */
+  isAssigned?: boolean
   createdAt: string
 }
 
@@ -259,6 +264,7 @@ interface PlaceDraft {
   icon: string
   color: string
   notifyChannels: NotifyChannel[]
+  assignedMemberIds: string[]
 }
 
 // One form for both "Add place" and "Edit place" (they used to be two copies).
@@ -273,6 +279,7 @@ function PlaceFormFields({
   photo,
   hasPremium,
   canManageGeofence,
+  kids,
 }: {
   idp: string
   mode: 'new' | 'edit'
@@ -290,6 +297,7 @@ function PlaceFormFields({
   }
   hasPremium: boolean
   canManageGeofence: boolean
+  kids: { id: string; name: string }[]
 }) {
   const set = (patch: Partial<PlaceDraft>) => setDraft((d) => ({ ...d, ...patch }))
   const toggleChannel = (channel: NotifyChannel) =>
@@ -299,6 +307,20 @@ function PlaceFormFields({
         ? d.notifyChannels.filter((c) => c !== channel)
         : [...d.notifyChannels, channel],
     }))
+  const toggleKid = (id: string) =>
+    setDraft((d) => ({
+      ...d,
+      assignedMemberIds: d.assignedMemberIds.includes(id)
+        ? d.assignedMemberIds.filter((k) => k !== id)
+        : [...d.assignedMemberIds, id],
+    }))
+  const chip = (selected: boolean) =>
+    cn(
+      'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors',
+      selected
+        ? 'border-primary bg-primary/10 text-primary'
+        : 'border-border text-muted-foreground hover:border-muted-foreground/40'
+    )
 
   return (
     <div className="space-y-4 py-4">
@@ -413,6 +435,38 @@ function PlaceFormFields({
                   className="w-full"
                 />
               </div>
+              {kids.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label>Applies to</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => set({ assignedMemberIds: [] })}
+                      aria-pressed={draft.assignedMemberIds.length === 0}
+                      className={chip(draft.assignedMemberIds.length === 0)}
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      Everyone
+                    </button>
+                    {kids.map((kid) => (
+                      <button
+                        key={kid.id}
+                        type="button"
+                        onClick={() => toggleKid(kid.id)}
+                        aria-pressed={draft.assignedMemberIds.includes(kid.id)}
+                        className={chip(draft.assignedMemberIds.includes(kid.id))}
+                      >
+                        {kid.name}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {draft.assignedMemberIds.length === 0
+                      ? 'Alerts for anyone in the family arriving or leaving.'
+                      : 'Alerts only when the selected kids arrive or leave.'}
+                  </p>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label>Notify me via</Label>
                 <div className="flex flex-wrap gap-1.5">
@@ -486,6 +540,11 @@ function PlacesPageContent() {
     (m) => m.userId === user?.id && (m.role === 'PARENT' || m.role === 'GUARDIAN' || m.role === 'ADULT')
   )
   const { access, isLoading: subscriptionLoading } = useSubscription(primaryFamily?.id || null)
+  // Kids a manager can limit a place to (active CHILD members of this family)
+  const kids = (primaryFamily?.members ?? [])
+    .filter((m) => m.role === 'CHILD' && m.isActive)
+    .map((m) => ({ id: m.id, name: m.displayName }))
+  const kidName = (id: string) => kids.find((k) => k.id === id)?.name
   
   const { data: places, isLoading: placesLoading, mutate } = useSWR<SavedPlace[]>(
     primaryFamily?.id ? `/api/places?familyId=${primaryFamily.id}` : null,
@@ -517,6 +576,7 @@ function PlacesPageContent() {
     icon: 'default',
     color: '#3B82F6',
     notifyChannels: DEFAULT_NOTIFY_CHANNELS as NotifyChannel[],
+    assignedMemberIds: [] as string[],
   })
   const [editPlace, setEditPlace] = useState({
     name: '',
@@ -531,6 +591,7 @@ function PlacesPageContent() {
     icon: 'default',
     color: '#3B82F6',
     notifyChannels: DEFAULT_NOTIFY_CHANNELS as NotifyChannel[],
+    assignedMemberIds: [] as string[],
   })
 
   const toggleNotifyChannel = (channel: NotifyChannel, target: 'new' | 'edit') => {
@@ -667,6 +728,7 @@ function PlacesPageContent() {
           icon: newPlace.icon,
           color: newPlace.color,
           notifyChannels: newPlace.notifyChannels,
+          ...(canManageGeofence ? { assignedMemberIds: newPlace.assignedMemberIds } : {}),
         }),
       })
 
@@ -693,6 +755,7 @@ function PlacesPageContent() {
           icon: 'default',
           color: '#3B82F6',
           notifyChannels: DEFAULT_NOTIFY_CHANNELS,
+          assignedMemberIds: [],
         })
         mutate()
       } else {
@@ -722,6 +785,8 @@ function PlacesPageContent() {
         place.notifyChannels && place.notifyChannels.length > 0
           ? place.notifyChannels
           : DEFAULT_NOTIFY_CHANNELS,
+      // Kids removed from the family since can't be re-saved; drop them
+      assignedMemberIds: (place.assignedMemberIds ?? []).filter((id) => kids.some((k) => k.id === id)),
     })
     setEditPhoto(null)
     setEditRemovePhoto(false)
@@ -752,6 +817,7 @@ function PlacesPageContent() {
           icon: editPlace.icon,
           color: editPlace.color,
           notifyChannels: editPlace.notifyChannels,
+          ...(canManageGeofence ? { assignedMemberIds: editPlace.assignedMemberIds } : {}),
         }),
       })
 
@@ -1023,6 +1089,14 @@ function PlacesPageContent() {
                               <Bell className="w-3 h-3 mr-1" />
                               Alerts on · {place.radius}m
                             </Badge>
+                            {place.isAssigned && (
+                              <Badge variant="outline" className="text-xs">
+                                <Users className="w-3 h-3 mr-1" />
+                                {canManageGeofence
+                                  ? 'Only ' + (place.assignedMemberIds ?? []).map((id) => kidName(id) ?? 'removed member').join(', ')
+                                  : (place.assignedMemberIds?.length ?? 0) > 0 ? 'Includes you' : 'Selected kids only'}
+                              </Badge>
+                            )}
                             {place.alertOnArrival && (
                               <Badge variant="outline" className="text-xs text-green-600">
                                 Arrival
@@ -1139,6 +1213,7 @@ function PlacesPageContent() {
             photo={{ file: newPhoto, onPick: setNewPhoto, onRemove: () => setNewPhoto(null) }}
             hasPremium={access.hasPremium}
             canManageGeofence={canManageGeofence}
+            kids={kids}
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddPlaceOpen(false)}>
@@ -1182,6 +1257,7 @@ function PlacesPageContent() {
             }}
             hasPremium={access.hasPremium}
             canManageGeofence={canManageGeofence}
+            kids={kids}
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditPlaceOpen(false)}>

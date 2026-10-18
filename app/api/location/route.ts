@@ -1,7 +1,7 @@
 import { isUnderLegalHold } from "@/lib/legal"
 import { ensureLocationRequestsTable } from "@/lib/location-schema"
 import { NextRequest, NextResponse } from "next/server"
-import { ensurePlaceNotifyChannelsColumn } from "@/lib/place-schema"
+import { ensurePlaceNotifyChannelsColumn, ensurePlaceMembersTable } from "@/lib/place-schema"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, getUserWithFamily, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { verifyDeviceToken } from "@/lib/device-token"
@@ -527,12 +527,23 @@ async function checkGeofences(
   accuracy?: number | null,
   prevPing?: { latitude: number; longitude: number; accuracy: number | null; ageSec: number } | null
 ): Promise<{ nearestGap: number | null; recorded: number }> {
-  // Get all geofence-enabled places for this family
+  // Geofence-enabled places in this family that apply to this person: ones
+  // assigned to nobody (everyone) or assigned to their membership here.
   await ensurePlaceNotifyChannelsColumn()
+  await ensurePlaceMembersTable()
   const places = await sql`
-    SELECT id, name, latitude, longitude, radius, alert_on_arrival, alert_on_departure, notify_channels
-    FROM saved_places
-    WHERE family_id = ${familyId} AND geofence_enabled = true
+    SELECT sp.id, sp.name, sp.latitude, sp.longitude, sp.radius, sp.alert_on_arrival, sp.alert_on_departure, sp.notify_channels
+    FROM saved_places sp
+    WHERE sp.family_id = ${familyId} AND sp.geofence_enabled = true
+      AND (
+        NOT EXISTS (SELECT 1 FROM saved_place_members spm WHERE spm.place_id = sp.id)
+        OR EXISTS (
+          SELECT 1 FROM saved_place_members spm
+          JOIN family_members fm ON fm.id = spm.family_member_id
+          WHERE spm.place_id = sp.id AND fm.user_id = ${userId}
+            AND fm.family_id = ${familyId} AND fm.is_active = true
+        )
+      )
   `
   if (places.length === 0) return { nearestGap: null, recorded: 0 }
 

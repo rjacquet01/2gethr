@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { ensurePlaceNotifyChannelsColumn } from "@/lib/place-schema"
+import { ensurePlaceNotifyChannelsColumn, getPlaceAssignees, setPlaceAssignees, validatePlaceAssignees } from "@/lib/place-schema"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { guestForbidden } from "@/lib/permissions"
@@ -18,6 +18,9 @@ const updatePlaceSchema = z.object({
   icon: z.string().max(50).optional().nullable(),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   notifyChannels: z.array(z.enum(["in_app", "push", "email", "sms"])).optional(),
+  // Kids this place applies to (family_members ids, role CHILD). Empty =
+  // everyone, omitted = unchanged. Only parents/guardians/adults may set it.
+  assignedMemberIds: z.array(z.string().min(1).max(100)).max(50).optional(),
 })
 
 // Get a single place
@@ -38,7 +41,7 @@ export async function GET(
     }
 
     const places = await sql`
-      SELECT sp.*, f.id as family_id, fm.role as member_role
+      SELECT sp.*, f.id as family_id, fm.role as member_role, fm.id as member_id
       FROM saved_places sp
       JOIN families f ON sp.family_id = f.id
       JOIN family_members fm ON f.id = fm.family_id
@@ -54,6 +57,8 @@ export async function GET(
     if (places[0].member_role === "GUEST") return guestForbidden()
 
     const p = places[0]
+    const ids = (await getPlaceAssignees([p.id as string])).get(p.id as string) ?? []
+    const viewerIsManager = ["PARENT", "GUARDIAN", "ADULT", "ADMIN"].includes(p.member_role)
     return NextResponse.json({
       success: true,
       data: {
@@ -70,6 +75,9 @@ export async function GET(
         icon: p.icon,
         color: p.color,
         notifyChannels: p.notify_channels,
+        // Same rule as the list: only managers see which other kids
+        assignedMemberIds: viewerIsManager ? ids : ids.filter((id) => id === p.member_id),
+        isAssigned: ids.length > 0,
         photoPath: p.photo_path ?? null,
         createdAt: p.created_at,
       },
@@ -128,6 +136,21 @@ export async function PATCH(
 
     const body = await request.json()
     const validatedData = updatePlaceSchema.parse(body)
+
+    // Which kids a place applies to: parents/guardians/adults only
+    let assignedMemberIds: string[] | undefined
+    if (validatedData.assignedMemberIds !== undefined) {
+      if (!isManager) {
+        return NextResponse.json(
+          { success: false, error: "Only a parent or guardian can assign places to kids" },
+          { status: 403 }
+        )
+      }
+      assignedMemberIds = [...new Set(validatedData.assignedMemberIds)]
+      const invalid = await validatePlaceAssignees(places[0].family_id, assignedMemberIds)
+      if (invalid) return NextResponse.json({ success: false, error: invalid }, { status: 400 })
+    }
+    delete validatedData.assignedMemberIds
 
     // Geofence alerts watch every family member, so only parents/guardians change them
     if (!isManager) {
@@ -197,7 +220,7 @@ export async function PATCH(
       values.push(true)
     }
 
-    if (updates.length === 0) {
+    if (updates.length === 0 && assignedMemberIds === undefined) {
       return NextResponse.json(
         { success: false, error: "No fields to update" },
         { status: 400 }
@@ -240,11 +263,12 @@ export async function PATCH(
         updated_at = NOW()
       WHERE id = ${placeId}
     `
+    if (assignedMemberIds !== undefined) await setPlaceAssignees(placeId, assignedMemberIds)
 
     // Audit log
     await logAuditEvent(user.id, "UPDATE", "saved_place", placeId, {
       oldValue: { name: places[0].name },
-      newValue: validatedData,
+      newValue: assignedMemberIds !== undefined ? { ...validatedData, assignedMemberIds } : validatedData,
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
     })

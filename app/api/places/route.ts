@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { ensurePlaceNotifyChannelsColumn } from "@/lib/place-schema"
+import { ensurePlaceNotifyChannelsColumn, getPlaceAssignees, setPlaceAssignees, validatePlaceAssignees } from "@/lib/place-schema"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { guestForbidden } from "@/lib/permissions"
@@ -22,6 +22,9 @@ const createPlaceSchema = z.object({
   // reminders. Omitted or empty falls back to the recipient's own
   // notification settings, same as every place created before this existed.
   notifyChannels: z.array(z.enum(["in_app", "push", "email", "sms"])).optional(),
+  // Kids this place applies to (family_members ids, role CHILD). Empty or
+  // omitted = everyone. Only parents/guardians/adults may set it.
+  assignedMemberIds: z.array(z.string().min(1).max(100)).max(50).optional(),
 })
 
 // Get saved places for a family
@@ -48,7 +51,7 @@ export async function GET(request: NextRequest) {
 
     // Verify membership
     const membership = await sql`
-      SELECT role FROM family_members 
+      SELECT id, role FROM family_members 
       WHERE family_id = ${familyId} AND user_id = ${user.id} AND is_active = true
     `
 
@@ -65,6 +68,15 @@ export async function GET(request: NextRequest) {
       WHERE family_id = ${familyId}
       ORDER BY name ASC
     `
+    const viewerIsManager = ["PARENT", "GUARDIAN", "ADULT", "ADMIN"].includes(membership[0].role)
+    const assignees = await getPlaceAssignees(places.map((p) => p.id as string))
+    // Managers see every assignment; anyone else only whether the place is
+    // limited and whether it includes them, never which other kids.
+    const assignmentFor = (placeId: string) => {
+      const ids = assignees.get(placeId) ?? []
+      if (viewerIsManager) return ids
+      return ids.filter((id) => id === membership[0].id)
+    }
 
     return NextResponse.json({
       success: true,
@@ -82,6 +94,8 @@ export async function GET(request: NextRequest) {
         icon: p.icon,
         color: p.color,
         notifyChannels: p.notify_channels,
+        assignedMemberIds: assignmentFor(p.id as string),
+        isAssigned: (assignees.get(p.id as string)?.length ?? 0) > 0,
         photoPath: p.photo_path ?? null,
         createdById: p.created_by_id ?? null,
         // Parents/guardians/adults manage every place; other members manage the ones they added
@@ -154,6 +168,19 @@ export async function POST(request: NextRequest) {
       validatedData.notifyChannels = undefined
     }
 
+    // Only parents/guardians/adults decide which kids a place applies to
+    const assignedMemberIds = [...new Set(validatedData.assignedMemberIds ?? [])]
+    if (assignedMemberIds.length > 0) {
+      if (!isManager) {
+        return NextResponse.json(
+          { success: false, error: "Only a parent or guardian can assign places to kids" },
+          { status: 403 }
+        )
+      }
+      const invalid = await validatePlaceAssignees(validatedData.familyId, assignedMemberIds)
+      if (invalid) return NextResponse.json({ success: false, error: invalid }, { status: 400 })
+    }
+
     // Check if geofencing is allowed
     if (validatedData.geofenceEnabled && !subscription.features.geofencing) {
       return NextResponse.json(
@@ -191,10 +218,11 @@ export async function POST(request: NextRequest) {
         NOW(), NOW()
       )
     `
+    if (assignedMemberIds.length > 0) await setPlaceAssignees(placeId, assignedMemberIds)
 
     // Audit log
     await logAuditEvent(user.id, "CREATE", "saved_place", placeId, {
-      newValue: { name: validatedData.name, familyId: validatedData.familyId },
+      newValue: { name: validatedData.name, familyId: validatedData.familyId, assignedMemberIds },
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
     })
@@ -204,6 +232,7 @@ export async function POST(request: NextRequest) {
       data: {
         id: placeId,
         ...validatedData,
+        assignedMemberIds,
       },
       message: "Saved place created successfully",
     })
