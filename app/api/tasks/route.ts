@@ -1,5 +1,5 @@
 import { createNotification } from '@/lib/notifications'
-import { ensureAssignmentColumns, isSupervisorRole, needsParentToApprove, getParentUserIds } from '@/lib/assignment'
+import { ensureAssignmentColumns, isSupervisorRole, needsParentToApprove, getParentUserIds, assigneesInFamily } from '@/lib/assignment'
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
@@ -190,6 +190,9 @@ export async function POST(request: NextRequest) {
     // A guest doesn't pick other family members: their tasks are for themselves.
     if (creatorRole === 'GUEST' && ((assignedToUserId && assignedToUserId !== user.id) || assignedToChildId)) {
       return NextResponse.json({ error: 'Guests can only assign tasks to themselves' }, { status: 403 })
+    }
+    if (!(await assigneesInFamily(familyId, assignedToUserId, assignedToChildId))) {
+      return NextResponse.json({ error: 'That person is not in this family' }, { status: 400 })
     }
     const assignerName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Someone'
 

@@ -6,7 +6,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { planGateError } from "@/lib/tier-gates"
-import { guestCanSeeEvent } from "@/lib/guest-scope"
+import { guestCanSeeEvent, canSeeEventVisibility } from "@/lib/guest-scope"
 
 const updateEventSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -74,6 +74,13 @@ export async function GET(
     // Guests only reach events they created or were invited to.
     const viewerIsGuest = event.member_role === "GUEST"
     if (viewerIsGuest && !(await guestCanSeeEvent(user.id, eventId))) {
+      return NextResponse.json(
+        { success: false, error: "Event not found or access denied" },
+        { status: 404 }
+      )
+    }
+    // PRIVATE / SELECTED_MEMBERS events only reach their creator and participants.
+    if (!(await canSeeEventVisibility(event as { id: string; visibility?: unknown; created_by_id?: unknown }, user.id))) {
       return NextResponse.json(
         { success: false, error: "Event not found or access denied" },
         { status: 404 }
@@ -417,11 +424,21 @@ export async function DELETE(
       )
     }
 
-    // Soft delete - set status to CANCELLED
-    await sql`
-      UPDATE events SET status = 'CANCELLED', updated_at = NOW()
-      WHERE id = ${eventId}
-    `
+    // Soft delete - set status to CANCELLED. "All occurrences" cancels every
+    // event of the same recurring series (they share recurrence_rule_id).
+    const allOccurrences = request.nextUrl.searchParams.get("deleteRecurrence") === "true"
+    if (allOccurrences && event.recurrence_rule_id) {
+      await sql`
+        UPDATE events SET status = 'CANCELLED', updated_at = NOW()
+        WHERE recurrence_rule_id = ${event.recurrence_rule_id}
+          AND calendar_id = ${event.calendar_id}
+      `
+    } else {
+      await sql`
+        UPDATE events SET status = 'CANCELLED', updated_at = NOW()
+        WHERE id = ${eventId}
+      `
+    }
 
     // Audit log
     await logAuditEvent(user.id, "DELETE", "event", eventId, {

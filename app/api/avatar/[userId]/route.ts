@@ -1,9 +1,30 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { get } from "@vercel/blob"
 import { sql } from "@/lib/db"
+import { getUserFromRequest, verifyRefreshToken } from "@/lib/auth"
 
-// Serve user avatars - publicly accessible for display in UI
-// This endpoint doesn't require authentication since avatars are meant to be displayed
+/**
+ * Who is asking. <img> tags only carry cookies, and the access cookie lasts
+ * 15 minutes, so a valid (unrevoked) refresh cookie also counts; otherwise
+ * avatars would break whenever the app sat idle.
+ */
+async function viewerId(request: NextRequest): Promise<string | null> {
+  const { user } = await getUserFromRequest(request)
+  if (user) return user.id
+  const refresh = request.cookies.get("refresh_token")?.value
+  if (!refresh) return null
+  const payload = await verifyRefreshToken(refresh)
+  if (!payload?.userId) return null
+  const live = await sql`
+    SELECT 1 FROM refresh_tokens
+    WHERE token = ${refresh} AND revoked_at IS NULL AND expires_at > NOW()
+    LIMIT 1
+  `
+  return live.length > 0 ? payload.userId : null
+}
+
+// Serve user avatars to the user themselves and people they share a family
+// with. Profile photos (children's included) are not public.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
@@ -13,6 +34,23 @@ export async function GET(
 
     if (!userId) {
       return new NextResponse("User ID required", { status: 400 })
+    }
+
+    const viewer = await viewerId(request)
+    if (!viewer) {
+      return new NextResponse("Unauthorized", { status: 401 })
+    }
+    if (viewer !== userId) {
+      const shared = await sql`
+        SELECT 1 FROM family_members a
+        JOIN family_members b ON b.family_id = a.family_id
+        WHERE a.user_id = ${viewer} AND a.is_active = true
+          AND b.user_id = ${userId} AND b.is_active = true
+        LIMIT 1
+      `
+      if (shared.length === 0) {
+        return new NextResponse("Not found", { status: 404 })
+      }
     }
 
     // Get the user's profile photo path from database

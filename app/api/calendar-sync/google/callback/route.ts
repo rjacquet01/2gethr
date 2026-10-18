@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { neon } from '@neondatabase/serverless'
 import { encrypt } from '@/lib/encryption'
 import { defaultFamilyFor } from '@/lib/permissions'
+import { verifyOAuthState } from '@/lib/auth'
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -26,12 +27,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/settings/calendar-sync?error=missing_params', request.url))
     }
 
-    // Decode state to get user ID
-    let userId: string
-    try {
-      const stateData = JSON.parse(Buffer.from(state, 'base64').toString())
-      userId = stateData.userId
-    } catch {
+    // The state must be one we signed (see generateOAuthState); a forged or
+    // expired one could otherwise attach a stranger's Google account.
+    const userId = await verifyOAuthState(state)
+    if (!userId) {
       return NextResponse.redirect(new URL('/settings/calendar-sync?error=invalid_state', request.url))
     }
 

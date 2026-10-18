@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserFromRequest } from '@/lib/auth'
+import { getUserFromRequest, generateOAuthState } from '@/lib/auth'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const REDIRECT_URI = process.env.NEXT_PUBLIC_APP_URL 
@@ -30,8 +30,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Create OAuth URL with state parameter containing user ID
-    const state = Buffer.from(JSON.stringify({ userId: user.id })).toString('base64')
+    // Signed state: the callback only trusts a user id this server issued.
+    const state = await generateOAuthState(user.id)
     
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
     authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID)

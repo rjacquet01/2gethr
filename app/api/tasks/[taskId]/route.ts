@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { notifyTaskCompleted, createNotification } from '@/lib/notifications'
-import { ensureAssignmentColumns, isSupervisorRole } from '@/lib/assignment'
+import { ensureAssignmentColumns, isSupervisorRole, assigneesInFamily } from '@/lib/assignment'
 import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
 import { taskInvolvesUser } from '@/lib/guest-scope'
 
@@ -329,12 +329,12 @@ export async function PATCH(
     }
     
     if (action === 'approve') {
-      // Only task creator or family owner can approve
+      // The task creator or a parent/guardian can approve
       const isCreator = task.created_by_id === user.id
-      const isOwner = membership[0].role === 'owner'
+      const isParent = isSupervisorRole(membership[0].role)
       
-      if (!isCreator && !isOwner) {
-        return NextResponse.json({ error: 'Only task creator or family owner can approve' }, { status: 403 })
+      if (!isCreator && !isParent) {
+        return NextResponse.json({ error: 'Only the task creator or a parent can approve' }, { status: 403 })
       }
       
       await sql`
@@ -360,10 +360,10 @@ export async function PATCH(
     
     if (action === 'reject') {
       const isCreator = task.created_by_id === user.id
-      const isOwner = membership[0].role === 'owner'
+      const isParent = isSupervisorRole(membership[0].role)
       
-      if (!isCreator && !isOwner) {
-        return NextResponse.json({ error: 'Only task creator or family owner can reject' }, { status: 403 })
+      if (!isCreator && !isParent) {
+        return NextResponse.json({ error: 'Only the task creator or a parent can reject' }, { status: 403 })
       }
       
       await sql`
@@ -521,6 +521,10 @@ export async function PATCH(
     
     // General update (action = 'update' or any field updates)
     if (action === 'update' || updates.title || updates.description || updates.dueDate || updates.priority || updates.category || updates.assignedToUserId !== undefined || updates.assignedToChildId !== undefined || updates.requiresApproval !== undefined || updates.isRecurring !== undefined || updates.notifyChannels !== undefined) {
+      // New assignees must belong to this task's family.
+      if (!(await assigneesInFamily(task.family_id, updates.assignedToUserId, updates.assignedToChildId))) {
+        return NextResponse.json({ error: 'That person is not in this family' }, { status: 400 })
+      }
       await ensureTaskEventNotifyChannelsColumns()
       const cleanChannels: string[] | null = Array.isArray(updates.notifyChannels)
         ? (updates.notifyChannels as unknown[]).filter((c): c is string => typeof c === 'string' && ['in_app', 'push', 'email', 'sms'].includes(c))
@@ -604,7 +608,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     }
     
-    // Only creator or family owner can delete
+    // The creator or a parent/guardian can delete
     const membership = await sql`
       SELECT role FROM family_members
       WHERE family_id = ${task[0].family_id} AND user_id = ${user.id} AND is_active = true
@@ -618,10 +622,10 @@ export async function DELETE(
     }
 
     const isCreator = task[0].created_by_id === user.id
-    const isOwner = membership[0].role === 'owner'
+    const isParent = isSupervisorRole(membership[0].role)
 
-    if (!isCreator && !isOwner) {
-      return NextResponse.json({ error: 'Only task creator or family owner can delete' }, { status: 403 })
+    if (!isCreator && !isParent) {
+      return NextResponse.json({ error: 'Only the task creator or a parent can delete' }, { status: 403 })
     }
     
     // Delete task history and comments first

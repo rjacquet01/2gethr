@@ -5,11 +5,11 @@ import { sendEmail, EMAIL_TEMPLATES } from "@/lib/services/email"
 // Verify the request is from Vercel Cron
 function verifyCronRequest(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization')
-  if (authHeader === `Bearer ${process.env.CRON_SECRET}`) {
+  if (process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`) {
     return true
   }
-  // Also allow in development or if CRON_SECRET is not set
-  if (!process.env.CRON_SECRET || process.env.NODE_ENV === 'development') {
+  // Also allow local development (never production without the secret)
+  if (process.env.NODE_ENV === 'development') {
     return true
   }
   return false

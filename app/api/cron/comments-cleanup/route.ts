@@ -15,7 +15,7 @@ import { HISTORY_CAP_DAYS, MAX_ROWS_PER_TABLE, isHistoryPurgeEnabled, heldUserId
 // family, are never removed. A board post that goes takes its comments with it.
 function verifyCronRequest(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) return true
+  if (!cronSecret) return process.env.NODE_ENV !== "production" // fail closed in production
   return request.headers.get("authorization") === `Bearer ${cronSecret}`
 }
 

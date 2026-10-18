@@ -9,6 +9,8 @@ import {
   type NotificationChannel 
 } from '@/lib/services/notification-dispatcher'
 
+import { hitRateLimit, tooManyRequests } from '@/lib/rate-limit'
+
 const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: Request) {
@@ -77,13 +79,21 @@ export async function POST(request: Request) {
           { status: 403 }
         )
       }
+      if (membership[0].role === 'GUEST') {
+        return NextResponse.json({ error: 'Not available for guest members' }, { status: 403 })
+      }
     }
 
-    // Only in-app and push may be chosen by callers; email/SMS are reserved for system code.
+    const limit = await hitRateLimit(`notify-send:${payload.userId}`, 20, 60 * 60)
+    if (!limit.allowed) return tooManyRequests(limit.retryAfterSec, 'notifications sent')
+
+    // Only in-app and push may be chosen by callers; email/SMS are reserved for
+    // system code. Leaving channels out must not fall back to the dispatcher's
+    // default (which includes email).
     const allowedChannels: NotificationChannel[] = ['in_app', 'push']
     const safeChannels = Array.isArray(channels)
       ? (channels as NotificationChannel[]).filter((c) => allowedChannels.includes(c))
-      : undefined
+      : allowedChannels
 
     // A user may only notify someone they share an active family with (or themselves).
     if (recipientType === 'user' && recipientId && recipientId !== payload.userId) {

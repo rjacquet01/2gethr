@@ -9,6 +9,12 @@ import {
 } from "@/lib/auth"
 import { z } from "zod"
 import { recordFailedLogin } from "@/lib/login-attempts"
+import { hitRateLimit, clientIp as requestIp, tooManyRequests } from "@/lib/rate-limit"
+
+// Password guessing limits: per account and per network address.
+const LOGIN_WINDOW_SEC = 15 * 60
+const LOGIN_LIMIT_PER_EMAIL = 10
+const LOGIN_LIMIT_PER_IP = 50
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -19,6 +25,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { email, password } = loginSchema.parse(body)
+
+    const byEmail = await hitRateLimit(`login:email:${email.toLowerCase()}`, LOGIN_LIMIT_PER_EMAIL, LOGIN_WINDOW_SEC)
+    if (!byEmail.allowed) return tooManyRequests(byEmail.retryAfterSec, "sign-in attempts")
+    const byIp = await hitRateLimit(`login:ip:${requestIp(request)}`, LOGIN_LIMIT_PER_IP, LOGIN_WINDOW_SEC)
+    if (!byIp.allowed) return tooManyRequests(byIp.retryAfterSec, "sign-in attempts")
 
     // Get user by email
     const users = await sql`
@@ -39,21 +50,22 @@ export async function POST(request: NextRequest) {
 
     const user = users[0]
 
-    // Check if user is active
-    if (!user.is_active) {
-      return NextResponse.json(
-        { success: false, error: "Account is deactivated" },
-        { status: 403 }
-      )
-    }
-
-    // Verify password
+    // Verify password (before the active check, so a wrong password can't
+    // tell anyone whether an account exists and is deactivated)
     const isValidPassword = await verifyPassword(password, user.password_hash)
     if (!isValidPassword) {
       await recordFailedLogin(email, user.id, clientIp)
       return NextResponse.json(
         { success: false, error: "Invalid email or password" },
         { status: 401 }
+      )
+    }
+
+    // Check if user is active
+    if (!user.is_active) {
+      return NextResponse.json(
+        { success: false, error: "Account is deactivated" },
+        { status: 403 }
       )
     }
 
@@ -106,19 +118,19 @@ export async function POST(request: NextRequest) {
     })
 
     // Set cookies on response object (required for API routes)
-    // Use secure: true and sameSite: 'none' for production, 'lax' for dev
+    // secure in production; SameSite=Lax so other sites can't send requests with the session
     const isProduction = process.env.NODE_ENV === "production"
     response.cookies.set("access_token", tokens.accessToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
+      sameSite: "lax",
       maxAge: 15 * 60, // 15 minutes
       path: "/",
     })
     response.cookies.set("refresh_token", tokens.refreshToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
+      sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60, // 7 days
       path: "/",
     })

@@ -12,6 +12,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 import { Eye, EyeOff } from 'lucide-react'
 import { LogoIcon } from '@/components/logo'
+import { SignedInRedirect } from '@/components/signed-in-redirect'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -126,6 +127,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
+      <SignedInRedirect to={getRedirectTarget} />
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center gap-3 mb-8">
           <LogoIcon size="lg" />

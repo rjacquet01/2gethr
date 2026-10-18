@@ -47,6 +47,10 @@ export async function GET(request: NextRequest) {
     const transformedUser = {
       id: user.id,
       email: user.email,
+      // The settings form edits these; without them it loaded blank names and
+      // saving any field wiped the stored name.
+      firstName: user.firstName ?? null,
+      lastName: user.lastName ?? null,
       displayName: [user.firstName, user.lastName].filter(Boolean).join(' ') || null,
       avatarUrl: user.profilePhotoPath ? `/api/avatar/${user.id}` : null, // Use avatar endpoint for private blob access
       phone: user.phone,

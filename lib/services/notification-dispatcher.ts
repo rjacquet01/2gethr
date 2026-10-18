@@ -11,6 +11,15 @@ import { createNotification } from '../notifications'
 
 export type NotificationChannel = 'in_app' | 'push' | 'email' | 'sms'
 
+function escapeHtml(s: string): string {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export interface NotificationRequest {
   userId: string
   type: string
@@ -145,13 +154,13 @@ export async function dispatchNotification(
           const templateFn = EMAIL_TEMPLATES[request.emailTemplate] as (...args: string[]) => { subject: string; html: string; text: string }
           emailContent = templateFn(...(request.smsData || []))
         } else {
-          // Default email format
+          // Default email format (title/body may contain user-typed text: escape it)
           emailContent = {
             subject: request.title,
             html: `
               <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #0d9488;">${request.title}</h2>
-                <p>${request.body}</p>
+                <h2 style="color: #0d9488;">${escapeHtml(request.title)}</h2>
+                <p>${escapeHtml(request.body)}</p>
               </div>
             `,
             text: `${request.title}\n\n${request.body}`,

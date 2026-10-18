@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Logo } from '@/components/logo'
+import { SignedInRedirect } from '@/components/signed-in-redirect'
 import { listTierDefinitions, centsToDisplay, TRIAL_DAYS } from '@/lib/subscription-tiers'
 import { 
   Calendar, 
@@ -129,6 +130,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SignedInRedirect />
       {/* Header */}
       <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur-sm z-50">
         <div className="container mx-auto px-4 h-14 sm:h-16 flex items-center justify-between">

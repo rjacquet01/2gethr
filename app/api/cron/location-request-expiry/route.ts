@@ -7,7 +7,7 @@ import { notifyRequesterExpired } from "@/lib/location-approval"
 // its 24-hour window is marked EXPIRED and the requester is told once.
 function verifyCronRequest(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) return true
+  if (!cronSecret) return process.env.NODE_ENV !== "production" // fail closed in production
   return request.headers.get("authorization") === `Bearer ${cronSecret}`
 }
 

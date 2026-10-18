@@ -26,7 +26,37 @@ export function ensureAssignmentColumns(): Promise<void> {
 export const isAdultRole = isAdultMemberRole
 export { isSupervisorRole }
 // A child pulling in a grown-up or a guest needs a parent's approval.
-export const needsParentToApprove = (role?: string | null) => isAdultMemberRole(role) || role === "GUEST"
+/**
+ * Are these assignees (a user and/or a child profile) active members of this
+ * family? Ids come from the request, so a task in family A must not be
+ * assigned to someone (or some child) in family B.
+ */
+export async function assigneesInFamily(
+  familyId: string,
+  userId?: string | null,
+  childProfileId?: string | null
+): Promise<boolean> {
+  if (userId) {
+    const u = await sql`
+      SELECT 1 FROM family_members
+      WHERE family_id = ${familyId} AND user_id = ${userId} AND is_active = true
+      LIMIT 1
+    `
+    if (u.length === 0) return false
+  }
+  if (childProfileId) {
+    const c = await sql`
+      SELECT 1 FROM child_profiles cp
+      JOIN family_members fm ON cp.family_member_id = fm.id
+      WHERE cp.id = ${childProfileId} AND fm.family_id = ${familyId} AND fm.is_active = true
+      LIMIT 1
+    `
+    if (c.length === 0) return false
+  }
+  return true
+}
+
+export const needsParentToApprove =(role?: string | null) => isAdultMemberRole(role) || role === "GUEST"
 
 // Parents and guardians: the people who approve things for children.
 export async function getParentUserIds(familyId: string, excludeUserId?: string): Promise<string[]> {

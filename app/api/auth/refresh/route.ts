@@ -60,19 +60,19 @@ export async function POST(request: NextRequest) {
     })
 
     // Set cookies on response object (required for API routes)
-    // Use secure: true and sameSite: 'none' for production, 'lax' for dev
+    // secure in production; SameSite=Lax so other sites can't send requests with the session
     const isProduction = process.env.NODE_ENV === "production"
     response.cookies.set("access_token", newTokens.accessToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
+      sameSite: "lax",
       maxAge: 15 * 60, // 15 minutes
       path: "/",
     })
     response.cookies.set("refresh_token", newTokens.refreshToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
+      sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60, // 7 days
       path: "/",
     })

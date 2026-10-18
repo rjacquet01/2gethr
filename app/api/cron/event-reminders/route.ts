@@ -16,7 +16,7 @@ const GRACE_MINUTES = 3
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization")
-    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (process.env.CRON_SECRET ? authHeader !== `Bearer ${process.env.CRON_SECRET}` : process.env.NODE_ENV === "production") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

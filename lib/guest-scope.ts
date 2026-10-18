@@ -46,6 +46,31 @@ export async function eventIdsInvolvingUser(userId: string, eventIds: string[]):
 }
 
 /**
+ * Event visibility for everyone (not just guests): FAMILY events are shared;
+ * PRIVATE events only with their creator; SELECTED_MEMBERS events with their
+ * creator and participants. Rows without a visibility value count as FAMILY.
+ */
+export async function filterEventsByVisibility<T extends { id: string; visibility?: unknown; created_by_id?: unknown }>(
+  rows: T[],
+  userId: string
+): Promise<T[]> {
+  const restricted = rows.filter((r) => r.visibility && r.visibility !== "FAMILY" && r.created_by_id !== userId)
+  if (restricted.length === 0) return rows
+  const selected = restricted.filter((r) => r.visibility === "SELECTED_MEMBERS").map((r) => r.id)
+  const allowed = await eventIdsInvolvingUser(userId, selected)
+  const hidden = new Set(restricted.filter((r) => !allowed.has(r.id)).map((r) => r.id))
+  return rows.filter((r) => !hidden.has(r.id))
+}
+
+/** Can this user see this one event under the visibility rules above? */
+export async function canSeeEventVisibility(
+  event: { id: string; visibility?: unknown; created_by_id?: unknown },
+  userId: string
+): Promise<boolean> {
+  return (await filterEventsByVisibility([event], userId)).length === 1
+}
+
+/**
  * Drop events a guest may not see. `familyOf` returns the event's family id;
  * rows from families where the user is not a guest are always kept.
  */

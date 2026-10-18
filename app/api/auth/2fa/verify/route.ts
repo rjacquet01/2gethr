@@ -8,6 +8,7 @@ import {
 } from "@/lib/auth"
 import { verifyLoginChallenge } from "@/lib/services/two-factor"
 import { z } from "zod"
+import { hitRateLimit, tooManyRequests } from "@/lib/rate-limit"
 
 const verifySchema = z.object({
   challengeToken: z.string().min(1),
@@ -30,6 +31,11 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+
+    // Per account, so getting a fresh challenge by signing in again doesn't
+    // reset the count: 5 codes per 15 minutes.
+    const limit = await hitRateLimit(`2fa:${payload.userId}`, 5, 15 * 60)
+    if (!limit.allowed) return tooManyRequests(limit.retryAfterSec, "code attempts")
 
     const isValid = await verifyLoginChallenge(payload.userId, code)
     if (!isValid) {
@@ -73,14 +79,14 @@ export async function POST(request: NextRequest) {
     response.cookies.set("access_token", tokens.accessToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
+      sameSite: "lax",
       maxAge: 15 * 60,
       path: "/",
     })
     response.cookies.set("refresh_token", tokens.refreshToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
+      sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60,
       path: "/",
     })

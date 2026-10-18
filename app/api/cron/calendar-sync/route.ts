@@ -22,7 +22,7 @@ import { ensureSyncSchema } from "@/lib/sync-schema"
 function verifyCronRequest(request: NextRequest): boolean {
   const authHeader = request.headers.get("authorization")
   const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) return true
+  if (!cronSecret) return process.env.NODE_ENV !== "production" // fail closed in production
   return authHeader === `Bearer ${cronSecret}`
 }
 

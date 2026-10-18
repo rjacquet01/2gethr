@@ -2,6 +2,7 @@ import { sql } from "./db"
 import { sendPushToUser, isFirebaseConfigured } from "./services/push"
 import { sendSMSMetered, isTwilioConfigured } from "./services/sms"
 import { sendEmail, isResendConfigured } from "./services/email"
+import { hitRateLimit } from "./rate-limit"
 
 interface AlertOptions {
   title: string
@@ -105,6 +106,13 @@ export async function notifyChildStoppedSharing(memberId: string, how: string) {
     `
     const m = rows[0]
     if (!m || m.role !== "CHILD") return
+    // Urgent alerts skip the SMS quota, so cap them: toggling sharing off and
+    // on (or revoking tokens) in a loop must not text every parent each time.
+    const limit = await hitRateLimit(`sharing-off:${memberId}`, 3, 60 * 60)
+    if (!limit.allowed) {
+      console.warn(`[family-alerts] sharing-off alert for ${memberId} suppressed (limit reached)`)
+      return
+    }
     await alertFamilyAdults(m.family_id, m.user_id, {
       title: `${m.name} turned off location sharing`,
       body: `${m.name} stopped sharing their location (${how}) at ${new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET. You can no longer see where they are.`,

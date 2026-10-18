@@ -10,7 +10,7 @@ const HOLD_DAYS = 3
 
 function verifyCronRequest(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) return true
+  if (!cronSecret) return process.env.NODE_ENV !== "production" // fail closed in production
   return request.headers.get("authorization") === `Bearer ${cronSecret}`
 }
 

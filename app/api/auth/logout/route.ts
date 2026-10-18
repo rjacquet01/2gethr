@@ -8,13 +8,21 @@ export async function POST(request: NextRequest) {
     const { user } = await getUserFromRequest(request)
     const cookieStore = await cookies()
     const refreshToken = cookieStore.get("refresh_token")?.value
+    // The web app also keeps a copy in localStorage and sends it here.
+    let bodyToken: string | undefined
+    try {
+      const body = await request.json()
+      if (typeof body?.refreshToken === "string") bodyToken = body.refreshToken
+    } catch {
+      // No body
+    }
 
-    // Revoke refresh token in database
-    if (refreshToken) {
+    // Revoke refresh token(s) in database
+    for (const token of new Set([refreshToken, bodyToken].filter(Boolean) as string[])) {
       await sql`
-        UPDATE refresh_tokens 
-        SET revoked_at = NOW() 
-        WHERE token = ${refreshToken}
+        UPDATE refresh_tokens
+        SET revoked_at = NOW()
+        WHERE token = ${token}
       `
     }
 

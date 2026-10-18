@@ -7,7 +7,7 @@ import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/li
 import { notifyFamilyAboutEvent, createNotification, type NotificationChannel } from "@/lib/notifications" // Event notifications
 import { z } from "zod"
 import { planGateError } from "@/lib/tier-gates"
-import { getGuestFamilyIds, filterEventsForGuest } from "@/lib/guest-scope"
+import { getGuestFamilyIds, filterEventsForGuest, filterEventsByVisibility } from "@/lib/guest-scope"
 import { generateOccurrences, isValidTimeZone, recurrenceFromPreset, type RecurrenceInput } from "@/lib/recurrence"
 
 const createEventSchema = z.object({
@@ -232,6 +232,9 @@ export async function GET(request: NextRequest) {
         LIMIT 500
       `
     }
+
+    // PRIVATE / SELECTED_MEMBERS events only reach their creator and participants.
+    events = await filterEventsByVisibility(events as Array<Record<string, any> & { id: string }>, user.id)
 
     // Guests only see events they created or were invited to, and never a
     // saved place's address (family location data).

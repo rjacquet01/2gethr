@@ -3,7 +3,7 @@ import { sql } from '@/lib/db'
 import { ensureSyncSchema } from '@/lib/sync-schema'
 import { checkFamilySubscription } from '@/lib/auth'
 import { getTierDefinition } from '@/lib/subscription-tiers'
-import { guestScopeUserId } from '@/lib/guest-scope'
+import { guestScopeUserId, filterEventsByVisibility } from '@/lib/guest-scope'
 
 // Public, unauthenticated ICS feed. Security comes from the `token` being an
 // unguessable random value (calendar_sync_connections.ical_token) rather than
@@ -126,6 +126,15 @@ export async function GET(
   const familyId = connections[0].family_id
   const feedUserId = connections[0].user_id
 
+  // The feed's owner must still be an active member of the family: a removed
+  // member's (or guest's) subscribed URL stops working.
+  const stillMember = feedUserId
+    ? await sql`SELECT 1 FROM family_members WHERE family_id = ${familyId} AND user_id = ${feedUserId} AND is_active = true LIMIT 1`
+    : []
+  if (stillMember.length === 0) {
+    return new NextResponse('Feed not found or disabled', { status: 404 })
+  }
+
   // Calendar export is a Plus/Premium feature: a family that dropped back to
   // Free stops serving the feed.
   const feedSub = await checkFamilySubscription(familyId)
@@ -160,7 +169,8 @@ export async function GET(
   const events = include.has('events')
     ? await sql`
         SELECT e.id, e.title, e.description, e.location,
-               e.start_time, e.end_time, e.is_all_day, e.updated_at, e.created_at
+               e.start_time, e.end_time, e.is_all_day, e.updated_at, e.created_at,
+               e.visibility, e.created_by_id
         FROM events e
         JOIN calendars c ON e.calendar_id = c.id
         WHERE c.family_id = ${familyId}
@@ -170,7 +180,7 @@ export async function GET(
         AND (${guestUserId}::text IS NULL OR e.created_by_id = ${guestUserId}
              OR EXISTS (SELECT 1 FROM event_participants ep WHERE ep.event_id = e.id AND ep.user_id = ${guestUserId}))
         ORDER BY e.start_time ASC
-      `
+      `.then((rows) => filterEventsByVisibility(rows as Array<Record<string, any> & { id: string }>, feedUserId))
     : []
 
   // Family tasks that have a due date (a task with no date has nowhere to go

@@ -4,6 +4,7 @@ import { verifyDeviceToken } from "@/lib/device-token"
 import { getUserFromRequest, getUserWithFamily } from "@/lib/auth"
 import { dispatchSos, ensureSosSchema } from "@/lib/sos"
 import { guestForbidden } from "@/lib/permissions"
+import { hitRateLimit } from "@/lib/rate-limit"
 import { z } from "zod"
 
 export const maxDuration = 30
@@ -68,6 +69,17 @@ export async function POST(request: NextRequest) {
         source = "none"
       }
     }
+    // SOS texts skip the SMS quota and retry, so cap repeats per person:
+    // 3 in 10 minutes and 10 a day is plenty for a real emergency.
+    const burst = await hitRateLimit(`sos:${userId}:10m`, 3, 10 * 60)
+    const daily = burst.allowed ? await hitRateLimit(`sos:${userId}:day`, 10, 24 * 60 * 60) : burst
+    if (!burst.allowed || !daily.allowed) {
+      return NextResponse.json(
+        { success: false, error: "Your family was already alerted. Please wait a few minutes before sending another SOS, or call them directly.", code: "RATE_LIMITED" },
+        { status: 429 }
+      )
+    }
+
     const who = (await sql`SELECT first_name FROM users WHERE id = ${userId}`)[0]?.first_name || "A family member"
 
     await ensureSosSchema()

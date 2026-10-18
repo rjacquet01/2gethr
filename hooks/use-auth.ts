@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import useSWR from 'swr'
+import useSWR, { mutate as globalMutate } from 'swr'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -294,8 +294,27 @@ export function useAuth(): AuthState & {
   }, [mutate])
   
   const logout = useCallback(async () => {
+    // End the session on the server too: revoke the refresh token and clear
+    // the httpOnly cookies, which would otherwise keep this device signed in.
+    const accessToken = getAccessToken()
+    const refreshToken = getRefreshToken()
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ refreshToken }),
+      })
+    } catch {
+      // Offline: local sign-out still happens; the token expires on its own.
+    }
     clearTokens()
     await mutate(null, false)
+    // Drop every cached response so the next person to sign in on this
+    // device never sees the previous account's families or tasks.
+    await globalMutate(() => true, undefined, { revalidate: false })
     router.push('/login')
   }, [mutate, router])
   

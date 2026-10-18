@@ -3,6 +3,7 @@ import { sql } from '@/lib/db'
 import { sendEmail, isResendConfigured } from '@/lib/services/email'
 import crypto from 'crypto'
 import { z } from 'zod'
+import { hitRateLimit, clientIp } from '@/lib/rate-limit'
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -17,10 +18,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { email } = forgotPasswordSchema.parse(body)
 
-    // Check if user exists (but don't reveal this to prevent email enumeration)
-    const users = await sql`
-      SELECT id, email, first_name FROM users WHERE email = ${email.toLowerCase()}
-    `
+    // Limit reset emails per address and per network address so this can't be
+    // used to flood an inbox. Over the limit nothing is sent, but the answer is
+    // the same as always, so it reveals nothing about the account.
+    const byEmail = await hitRateLimit(`reset:email:${email.toLowerCase()}`, 3, 60 * 60)
+    const byIp = byEmail.allowed ? await hitRateLimit(`reset:ip:${clientIp(request)}`, 10, 60 * 60) : byEmail
+    const users = byEmail.allowed && byIp.allowed
+      ? await sql`SELECT id, email, first_name FROM users WHERE email = ${email.toLowerCase()}`
+      : []
 
     if (users.length > 0) {
       const user = users[0]

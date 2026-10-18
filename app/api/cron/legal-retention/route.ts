@@ -8,7 +8,7 @@ import { ensureLocationRequestsTable } from "@/lib/location-schema"
 // LOCATION_RETENTION_DAYS (default 90) is the maximum history kept for any plan.
 function verifyCronRequest(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) return true
+  if (!cronSecret) return process.env.NODE_ENV !== "production" // fail closed in production
   return request.headers.get("authorization") === `Bearer ${cronSecret}`
 }
 

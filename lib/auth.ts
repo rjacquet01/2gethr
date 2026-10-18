@@ -131,6 +131,28 @@ export async function verifyTwoFactorChallengeToken(token: string): Promise<JWTP
   }
 }
 
+// OAuth `state` for third-party connections (Google Calendar): signed, so a
+// callback can't be pointed at someone else's account, and short-lived.
+const OAUTH_STATE_EXPIRY = "15m"
+
+export async function generateOAuthState(userId: string): Promise<string> {
+  return new SignJWT({ userId, type: "oauth_state", nonce: crypto.randomUUID() })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(OAUTH_STATE_EXPIRY)
+    .sign(ACCESS_TOKEN_SECRET)
+}
+
+export async function verifyOAuthState(state: string): Promise<string | null> {
+  try {
+    const { payload } = await jwtVerify(state, ACCESS_TOKEN_SECRET)
+    if (payload.type !== "oauth_state" || typeof payload.userId !== "string") return null
+    return payload.userId
+  } catch {
+    return null
+  }
+}
+
 export async function verifyAccessToken(token: string): Promise<JWTPayload | null> {
   try {
     const { payload } = await jwtVerify(token, ACCESS_TOKEN_SECRET)

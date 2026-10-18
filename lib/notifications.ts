@@ -392,7 +392,7 @@ export async function checkAndNotifyOverdueTasks(): Promise<{ notified: number }
         SELECT 1 FROM notifications n 
         WHERE n.data->>'taskId' = t.id 
           AND n.type = 'TASK_OVERDUE'
-          AND n.created_at > NOW() - INTERVAL '12 hours'
+          AND n.created_at > NOW() - INTERVAL '24 hours'
       )
   `
   
@@ -537,7 +537,7 @@ export async function checkAndNotifyUpcomingDueDates(): Promise<{
         WHERE n.data->>'taskId' = t.id 
           AND n.type = 'TASK_ASSIGNED'
           AND (n.data->>'reminder48h')::boolean = true
-          AND n.created_at > NOW() - INTERVAL '24 hours'
+          AND n.created_at > NOW() - INTERVAL '48 hours'
       )
   `
   
@@ -605,34 +605,40 @@ export async function checkAndNotifyUpcomingDueDates(): Promise<{
   // Events in next 48 hours
   const upcomingEvents = await sql`
     SELECT e.id, e.title, e.start_time, e.end_time, e.location, e.is_all_day,
-           e.created_by_id, c.family_id
+           e.created_by_id, e.visibility, c.family_id
     FROM events e
     JOIN calendars c ON e.calendar_id = c.id
     WHERE e.status IN ('APPROVED')
       AND e.start_time >= NOW()
       AND e.start_time <= NOW() + INTERVAL '48 hours'
       AND NOT EXISTS (
-        SELECT 1 FROM notifications n 
-        WHERE n.data->>'eventId' = e.id 
+        SELECT 1 FROM notifications n
+        WHERE n.data->>'eventId' = e.id
           AND n.type = 'EVENT_REMINDER'
           AND (n.data->>'reminder48h')::boolean = true
-          AND n.created_at > NOW() - INTERVAL '24 hours'
+          AND n.created_at > NOW() - INTERVAL '48 hours'
       )
   `
-  
+
   for (const event of upcomingEvents) {
     const startTime = new Date(event.start_time)
     const now = new Date()
     const hoursUntilEvent = Math.floor((startTime.getTime() - now.getTime()) / (1000 * 60 * 60))
-    
-    const members = await sql`
-      SELECT fm.user_id
-      FROM family_members fm
-      WHERE fm.family_id = ${event.family_id}
-        AND fm.is_active = true
-    `
-    
-    const participants = await sql`
+
+    // Whole family (not guests) only for FAMILY events; PRIVATE goes to the
+    // creator alone and SELECTED_MEMBERS to the creator plus participants.
+    const members = !event.visibility || event.visibility === 'FAMILY'
+      ? await sql`
+          SELECT fm.user_id
+          FROM family_members fm
+          WHERE fm.family_id = ${event.family_id}
+            AND fm.is_active = true
+            AND fm.role != 'GUEST'
+            AND fm.user_id IS NOT NULL
+        `
+      : [{ user_id: event.created_by_id }]
+
+    const participants = event.visibility === 'PRIVATE' ? [] : await sql`
       SELECT ep.user_id
       FROM event_participants ep
       WHERE ep.event_id = ${event.id}
@@ -648,7 +654,9 @@ export async function checkAndNotifyUpcomingDueDates(): Promise<{
       ? 'in less than an hour' 
       : hoursUntilEvent < 24 
         ? `in ${hoursUntilEvent} hours`
-        : 'tomorrow'
+        : hoursUntilEvent < 36
+          ? 'tomorrow'
+          : 'in 2 days'
     
     for (const userId of usersToNotify) {
       await createNotification({
