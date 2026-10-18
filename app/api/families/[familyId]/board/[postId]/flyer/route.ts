@@ -21,12 +21,12 @@ type Params = { params: Promise<{ familyId: string; postId: string }> }
 
 async function setup(request: NextRequest, familyId: string) {
   const { user } = await getUserFromRequest(request)
-  if (!user) return { response: NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 }) }
+  if (!user) return { response: NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 }), user: null, access: null } as const
   await ensureSocialTables()
   await ensureBoardFlyerColumns()
   const access = await boardAccess(familyId, user.id)
-  if (access instanceof NextResponse) return { response: access }
-  return { user, access }
+  if (access instanceof NextResponse) return { response: access, user: null, access: null } as const
+  return { response: null, user, access } as const
 }
 
 async function loadFlyerPost(familyId: string, postId: string) {
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   try {
     const { familyId, postId } = await params
     const ctx = await setup(request, familyId)
-    if ("response" in ctx) return ctx.response
+    if (ctx.response) return ctx.response
     const post = await loadFlyerPost(familyId, postId)
     if (!post) return notFound()
     const size = request.nextUrl.searchParams.get("size") === "full" ? "full" : "thumb"
@@ -81,7 +81,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
   try {
     const { familyId, postId } = await params
     const ctx = await setup(request, familyId)
-    if ("response" in ctx) return ctx.response
+    if (ctx.response) return ctx.response
     const { user, access } = ctx
     const post = await loadFlyerPost(familyId, postId)
     if (!post) return notFound()
@@ -129,7 +129,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   try {
     const { familyId, postId } = await params
     const ctx = await setup(request, familyId)
-    if ("response" in ctx) return ctx.response
+    if (ctx.response) return ctx.response
     const { user, access } = ctx
     const post = await loadFlyerPost(familyId, postId)
     if (!post) return notFound()
