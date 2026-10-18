@@ -8,7 +8,7 @@ export interface BoardAccess {
   role: string
   /** PARENT or the family owner: may pin and delete anyone's posts/comments */
   canModerate: boolean
-  /** PARENT / GUARDIAN / ADULT: may pin photo flyers (kids post notes only) */
+  /** Every member (guests never get here): may pin photo flyers */
   canPinFlyers: boolean
 }
 

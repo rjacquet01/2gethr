@@ -5,7 +5,7 @@
 // replaced by an in-memory fake (lib/board-flyers flyerStore), so no real
 // storage is ever touched. Everything created here is deleted in `finally`.
 //
-// Covers: permission matrix (adults pin, child photo 403, guest 403,
+// Covers: permission matrix (adults and children pin, guest 403,
 // non-member 403, poster/parent delete), limits (20 per family incl. a
 // parallel race, oversize, wrong type, fake image), image route authz and
 // caching, /api/files refusing flyer paths, the 90-day purge deleting both
@@ -160,7 +160,10 @@ async function main() {
     const flyerB = (await r.json()).data
     ok('adult pins a flyer')
 
-    assert.strictEqual((await pin('K')).status, 403); ok('child photo upload is 403')
+    r = await pin('K')
+    assert.strictEqual(r.status, 201, 'child pins like a parent')
+    const flyerK = (await r.json()).data
+    ok('child pins a flyer (same access as parents)')
     assert.strictEqual((await pin('G')).status, 403); ok('guest photo upload is 403')
     assert.strictEqual((await pin('O')).status, 403); ok('non-member photo upload is 403')
 
@@ -169,9 +172,14 @@ async function main() {
 
     r = await boardRoute.GET(req('GET', `/api/families/${F1}/board`, 'K'), { params: Promise.resolve({ familyId: F1 }) })
     const page = (await r.json()).data
-    assert.strictEqual(page.canPinFlyers, false)
+    assert.strictEqual(page.canPinFlyers, true)
     assert.ok([...page.pinned, ...page.posts].some((p: { id: string; flyer: unknown }) => p.id === flyerA.id && p.flyer))
-    ok('board list shows flyers to a child (canPinFlyers false)')
+    ok('board list shows flyers to a child (canPinFlyers true)')
+
+    const kd0 = delCalls.length
+    assert.strictEqual((await delPost('K', flyerK.id)).status, 200)
+    assert.strictEqual(delCalls.length - kd0, 2)
+    ok('child deletes own flyer; both files deleted')
 
     // --- image route --------------------------------------------------------
     console.log('image route')
