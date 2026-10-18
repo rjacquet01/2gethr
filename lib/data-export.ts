@@ -1,5 +1,6 @@
 import { sql } from '@/lib/db'
 import { ensureSocialTables } from '@/lib/social'
+import { ensureBoardFlyerColumns } from '@/lib/board-flyers'
 
 /**
  * Account data export ("data portability").
@@ -306,10 +307,11 @@ export async function collectUserExport(userId: Id, format = 'json'): Promise<Us
     `) as ExportRow[]
   })
 
-  await run('Family Board Posts', 'Posts you wrote on the family board', async () => {
-    await ensureSocialTables()
+  await run('Family Board Posts', 'Posts and photo flyers you put on the family board (flyer files are listed by storage path)', async () => {
+    await ensureBoardFlyerColumns()
     return (await sql`
-      SELECT fp.id, f.name AS family_name, fp.body, fp.pinned, fp.created_at, fp.deleted_at
+      SELECT fp.id, f.name AS family_name, fp.body, fp.pinned, fp.created_at, fp.deleted_at,
+             fp.flyer_full_path, fp.flyer_thumb_path, fp.flyer_width, fp.flyer_height, fp.flyer_uploaded_at
       FROM family_posts fp LEFT JOIN families f ON f.id = fp.family_id
       WHERE fp.user_id = ${userId} ORDER BY fp.created_at DESC
     `) as ExportRow[]

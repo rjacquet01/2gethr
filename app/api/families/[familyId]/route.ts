@@ -5,6 +5,7 @@ import { ensureAgeColumns } from "@/lib/age-schema"
 import { childAgeInfo, GUEST_AGE_INFO } from "@/lib/age"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
+import { removeFamilyFlyers } from "@/lib/board-flyers"
 
 const updateFamilySchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -328,6 +329,15 @@ export async function DELETE(
       `
     } catch (e) {
       console.error("revoke invites on family delete failed (non-fatal):", e)
+    }
+
+    // Board flyer photos are deleted from storage now (the posts themselves
+    // go with the 90-day board purge). Any file that fails stays referenced
+    // by its post, so the purge still removes it later.
+    try {
+      await removeFamilyFlyers(familyId)
+    } catch (e) {
+      console.error("delete board flyers on family delete failed (non-fatal):", e)
     }
 
     // Audit log

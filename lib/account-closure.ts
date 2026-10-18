@@ -2,6 +2,7 @@ import { sql } from "@/lib/db"
 import { revokeAllUserTokens } from "@/lib/auth"
 import { stripe } from "@/lib/stripe"
 import { ensureSocialTables } from "@/lib/social"
+import { deleteFlyerFiles, ensureBoardFlyerColumns, type FlyerFileRow } from "@/lib/board-flyers"
 
 // Shared account-closure logic used by both self-service deletion
 // (/api/account/delete) and admin closure of ToS-violating accounts.
@@ -69,6 +70,18 @@ export async function closeUserAccount(user: { id: string; email: string }): Pro
           }
         }
 
+        // Board posts have no foreign key to families: delete their flyer
+        // photo files, then the posts and comments, before the family goes.
+        await ensureBoardFlyerColumns()
+        const famFlyers = await sql`
+          SELECT id, flyer_full_url, flyer_thumb_url FROM family_posts
+          WHERE family_id = ${family.id} AND flyer_full_url IS NOT NULL
+        `
+        const famDone = await deleteFlyerFiles(famFlyers as FlyerFileRow[])
+        if (famDone.size < famFlyers.length) throw new Error('Could not delete board flyer photos; try again')
+        await sql`DELETE FROM family_post_comments WHERE family_id = ${family.id}`
+        await sql`DELETE FROM family_posts WHERE family_id = ${family.id}`
+
         // Cascades to family_members, calendars -> events, tasks,
         // subscriptions, calendar_sync_connections, saved_places, etc.
         await sql`DELETE FROM families WHERE id = ${family.id}`
@@ -89,6 +102,14 @@ export async function closeUserAccount(user: { id: string; email: string }): Pro
     // Event comments and family board posts/comments are removed like task
     // comments. A removed post takes the replies under it with it.
     await ensureSocialTables()
+    await ensureBoardFlyerColumns()
+    // Flyer photo files go first, so none outlive their post.
+    const myFlyers = await sql`
+      SELECT id, flyer_full_url, flyer_thumb_url FROM family_posts
+      WHERE user_id = ${user.id} AND flyer_full_url IS NOT NULL
+    `
+    const myDone = await deleteFlyerFiles(myFlyers as FlyerFileRow[])
+    if (myDone.size < myFlyers.length) throw new Error('Could not delete board flyer photos; try again')
     await sql`DELETE FROM event_comments WHERE user_id = ${user.id}`
     await sql`
       DELETE FROM family_post_comments

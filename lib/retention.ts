@@ -262,3 +262,96 @@ export async function heldUserIds(): Promise<string[]> {
 export async function heldFamilyIds(): Promise<string[]> {
   return (await heldScope()).families
 }
+
+export interface BoardPurgeResult {
+  posts: number
+  /** comments removed with their post */
+  postComments: number
+  /** flyer files deleted (full + thumbnail each count) */
+  flyerFiles: number
+  /** dry run: the flyer files that would be deleted */
+  flyerPathsListed: string[]
+  /** posts kept because their flyer files could not be deleted (retried next run) */
+  keptForRetry: number
+  capped: boolean
+}
+
+/**
+ * Board posts past the cap (or soft-deleted more than 30 days ago), never for
+ * a held user or family. A post takes its comments with it, and a flyer's
+ * Blob files (full + thumbnail) are deleted FIRST: a post whose files can't be
+ * deleted is kept for the next run, so no file is ever orphaned. Both tables
+ * stay within `maxRows` (minus `commentsAlreadyDeleted`). With dryRun nothing
+ * is changed and the flyer files are only listed. `familyIds` restricts the
+ * run (tests only).
+ */
+export async function purgeBoardPosts({
+  dryRun,
+  ageDays = HISTORY_CAP_DAYS,
+  familyIds,
+  maxRows = MAX_ROWS_PER_TABLE,
+  commentsAlreadyDeleted = 0,
+}: {
+  dryRun: boolean
+  ageDays?: number
+  familyIds?: string[]
+  maxRows?: number
+  commentsAlreadyDeleted?: number
+}): Promise<BoardPurgeResult> {
+  const { ensureBoardFlyerColumns, deleteFlyerFiles } = await import("./board-flyers")
+  await ensureBoardFlyerColumns()
+  const cap = Math.min(maxRows, MAX_ROWS_PER_TABLE_LIMIT)
+  const held = await heldScope()
+  const scoped = Array.isArray(familyIds)
+  const scope = familyIds ?? []
+  const candidates = await sql`
+    SELECT p.id, p.flyer_full_url, p.flyer_thumb_url, p.flyer_full_path, p.flyer_thumb_path,
+      (SELECT count(*)::int FROM family_post_comments c WHERE c.post_id = p.id) AS comments
+    FROM family_posts p
+    WHERE ((p.deleted_at IS NOT NULL AND p.deleted_at < NOW() - INTERVAL '30 days')
+       OR p.created_at < NOW() - make_interval(days => ${ageDays}::int))
+      AND NOT (p.user_id = ANY(${held.users}::text[]))
+      AND NOT (p.family_id = ANY(${held.families}::text[]))
+      AND (${!scoped} OR p.family_id = ANY(${scope}::text[]))
+    ORDER BY p.created_at
+    LIMIT ${cap + 1}
+  `
+  let capped = candidates.length > cap
+  let commentBudget = cap - commentsAlreadyDeleted
+  const chosen: Record<string, unknown>[] = []
+  for (const c of candidates.slice(0, cap)) {
+    const n = Number(c.comments)
+    if (n > commentBudget) { capped = true; continue }
+    commentBudget -= n
+    chosen.push(c)
+  }
+  const withFiles = chosen.filter((c) => c.flyer_full_url || c.flyer_thumb_url)
+  const fileCount = withFiles.reduce((a, c) => a + (c.flyer_full_url ? 1 : 0) + (c.flyer_thumb_url ? 1 : 0), 0)
+
+  if (dryRun) {
+    return {
+      posts: chosen.length,
+      postComments: chosen.reduce((a, c) => a + Number(c.comments), 0),
+      flyerFiles: fileCount,
+      flyerPathsListed: withFiles.flatMap((c) => [c.flyer_full_path, c.flyer_thumb_path].filter(Boolean) as string[]),
+      keptForRetry: 0,
+      capped,
+    }
+  }
+
+  // Files first; a post whose files are still there stays for the next run.
+  const deleted = await deleteFlyerFiles(withFiles as { id: string; flyer_full_url: string | null; flyer_thumb_url: string | null }[])
+  const failed = new Set(withFiles.map((c) => c.id as string).filter((id) => !deleted.has(id)))
+  const postIds = chosen.map((c) => c.id as string).filter((id) => !failed.has(id))
+  const filesGone = withFiles
+    .filter((c) => deleted.has(c.id as string))
+    .reduce((a, c) => a + (c.flyer_full_url ? 1 : 0) + (c.flyer_thumb_url ? 1 : 0), 0)
+
+  let postComments = 0
+  let posts = 0
+  if (postIds.length > 0) {
+    postComments = (await sql`DELETE FROM family_post_comments WHERE post_id = ANY(${postIds}::text[]) RETURNING id`).length
+    posts = (await sql`DELETE FROM family_posts WHERE id = ANY(${postIds}::text[]) RETURNING id`).length
+  }
+  return { posts, postComments, flyerFiles: filesGone, flyerPathsListed: [], keptForRetry: failed.size, capped }
+}
