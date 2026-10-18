@@ -78,7 +78,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
     })
-    await notifyNewPost({ familyId, postId: id, user, role: access.role, pinned, body: caption, flyer: true })
+    await notifyNewPost({ familyId, postId: id, user, pinned, body: caption, flyer: true })
 
     const [shaped] = await shapePosts(familyId, ins)
     return NextResponse.json({ success: true, data: shaped, rolledOff }, { status: 201 })

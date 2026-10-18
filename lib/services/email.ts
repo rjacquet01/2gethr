@@ -466,6 +466,48 @@ export const EMAIL_TEMPLATES = {
     text: `Weekly Summary for ${familyName} (${weekStart} - ${weekEnd})\n\nHi ${userName},\n\nTasks: ${tasks.completed} completed, ${tasks.pending} pending, ${tasks.overdue} overdue\n\nUpcoming Events: ${events.length}\n${events.slice(0, 5).map(e => `- ${e.title} (${new Date(e.start_time).toLocaleDateString()})`).join('\n')}\n\nView dashboard: ${process.env.NEXT_PUBLIC_APP_URL || 'https://togethr.app'}/dashboard`,
   }),
 
+  // A new pin on the family board. Says only who pinned what kind of thing:
+  // no note text, no flyer image or details (those stay in the app).
+  BOARD_PIN: (recipientName: string | null, posterName: string, kind: 'flyer' | 'note', familyName: string | null) => {
+    const app = process.env.NEXT_PUBLIC_APP_URL || 'https://mytogethr.com'
+    const what = kind === 'flyer' ? 'a flyer' : 'a note'
+    const where = familyName ? `the ${familyName} family board` : 'your family board'
+    const hi = recipientName ? `Hi ${escapeHtml(recipientName)},` : 'Hi,'
+    return {
+      subject: `${posterName} pinned ${what} on the family board`,
+      html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">${hi}</p>
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 30px;">
+              ${escapeHtml(posterName)} pinned ${what} on ${escapeHtml(where)}. Open the board to see it.
+            </p>
+            <div style="text-align: center;">
+              <a href="${app}/board"
+                 style="display: inline-block; background-color: #3b4563; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
+                Open the family board
+              </a>
+            </div>
+            <p style="color: #9ca3af; font-size: 12px; line-height: 1.6; margin: 30px 0 0; text-align: center;">
+              You're receiving this because you have email notifications enabled.<br>
+              <a href="${app}/settings" style="color: #6b7280;">Manage notification preferences</a>
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+      text: `${recipientName ? `Hi ${recipientName},\n\n` : ''}${posterName} pinned ${what} on ${where}. Open the board to see it: ${app}/board\n\nYou're receiving this because you have email notifications enabled. Manage notification preferences: ${app}/settings`,
+    }
+  },
+
   // --- Admin operational alerts ---------------------------------------
   // These four go to notifyAdmin()/ADMIN_EMAIL, never to a regular user.
 
@@ -524,4 +566,9 @@ export const EMAIL_TEMPLATES = {
     `,
     text: `Tier changed for ${familyName} (${userEmail}): ${previousTier} -> ${newTier}.`,
   }),
+}
+
+/** Escape user-supplied text (names) for an HTML email body. */
+export function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }

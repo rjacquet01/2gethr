@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { sql } from "./db"
 import { getMemberAccess, guestForbidden } from "./permissions"
 import { authorInfo, notifySocial, type AuthorInfo } from "./social"
+import { EMAIL_TEMPLATES } from "./services/email"
 import { canPinFlyers, flyerImageUrl, isBoardAdult } from "./board-flyers"
 
 export interface BoardAccess {
@@ -84,25 +85,30 @@ export async function shapePosts(familyId: string, posts: Record<string, unknown
 }
 
 /**
- * Tell the other non-guest members about a new post: in-app always; push only
- * for pinned posts or posts from a PARENT, at most one board push per person
- * per 10 minutes.
+ * A new pin is up: tell every other active, non-guest member (children too,
+ * like event notifications). In-app always (with a short preview); push and
+ * email for every pin, each at most once per person per 10 minutes per
+ * family board, respecting the recipient's push / email settings and quiet
+ * hours (push). Push and email say only who pinned what, never the text.
+ * Never SMS. Only new posts call this - not restores, roll-off or edits.
  */
 export async function notifyNewPost(opts: {
   familyId: string
   postId: string
   user: { id: string; firstName?: string | null; lastName?: string | null }
-  role: string
   pinned: boolean
   body: string
   flyer?: boolean
 }) {
   const recipients = await sql`
-    SELECT user_id FROM family_members
+    SELECT DISTINCT user_id FROM family_members
     WHERE family_id = ${opts.familyId} AND is_active = true AND user_id IS NOT NULL
       AND role <> 'GUEST' AND user_id <> ${opts.user.id}
   `
+  if (recipients.length === 0) return
   const name = opts.user.firstName ? `${opts.user.firstName} ${opts.user.lastName || ""}`.trim() : "Someone"
+  const fam = await sql`SELECT name FROM families WHERE id = ${opts.familyId} LIMIT 1`
+  const familyName = (fam[0]?.name as string | undefined) ?? null
   await notifySocial({
     recipientIds: recipients.map((r) => r.user_id as string),
     type: "SYSTEM",
@@ -112,9 +118,11 @@ export async function notifyNewPost(opts: {
         ? `${name} pinned a post`
         : `${name} posted on the family board`,
     body: (opts.body || (opts.flyer ? "New flyer on the family board" : "")).slice(0, 140),
+    pushBody: "Open the family board to see it.",
     data: { subType: "BOARD_POST", postId: opts.postId, familyId: opts.familyId },
-    push: opts.pinned || opts.role === "PARENT",
+    push: true,
     scope: `board:${opts.familyId}`,
     clickAction: "/board",
+    email: (r) => EMAIL_TEMPLATES.BOARD_PIN(r.firstName, name, opts.flyer ? "flyer" : "note", familyName),
   })
 }

@@ -1,7 +1,26 @@
 import { sql } from "./db"
 import { createNotification, type NotificationType } from "./notifications"
 import { sendPushToUser, isFirebaseConfigured } from "./services/push"
+import { sendEmail, isResendConfigured } from "./services/email"
 import { isQuietNow } from "./quiet-hours"
+
+/**
+ * Push and email for social notifications go through this object so tests
+ * can swap in fakes. There is deliberately no SMS here: board and comment
+ * notifications never text anyone.
+ */
+export const socialTransport = {
+  pushReady: () => isFirebaseConfigured(),
+  push: (userId: string, msg: Parameters<typeof sendPushToUser>[1]) => sendPushToUser(userId, msg),
+  emailReady: () => isResendConfigured(),
+  email: (payload: Parameters<typeof sendEmail>[0]) => sendEmail(payload),
+}
+
+export interface SocialEmail {
+  subject: string
+  html: string
+  text: string
+}
 
 // Event comments and the family board: short text only. Every list query is
 // LIMITed with a created_at cursor and served by an index on these tables.
@@ -140,10 +159,26 @@ export async function authorInfo(familyId: string, userIds: string[]): Promise<M
   return map
 }
 
+/** Claim a recipient's slot for `scope`: true at most once per PUSH_COALESCE_MINUTES. */
+async function claimSlot(userId: string, scope: string): Promise<boolean> {
+  const claimed = await sql`
+    INSERT INTO social_push_log (user_id, scope, last_push_at)
+    VALUES (${userId}, ${scope}, NOW())
+    ON CONFLICT (user_id, scope) DO UPDATE SET last_push_at = NOW()
+      WHERE social_push_log.last_push_at <= NOW() - make_interval(mins => ${PUSH_COALESCE_MINUTES}::int)
+    RETURNING user_id
+  `
+  return claimed.length > 0
+}
+
 /**
  * In-app notification for every recipient; a push only when `push` is true,
  * the recipient allows push, it isn't their quiet hours, and they haven't had
- * a push for this same `scope` in the last PUSH_COALESCE_MINUTES.
+ * a push for this same `scope` in the last PUSH_COALESCE_MINUTES. With
+ * `email`, the same for email: only to recipients with an address and
+ * reminder_settings.email_enabled (as createNotification does), at most one
+ * per scope per window. `pushBody` replaces the body on the lock screen
+ * (push) when the in-app text shouldn't show there. Never SMS.
  */
 export async function notifySocial(opts: {
   recipientIds: string[]
@@ -152,8 +187,10 @@ export async function notifySocial(opts: {
   body: string
   data: Record<string, unknown>
   push: boolean
+  pushBody?: string
   scope: string
   clickAction: string
+  email?: (recipient: { firstName: string | null }) => SocialEmail
 }) {
   const recipients = Array.from(new Set(opts.recipientIds))
   for (const uid of recipients) {
@@ -163,31 +200,36 @@ export async function notifySocial(opts: {
       console.error("social in-app notify failed:", e)
     }
   }
-  if (!opts.push || !isFirebaseConfigured() || recipients.length === 0) return
+  const doPush = opts.push && socialTransport.pushReady()
+  const doEmail = !!opts.email && socialTransport.emailReady()
+  if ((!doPush && !doEmail) || recipients.length === 0) return
 
   const prefs = await sql`
-    SELECT u.id, u.timezone, rs.push_enabled, rs.quiet_hours_start, rs.quiet_hours_end
+    SELECT u.id, u.timezone, u.email, u.first_name, rs.push_enabled, rs.email_enabled, rs.quiet_hours_start, rs.quiet_hours_end
     FROM users u LEFT JOIN reminder_settings rs ON rs.user_id = u.id
-    WHERE u.id = ANY(${recipients})
+    WHERE u.id = ANY(${recipients}) AND u.is_active IS NOT FALSE
   `
   for (const p of prefs) {
-    if (p.push_enabled === false) continue
-    if (isQuietNow(p.quiet_hours_start, p.quiet_hours_end, p.timezone)) continue
-    // Claim the push slot: only one push per recipient per scope per window.
-    const claimed = await sql`
-      INSERT INTO social_push_log (user_id, scope, last_push_at)
-      VALUES (${p.id}, ${opts.scope}, NOW())
-      ON CONFLICT (user_id, scope) DO UPDATE SET last_push_at = NOW()
-        WHERE social_push_log.last_push_at <= NOW() - make_interval(mins => ${PUSH_COALESCE_MINUTES}::int)
-      RETURNING user_id
-    `
-    if (claimed.length === 0) continue
-    try {
-      const pushData: Record<string, string> = { type: opts.type }
-      for (const [k, v] of Object.entries(opts.data)) if (v !== undefined && v !== null) pushData[k] = String(v)
-      await sendPushToUser(p.id as string, { title: opts.title, body: opts.body, data: pushData, clickAction: opts.clickAction })
-    } catch (e) {
-      console.error("social push failed (non-fatal):", e)
+    if (doPush && p.push_enabled !== false && !isQuietNow(p.quiet_hours_start, p.quiet_hours_end, p.timezone)) {
+      try {
+        if (await claimSlot(p.id as string, opts.scope)) {
+          const pushData: Record<string, string> = { type: opts.type }
+          for (const [k, v] of Object.entries(opts.data)) if (v !== undefined && v !== null) pushData[k] = String(v)
+          await socialTransport.push(p.id as string, { title: opts.title, body: opts.pushBody ?? opts.body, data: pushData, clickAction: opts.clickAction })
+        }
+      } catch (e) {
+        console.error("social push failed (non-fatal):", e)
+      }
+    }
+    if (doEmail && p.email && p.email_enabled === true) {
+      try {
+        if (await claimSlot(p.id as string, `${opts.scope}:email`)) {
+          const msg = opts.email!({ firstName: (p.first_name as string | null) ?? null })
+          await socialTransport.email({ to: p.email as string, ...msg })
+        }
+      } catch (e) {
+        console.error("social email failed (non-fatal):", e)
+      }
     }
   }
 }

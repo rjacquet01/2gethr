@@ -120,7 +120,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       `
     )
 
-    await notifyNewPost({ familyId, postId: id, user, role: access.role, pinned, body: cleaned.body })
+    await notifyNewPost({ familyId, postId: id, user, pinned, body: cleaned.body })
 
     const [shaped] = await shapePosts(familyId, ins)
     return NextResponse.json({ success: true, data: shaped, rolledOff }, { status: 201 })
