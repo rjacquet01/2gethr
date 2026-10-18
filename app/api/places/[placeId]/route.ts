@@ -204,6 +204,18 @@ export async function PATCH(
       )
     }
 
+    // Turning alerts on/off, moving the pin or changing the radius starts
+    // inside/outside tracking afresh: an old "arrived" (from before a summer
+    // break, or at the old spot) must not swallow the next arrival or fire a
+    // false "left".
+    const cur = places[0]
+    const changed = (v: number | undefined, old: unknown) => v !== undefined && Number(old) !== v
+    const resetGeofenceState =
+      (validatedData.geofenceEnabled !== undefined && validatedData.geofenceEnabled !== cur.geofence_enabled) ||
+      changed(validatedData.latitude, cur.latitude) ||
+      changed(validatedData.longitude, cur.longitude) ||
+      changed(validatedData.radius, cur.radius)
+
     // Execute update
     const normalizedNotifyChannels =
       validatedData.notifyChannels !== undefined
@@ -224,6 +236,7 @@ export async function PATCH(
         icon = COALESCE(${validatedData.icon}, icon),
         color = COALESCE(${validatedData.color}, color),
         notify_channels = COALESCE(${normalizedNotifyChannels ?? null}, notify_channels),
+        geofence_state_reset_at = CASE WHEN ${resetGeofenceState} THEN NOW() ELSE geofence_state_reset_at END,
         updated_at = NOW()
       WHERE id = ${placeId}
     `

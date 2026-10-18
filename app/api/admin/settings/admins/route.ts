@@ -69,7 +69,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only super admins can create new admins' }, { status: 403 })
     }
 
-    const { email, firstName, lastName, password, role } = await request.json()
+    const { email: rawEmail, firstName, lastName, password, role } = await request.json()
+    // Login looks admins up by lowercased email, so store it that way.
+    const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : rawEmail
 
     if (!email || !firstName || !lastName || !password) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 })

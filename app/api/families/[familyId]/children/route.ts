@@ -212,6 +212,16 @@ export async function POST(
         )
       }
 
+      // Never turn the family owner or a parent/guardian into a child (that
+      // would strip their rights); member edits already protect the owner.
+      const ownerRow = await sql`SELECT owner_id FROM families WHERE id = ${familyId}`
+      if (existingMember[0].user_id === ownerRow[0]?.owner_id || ['PARENT', 'GUARDIAN'].includes(existingMember[0].role)) {
+        return NextResponse.json(
+          { success: false, error: "The family owner and parents can't be turned into a child profile" },
+          { status: 403 }
+        )
+      }
+
       memberId = validatedData.existingMemberId
       userId = existingMember[0].user_id
 

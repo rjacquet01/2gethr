@@ -21,7 +21,6 @@ const ISSUER = 'Togethr'
 export interface TwoFactorSetupResult {
   secret: string
   otpAuthUrl: string
-  qrCodeUrl: string
 }
 
 /**
@@ -40,13 +39,10 @@ export async function startEnrollment(userId: string, userEmail: string): Promis
     WHERE id = ${userId}
   `
 
-  // Render the QR via a third-party image service rather than pulling in a
-  // QR-generation npm package. The manual-entry secret (returned alongside)
-  // is always shown too, exactly as every authenticator app expects as a
-  // fallback, so this is never a hard dependency for enrollment to work.
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(otpAuthUrl)}`
-
-  return { secret, otpAuthUrl, qrCodeUrl }
+  // No QR image: rendering it through a third-party image service put the
+  // TOTP secret in that service's logs. The client offers the otpauth:// link
+  // (opens the authenticator app on a phone) and the manual-entry secret.
+  return { secret, otpAuthUrl }
 }
 
 /**

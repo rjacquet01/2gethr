@@ -8,15 +8,22 @@ const VALID_STATUSES = ['PENDING', 'COMPLETED', 'DISMISSED', 'ARCHIVED']
 
 async function loadReminder(reminderId: string, userId: string) {
   const rows = await sql`
-    SELECT r.*, fm.user_id as membership_user_id, fm.role as membership_role
+    SELECT r.*, fm.user_id as membership_user_id, fm.role as membership_role,
+           (SELECT cfm.user_id FROM child_profiles cp JOIN family_members cfm ON cfm.id = cp.family_member_id
+            WHERE cp.id = r.child_profile_id) as child_user_id
     FROM reminders r
     JOIN family_members fm ON fm.family_id = r.family_id AND fm.user_id = ${userId} AND fm.is_active = true
     WHERE r.id = ${reminderId}
   `
   const r = rows[0]
   if (!r) return null
-  // Guests only reach reminders they own or created.
-  if (r.membership_role === 'GUEST' && r.user_id !== userId && r.created_by_id !== userId) return null
+  // Same privacy as the reminder lists: a personal reminder belongs to the
+  // person it's for and whoever created it; a child's reminder also to
+  // parents/guardians and the child's own login. (Guests: own/created only.)
+  const own = r.user_id === userId || r.created_by_id === userId
+  const childsReminder = !!r.child_profile_id &&
+    (r.child_user_id === userId || (r.membership_role !== 'GUEST' && ['PARENT', 'GUARDIAN'].includes(r.membership_role)))
+  if (!own && !childsReminder) return null
   return r
 }
 

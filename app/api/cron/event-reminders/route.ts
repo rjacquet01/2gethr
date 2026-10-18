@@ -77,15 +77,6 @@ export async function GET(request: NextRequest) {
       const hasSms = tierHasFeature(tierRows.length > 0 ? tierRows[0].tier : "FREE", "smsNotifications")
 
       for (const p of participants) {
-        const already = await sql`
-          SELECT 1 FROM notifications
-          WHERE user_id = ${p.id} AND type = 'EVENT_REMINDER'
-            AND data->>'eventId' = ${event.id} AND data->>'offset' = ${String(offset)}
-            AND data->>'startTime' = ${new Date(event.start_time).toISOString()}
-          LIMIT 1
-        `
-        if (already.length > 0) continue
-
         const settings = await sql`
           SELECT push_enabled, email_enabled, sms_enabled, quiet_hours_start, quiet_hours_end
           FROM reminder_settings WHERE user_id = ${p.id}
@@ -93,12 +84,24 @@ export async function GET(request: NextRequest) {
         const us = settings[0] || { push_enabled: true, email_enabled: true, sms_enabled: false }
         if (isQuietNow(us.quiet_hours_start, us.quiet_hours_end, p.timezone)) continue
 
-        await sql`
+        // Check-and-insert in one statement: the in-app row is the "already
+        // sent" marker, and a separate check then insert let two overlapping
+        // runs both send push/email/SMS.
+        const startIso = new Date(event.start_time).toISOString()
+        const inserted = await sql`
           INSERT INTO notifications (id, user_id, type, title, body, data, is_read, created_at)
-          VALUES (${crypto.randomUUID()}, ${p.id}, 'EVENT_REMINDER', ${"Upcoming: " + event.title}, ${body},
-            ${JSON.stringify({ eventId: event.id, offset: String(offset), startTime: new Date(event.start_time).toISOString(), location: event.location })}::jsonb,
-            false, NOW())
+          SELECT ${crypto.randomUUID()}, ${p.id}, 'EVENT_REMINDER', ${"Upcoming: " + event.title}, ${body},
+            ${JSON.stringify({ eventId: event.id, offset: String(offset), startTime: startIso, location: event.location })}::jsonb,
+            false, NOW()
+          WHERE NOT EXISTS (
+            SELECT 1 FROM notifications
+            WHERE user_id = ${p.id} AND type = 'EVENT_REMINDER'
+              AND data->>'eventId' = ${event.id} AND data->>'offset' = ${String(offset)}
+              AND data->>'startTime' = ${startIso}
+          )
+          RETURNING id
         `
+        if (inserted.length === 0) continue
         sent++
 
         if (channels.includes("push") && us.push_enabled) {

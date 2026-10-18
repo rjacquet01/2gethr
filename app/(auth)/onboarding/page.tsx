@@ -82,9 +82,10 @@ export default function OnboardingPage() {
       router.push('/dashboard')
     } else if (/unauthor|authenticat|token/i.test(result.error || '')) {
       // Opened an invite link without being signed in. The code stays saved
-      // on this device, so sign up / sign in and it will be waiting here.
-      toast.info('Create an account or sign in first - your invite code will be waiting.')
-      router.push('/register')
+      // on this device; signing in returns here (registering does too), so
+      // an existing user's invite isn't lost on the way to the dashboard.
+      toast.info('Sign in (or create an account) first - your invite code will be waiting.')
+      router.push('/login?redirect=%2Fonboarding')
     } else {
       toast.error(result.error || 'Failed to join family')
     }

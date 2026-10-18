@@ -24,7 +24,10 @@ import { sendWebPush, isVapidConfigured } from '@/lib/services/web-push-vapid'
 async function requireAdmin(request: Request) {
   const authHeader = request.headers.get('authorization')
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-  return token ? getAdminFromToken(token) : null
+  const admin = token ? await getAdminFromToken(token) : null
+  // Debug tool that can push to every user and lists their emails: super
+  // admins only (support staff don't need it).
+  return admin && admin.roles.includes('SUPER_ADMIN') ? admin : null
 }
 
 export async function GET(request: Request) {

@@ -146,6 +146,8 @@ export async function GET(
         recurrenceId: event.recurrence_rule_id, // alias for frontend compatibility
         createdById: event.created_by_id,
         isOwner: event.created_by_id === user.id,
+        // Same rule as PATCH and DELETE below: the creator or a parent.
+        canManage: event.created_by_id === user.id || event.member_role === "PARENT",
         creatorName: `${event.creator_first_name} ${event.creator_last_name}`,
         calendar: {
           id: event.calendar_id,
@@ -248,6 +250,11 @@ export async function PATCH(
 
     const body = await request.json()
     const validatedData = updateEventSchema.parse(body)
+    const newStart = new Date(validatedData.startTime ?? event.start_time)
+    const newEnd = new Date(validatedData.endTime ?? event.end_time)
+    if (newEnd < newStart) {
+      return NextResponse.json({ success: false, error: "The event can't end before it starts" }, { status: 400 })
+    }
 
     if (validatedData.reminderMinutes) {
       const cal = await sql`SELECT family_id FROM calendars WHERE id = ${event.calendar_id}`

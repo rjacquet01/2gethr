@@ -13,6 +13,9 @@ export function ensurePlaceNotifyChannelsColumn(): Promise<void> {
       await sql`ALTER TABLE saved_places ADD COLUMN IF NOT EXISTS photo_path TEXT`
       await sql`ALTER TABLE saved_places ADD COLUMN IF NOT EXISTS photo_url TEXT`
       await sql`ALTER TABLE saved_places ADD COLUMN IF NOT EXISTS created_by_id TEXT`
+      // Arrival/departure events before this time don't count toward who is
+      // "inside" (set when the place is turned on/off, moved or resized).
+      await sql`ALTER TABLE saved_places ADD COLUMN IF NOT EXISTS geofence_state_reset_at TIMESTAMPTZ`
     })().catch((err) => {
       ensured = null
       throw err

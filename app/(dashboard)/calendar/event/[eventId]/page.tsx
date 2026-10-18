@@ -138,7 +138,9 @@ export default function EventDetailPage() {
             Back to Calendar
           </Link>
         </Button>
-        
+
+        {/* Only the creator or a parent may edit/delete (the server checks too) */}
+        {(event as unknown as { canManage?: boolean }).canManage !== false && (
         <div className="flex items-center gap-2">
           <Button variant="outline" asChild>
             <Link href={`/calendar/event/${eventId}/edit`}>
@@ -188,6 +190,7 @@ export default function EventDetailPage() {
             </AlertDialogContent>
           </AlertDialog>
         </div>
+        )}
       </div>
 
       {(() => {

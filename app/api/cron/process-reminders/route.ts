@@ -74,6 +74,15 @@ export async function GET(request: NextRequest) {
         continue
       }
 
+      // Claim this occurrence before sending: runs are every minute and a
+      // slow one can overlap the next, which used to send everything twice.
+      const claimed = await sql`
+        UPDATE reminders SET sent_at = NOW(), updated_at = NOW()
+        WHERE id = ${reminder.id} AND sent_at IS NULL
+        RETURNING id
+      `
+      if (claimed.length === 0) continue
+
       // In-app notification row, always written (matches createNotification's
       // own always-on in_app behavior).
       if (channels.includes('in_app')) {
@@ -132,21 +141,26 @@ export async function GET(request: NextRequest) {
       sent++
 
       if (reminder.is_recurring && reminder.recurrence_rule && RECURRENCE_INTERVALS[reminder.recurrence_rule]) {
+        // Next occurrence on the user's own clock (8am stays 8am across a DST
+        // change), skipping any occurrences already in the past so a reminder
+        // that fell behind doesn't fire once a minute to catch up.
         const interval = RECURRENCE_INTERVALS[reminder.recurrence_rule]
+        const tz: string = reminder.timezone || 'UTC'
         await sql`
           UPDATE reminders
-          SET remind_at = remind_at + ${interval}::interval,
+          SET remind_at = COALESCE((
+                SELECT ((r0.remind_at AT TIME ZONE ${tz}) + (n * ${interval}::interval)) AT TIME ZONE ${tz}
+                FROM generate_series(1, 1000) AS n
+                WHERE ((r0.remind_at AT TIME ZONE ${tz}) + (n * ${interval}::interval)) AT TIME ZONE ${tz} > NOW()
+                ORDER BY n
+                LIMIT 1
+              ), NOW() + ${interval}::interval),
               sent_at = NULL,
               updated_at = NOW()
-          WHERE id = ${reminder.id}
+          FROM reminders r0
+          WHERE reminders.id = ${reminder.id} AND r0.id = reminders.id
         `
         recurred++
-      } else {
-        await sql`
-          UPDATE reminders
-          SET sent_at = NOW(), updated_at = NOW()
-          WHERE id = ${reminder.id}
-        `
       }
     }
 

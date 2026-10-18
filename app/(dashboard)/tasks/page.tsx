@@ -1,7 +1,7 @@
 'use client'
 
 import { formatCategory } from '@/lib/categories'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useFamilies } from '@/hooks/use-family'
 import { useAuth } from '@/hooks/use-auth'
 import { useTasks, updateTask } from '@/hooks/use-tasks'
@@ -93,6 +93,16 @@ export default function TasksPage() {
   const [personKey, setPersonKey] = useState<string>('all')
   const [showClosed, setShowClosed] = useState(false)
   const [processingTaskId, setProcessingTaskId] = useState<string | null>(null)
+
+  // Dashboard links open this page pre-filtered (/tasks?status=on_hold etc.).
+  useEffect(() => {
+    const status = new URLSearchParams(window.location.search).get('status')
+    const chips: Chip[] = ['overdue', 'in_progress', 'pending', 'pending_approval', 'on_hold', 'completed']
+    if (status && (chips as string[]).includes(status)) {
+      setChip(status as Chip)
+      setTabState(status === 'pending_approval' ? 'approval' : 'everyone')
+    }
+  }, [])
   const { isFavorite, toggleFavorite } = useFavorites()
 
   const members = primaryFamily?.members || []

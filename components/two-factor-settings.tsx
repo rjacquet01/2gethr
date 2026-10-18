@@ -28,7 +28,7 @@ export function TwoFactorSettings() {
   const [step, setStep] = useState<Step>('closed')
   const [isLoading, setIsLoading] = useState(false)
 
-  const [qrCodeUrl, setQrCodeUrl] = useState('')
+  const [otpAuthUrl, setOtpAuthUrl] = useState('')
   const [secret, setSecret] = useState('')
   const [code, setCode] = useState('')
   const [backupCodes, setBackupCodes] = useState<string[]>([])
@@ -50,7 +50,7 @@ export function TwoFactorSettings() {
         toast.error(data.error || 'Failed to start 2FA setup')
         return
       }
-      setQrCodeUrl(data.data.qrCodeUrl)
+      setOtpAuthUrl(data.data.otpAuthUrl)
       setSecret(data.data.secret)
       setStep('qr')
     } catch {
@@ -139,15 +139,17 @@ export function TwoFactorSettings() {
           <DialogHeader>
             <DialogTitle>Set up two-factor authentication</DialogTitle>
             <DialogDescription>
-              Scan this QR code with an authenticator app (Google Authenticator, Authy, 1Password, etc.), then enter the 6-digit code it shows.
+              Add Togethr to an authenticator app (Google Authenticator, Authy, 1Password, etc.), then enter the 6-digit code it shows.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col items-center gap-3 py-2">
-            {qrCodeUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={qrCodeUrl} alt="2FA QR code" width={200} height={200} className="rounded-lg border" />
+            {otpAuthUrl && (
+              // Opens Google Authenticator, Authy, 1Password etc. on this phone.
+              <Button asChild variant="outline">
+                <a href={otpAuthUrl}>Add to authenticator app</a>
+              </Button>
             )}
-            <p className="text-xs text-muted-foreground">Can't scan? Enter this code manually:</p>
+            <p className="text-xs text-muted-foreground">Or enter this key in your authenticator app:</p>
             <code className="text-sm font-mono bg-muted px-3 py-1.5 rounded select-all">{secret}</code>
           </div>
           <form onSubmit={confirmEnroll} className="space-y-4">

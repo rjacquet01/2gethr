@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { useFamilies } from '@/hooks/use-family'
 import { useEvents } from '@/hooks/use-events'
@@ -48,6 +48,8 @@ import {
   addWeeks,
   subWeeks,
   parseISO,
+  startOfDay,
+  endOfDay,
 } from 'date-fns'
 import { cn } from '@/lib/utils'
 import {
@@ -79,6 +81,18 @@ export default function CalendarPage() {
   const [selectedCategory, setSelectedCategory] = useState('ALL')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const [showEventSheet, setShowEventSheet] = useState(false)
+
+  // Links like /calendar?date=2026-10-24 open on that day.
+  useEffect(() => {
+    const d = new URLSearchParams(window.location.search).get('date')
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      const day = parseISO(d)
+      if (!isNaN(day.getTime())) {
+        setCurrentDate(day)
+        setSelectedDate(day)
+      }
+    }
+  }, [])
   
   const { families, isLoading: familiesLoading } = useFamilies()
   const primaryFamily = families[0]
@@ -128,13 +142,19 @@ export default function CalendarPage() {
   const getEventsForDay = (day: Date) => {
     return events.filter(event => {
       const eventDate = parseISO(event.startTime)
+      // A multi-day event (a Fri-Sun trip) shows on every day it covers. The
+      // end is exclusive, so an event ending at midnight doesn't spill over.
+      const eventEnd = event.endTime ? parseISO(event.endTime) : eventDate
+      const coversDay =
+        isSameDay(eventDate, day) ||
+        (eventDate < startOfDay(day) && eventEnd > startOfDay(day) && eventDate <= endOfDay(day))
       const matchesCategory =
         selectedCategory === 'ALL' ||
         (event.category || 'OTHER').toLowerCase() === selectedCategory.toLowerCase()
       const matchesPerson =
         personFilter === 'ALL' ||
         ((event.participants || []) as any[]).some((p) => (p.name || p.displayName) === personFilter)
-      return matchesCategory && matchesPerson && isSameDay(eventDate, day) && (event.status === 'APPROVED' || event.status === 'ACTIVE')
+      return matchesCategory && matchesPerson && coversDay && (event.status === 'APPROVED' || event.status === 'ACTIVE')
     })
   }
 

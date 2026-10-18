@@ -129,7 +129,13 @@ export default function EditEventPage() {
         startTime = localDateTimeToISO(formData.startDate, formData.startTime)
         endTime = localDateTimeToISO(formData.endDate, formData.endTime)
       }
-      
+
+      if (new Date(endTime) < new Date(startTime)) {
+        toast.error('The end time must be after the start time')
+        setIsSaving(false)
+        return
+      }
+
       const res = await authFetch(`/api/events/${eventId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

@@ -314,7 +314,13 @@ function NewEventForm() {
       const endTime = allDay
         ? localEndOfDayToISO(formData.endDate)
         : localDateTimeToISO(formData.endDate, formData.endTime)
-      
+
+      if (new Date(endTime) < new Date(startTime)) {
+        toast.error('The end time must be after the start time')
+        setIsSubmitting(false)
+        return
+      }
+
       const res = await authFetch('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

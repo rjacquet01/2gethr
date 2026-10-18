@@ -521,6 +521,11 @@ export async function PATCH(
     
     // General update (action = 'update' or any field updates)
     if (action === 'update' || updates.title || updates.description || updates.dueDate || updates.priority || updates.category || updates.assignedToUserId !== undefined || updates.assignedToChildId !== undefined || updates.requiresApproval !== undefined || updates.isRecurring !== undefined || updates.notifyChannels !== undefined) {
+      // A child may only edit tasks they created: otherwise a kid could
+      // reassign or rewrite a parent's task, skipping the approval flow.
+      if (membership[0].role === 'CHILD' && task.created_by_id !== user.id) {
+        return NextResponse.json({ error: 'Only the person who created this task or a parent can change it' }, { status: 403 })
+      }
       // New assignees must belong to this task's family.
       if (!(await assigneesInFamily(task.family_id, updates.assignedToUserId, updates.assignedToChildId))) {
         return NextResponse.json({ error: 'That person is not in this family' }, { status: 400 })

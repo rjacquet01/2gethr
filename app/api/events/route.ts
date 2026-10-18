@@ -316,6 +316,7 @@ export async function GET(request: NextRequest) {
         startTime: e.start_time,
         endTime: e.end_time,
         isAllDay: e.is_all_day,
+        allDay: e.is_all_day, // the calendar and dashboard read this name
         status: e.status,
         visibility: e.visibility,
         color: e.color || e.calendar_color,
@@ -366,7 +367,10 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const validatedData = createEventSchema.parse(body)
-    
+    if (new Date(validatedData.endTime) < new Date(validatedData.startTime)) {
+      return NextResponse.json({ success: false, error: "The event can't end before it starts" }, { status: 400 })
+    }
+
     // Handle isAllDay or allDay field
     const isAllDay = validatedData.isAllDay || validatedData.allDay || false
 

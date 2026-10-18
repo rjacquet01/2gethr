@@ -371,11 +371,43 @@ export async function POST(request: NextRequest) {
       suggestedIntervalSec = suggestedPingIntervalSec(geo.nearestGap, moved)
     }
 
+    // The same person's other families (e.g. a child in two households):
+    // the ping is visible there too, so their places' arrival/departure
+    // alerts must run as well, wherever sharing is on and the plan has them.
+    const otherFamilies = await sql`
+      SELECT fm.family_id FROM family_members fm
+      JOIN location_settings ls ON ls.family_member_id = fm.id
+      WHERE fm.user_id = ${user.id} AND fm.is_active = true
+        AND fm.family_id <> ${setting.family_id}
+        AND ls.mode = 'ACTIVE' AND ls.share_with_family = true
+    `
+    for (const other of otherFamilies) {
+      const otherSub = await checkFamilySubscription(other.family_id as string)
+      if (!otherSub.features.geofencing) continue
+      const geo = await checkGeofences(
+        user.id,
+        other.family_id as string,
+        validatedData.latitude,
+        validatedData.longitude,
+        validatedData.accuracy,
+        prevPing
+      )
+      if (geo.recorded > 0) geofenceChanged = true
+      const hint = suggestedPingIntervalSec(geo.nearestGap, moved)
+      if (hint != null && (suggestedIntervalSec == null || hint < suggestedIntervalSec)) suggestedIntervalSec = hint
+    }
+
     // A still phone repeating the same spot: move the previous row forward
     // instead of adding one (lib/location-dedupe.ts). Last-seen stays fresh;
     // a new row is still written every few minutes, after real movement, or
     // when a geofence state changed.
-    const pingTimestamp = validatedData.timestamp || new Date().toISOString()
+    // A phone with a wrong clock must not write a future-dated "latest" fix
+    // (it would stay on the map and block departure/stale checks): clamp
+    // anything more than 5 minutes ahead to now, like queued fixes above.
+    const sentMs = validatedData.timestamp ? Date.parse(validatedData.timestamp) : NaN
+    const pingTimestamp = Number.isFinite(sentMs) && sentMs <= Date.now() + 300_000
+      ? (validatedData.timestamp as string)
+      : new Date().toISOString()
     const merge = shouldMergeWithPrevious({
       prev: prevPings[0]
         ? { id: prevPings[0].id as string, latitude: Number(prevPings[0].latitude), longitude: Number(prevPings[0].longitude) }
@@ -416,8 +448,18 @@ export async function POST(request: NextRequest) {
         )
       `
 
-      // Free tier gets live location only, not history: keep just the latest ping.
-      if (subscription.tier === "FREE" && !(await isUnderLegalHold(user.id))) {
+      // Free tier gets live location only, not history: keep just the latest
+      // ping. Pings belong to the person, not a family, so this only applies
+      // when none of their families has a paid plan (a child in a Free and a
+      // Premium family keeps the Premium family's history).
+      const inPaidFamily = subscription.tier === "FREE" && (await sql`
+        SELECT 1 FROM family_members fm
+        JOIN subscriptions s ON s.family_id = fm.family_id
+        WHERE fm.user_id = ${user.id} AND fm.is_active = true
+          AND s.tier <> 'FREE' AND s.status IN ('ACTIVE', 'TRIALING')
+        LIMIT 1
+      `).length > 0
+      if (subscription.tier === "FREE" && !inPaidFamily && !(await isUnderLegalHold(user.id))) {
         await sql`DELETE FROM location_pings WHERE user_id = ${user.id} AND id != ${pingId}`
       }
     }
@@ -434,11 +476,14 @@ export async function POST(request: NextRequest) {
     if (battery != null && battery <= 15 && (prevBattery == null || prevBattery > 15)) {
       try {
         const who = (await sql`SELECT first_name FROM users WHERE id = ${user.id}`)[0]?.first_name || "A family member"
-        await alertFamilyAdults(setting.family_id, user.id, {
-          title: `${who}'s battery is low`,
-          body: `${who}'s phone is at ${battery}%. Their location may stop updating soon.`,
-          data: { userId: user.id, subType: "LOW_BATTERY", batteryLevel: battery },
-        })
+        // Every family that can see this person's location hears about it.
+        for (const familyId of [setting.family_id as string, ...otherFamilies.map((o) => o.family_id as string)]) {
+          await alertFamilyAdults(familyId, user.id, {
+            title: `${who}'s battery is low`,
+            body: `${who}'s phone is at ${battery}%. Their location may stop updating soon.`,
+            data: { userId: user.id, subType: "LOW_BATTERY", batteryLevel: battery },
+          })
+        }
       } catch (err) {
         console.error("Low battery alert failed (non-fatal):", err)
       }
@@ -492,11 +537,14 @@ async function checkGeofences(
   if (places.length === 0) return { nearestGap: null, recorded: 0 }
 
   // Last arrival/departure state per place for this user, in one query.
+  // Events from before a place was turned on/off, moved or resized don't count.
   const lastRows = await sql`
-    SELECT DISTINCT ON (saved_place_id) saved_place_id, event_type
-    FROM geofence_events
-    WHERE user_id = ${userId}
-    ORDER BY saved_place_id, timestamp DESC
+    SELECT DISTINCT ON (ge.saved_place_id) ge.saved_place_id, ge.event_type
+    FROM geofence_events ge
+    JOIN saved_places sp ON sp.id = ge.saved_place_id
+    WHERE ge.user_id = ${userId}
+      AND ge.timestamp > COALESCE(sp.geofence_state_reset_at, '-infinity'::timestamptz)
+    ORDER BY ge.saved_place_id, ge.timestamp DESC
   `
   const lastByPlace = new Map<string, string>()
   for (const r of lastRows) lastByPlace.set(r.saved_place_id, r.event_type)

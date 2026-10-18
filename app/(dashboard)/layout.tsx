@@ -39,7 +39,8 @@ import {
   ListTodo,
   HelpCircle,
   Archive,
-  MessagesSquare
+  MessagesSquare,
+  Inbox
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -67,6 +68,8 @@ const navItems = [
   { href: '/location', icon: Navigation, label: 'Location' },
   { href: '/places', icon: MapPin, label: 'Places' },
   { href: '/dashboard/archive', icon: Archive, label: 'Archive' },
+  // The bell in the mobile header was the only way here; desktop had none.
+  { href: '/notifications', icon: Inbox, label: 'Notifications' },
   { href: '/subscription', icon: Crown, label: 'Subscription' },
   { href: '/support', icon: HelpCircle, label: 'Support' },
 ]

@@ -320,15 +320,23 @@ export async function refreshAdminTokens(
   const payload = await verifyAdminToken(refreshToken)
   if (!payload || payload.type !== 'admin_refresh') return null
   
-  // Verify session exists and not revoked
+  // The token must belong to one live session (matched by its stored hash),
+  // not just to an admin who has some session: a leaked old token used to
+  // keep working after logout + a new login elsewhere.
   const sessions = await sql`
-    SELECT id FROM admin_sessions
+    SELECT id, token_hash FROM admin_sessions
     WHERE admin_user_id = ${payload.sub}
       AND revoked_at IS NULL
       AND expires_at > NOW()
   `
-  
-  if (sessions.length === 0) return null
+  let sessionId: string | null = null
+  for (const s of sessions) {
+    if (s.token_hash && (await bcrypt.compare(refreshToken, s.token_hash as string))) {
+      sessionId = s.id as string
+      break
+    }
+  }
+  if (!sessionId) return null
   
   // Get admin with fresh data
   const adminResult = await sql`
@@ -355,6 +363,13 @@ export async function refreshAdminTokens(
   
   const newAccessToken = await generateAdminAccessToken(adminUser)
   const newRefreshToken = await generateAdminRefreshToken(adminUser)
+
+  // Rotate: the session now only accepts the new refresh token.
+  await sql`
+    UPDATE admin_sessions
+    SET token_hash = ${await bcrypt.hash(newRefreshToken, 10)}, last_activity_at = NOW()
+    WHERE id = ${sessionId}
+  `
   
   return { accessToken: newAccessToken, refreshToken: newRefreshToken }
 }

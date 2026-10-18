@@ -15,7 +15,7 @@ export async function closeUserAccount(user: { id: string; email: string }): Pro
     `
 
     for (const family of ownedFamilies) {
-      const otherMembers = await sql`
+      const remaining = await sql`
         SELECT user_id, role FROM family_members
         WHERE family_id = ${family.id} AND user_id != ${user.id} AND is_active = true
           AND role <> 'GUEST'
@@ -23,8 +23,27 @@ export async function closeUserAccount(user: { id: string; email: string }): Pro
           CASE role WHEN 'PARENT' THEN 0 WHEN 'GUARDIAN' THEN 1 WHEN 'ADULT' THEN 2 ELSE 3 END,
           joined_at ASC
       `
+      // A child never inherits ownership (it would let a kid manage invites,
+      // remove members or delete the family).
+      const otherMembers = remaining.filter((m) => m.role !== 'CHILD')
+      const onlyChildrenLeft = otherMembers.length === 0 && remaining.length > 0
 
-      if (otherMembers.length > 0) {
+      if (onlyChildrenLeft) {
+        // Keep the family so the children keep their data; ownership stays
+        // with this (closed) account. Its paid plan ends, since the person
+        // paying for it is gone.
+        const subs = await sql`
+          SELECT stripe_subscription_id FROM subscriptions
+          WHERE family_id = ${family.id} AND stripe_subscription_id IS NOT NULL
+        `
+        for (const sub of subs) {
+          try {
+            await stripe.subscriptions.cancel(sub.stripe_subscription_id)
+          } catch (err) {
+            console.error('Failed to cancel Stripe subscription during account deletion:', err)
+          }
+        }
+      } else if (otherMembers.length > 0) {
         // Transfer ownership to the longest-standing parent/guardian/adult (or
         // whoever else is left) so the family and its data keep existing
         // for the remaining members. A guest never inherits ownership.

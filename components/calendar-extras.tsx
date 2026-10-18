@@ -77,7 +77,9 @@ export function weatherLabel(code: number): string {
 export function CellWeather({ w }: { w?: DayWeather }) {
   if (!w) return null
   return (
-    <div className="absolute top-1 right-1 flex items-center gap-0.5 text-[10px] leading-none text-muted-foreground sm:text-xs">
+    // Phones: its own line under the (centered) day number, which it used to
+    // cover; wider screens: the top-right corner.
+    <div className="flex items-center justify-center gap-0.5 text-[10px] leading-none text-muted-foreground sm:absolute sm:top-1 sm:right-1 sm:text-xs">
       <span aria-hidden>{weatherEmoji(w.code)}</span>
       <span className="font-medium">{w.hi}°</span>
       {w.rain >= 50 && <Umbrella className="h-3 w-3 text-sky-600" aria-label="Rain likely" />}
