@@ -128,7 +128,7 @@ export default function PrivacyPage() {
                   <li>Stripe: payment processing and billing</li>
                   <li>Resend: transactional and notification email</li>
                   <li>Google Firebase Cloud Messaging: push notifications</li>
-                  <li>Open-Meteo: weather forecasts. We send approximate coordinates of your family's saved Home place (rounded to about 1 km) through our servers to retrieve the forecast shown on your calendar. No names, addresses or account details are sent.</li>
+                  <li>Open-Meteo: weather forecasts. We send approximate coordinates of your family's saved Home place (or another saved place if the family has no place named Home), rounded to about 1 km, through our servers to retrieve the forecast shown on your calendar. No names, addresses or account details are sent.</li>
                   <li>OpenStreetMap-based services: map tiles and address lookup (the address or coordinates you look up may be sent to them)</li>
                   <li>Calendar providers you connect (Google, Apple)</li>
                 </ul>
