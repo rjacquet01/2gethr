@@ -7,6 +7,7 @@ import { Umbrella } from 'lucide-react'
 import { authFetch } from '@/hooks/use-auth'
 import { useMyRole } from '@/hooks/use-my-role'
 import { cn } from '@/lib/utils'
+import { weatherStatusFor, type WeatherStatus } from '@/lib/weather-prompt'
 
 /* ------------------------------- Weather ------------------------------- */
 
@@ -27,10 +28,15 @@ const jsonFetcher = async (url: string) => {
 
 // Uses the family's "Home" saved place, else the first saved place. Guests
 // can't read saved places (that would reveal the family's home), so they get
-// no weather.
-export function useCalendarWeather(familyId: string | undefined): Record<string, DayWeather> {
-  const { isGuest } = useMyRole()
-  const { data: places } = useSWR<any[]>(
+// no weather. weatherStatus tells a family with no saved place apart from
+// loading / error / guest, so the calendar can explain the missing weather.
+export function useCalendarWeatherState(familyId: string | undefined): {
+  weather: Record<string, DayWeather>
+  weatherStatus: WeatherStatus
+  role: string | null
+} {
+  const { isGuest, role, isLoading: roleLoading } = useMyRole()
+  const { data: places, error: placesError } = useSWR<any[]>(
     familyId && !isGuest ? `/api/places?familyId=${encodeURIComponent(familyId)}` : null,
     jsonFetcher
   )
@@ -38,12 +44,27 @@ export function useCalendarWeather(familyId: string | undefined): Record<string,
   const spot = list.find((p) => /\b(home|house)\b/i.test(p.name || '')) || list[0]
   const lat = spot ? Number(spot.latitude) : null
   const lng = spot ? Number(spot.longitude) : null
-  const { data } = useSWR<Record<string, DayWeather>>(
+  const { data, error: weatherError } = useSWR<Record<string, DayWeather>>(
     lat != null && lng != null ? `/api/weather?lat=${lat.toFixed(2)}&lng=${lng.toFixed(2)}` : null,
     jsonFetcher,
     { refreshInterval: 30 * 60 * 1000, revalidateOnFocus: false }
   )
-  return data || {}
+  const weatherStatus = weatherStatusFor({
+    familyId,
+    roleLoading,
+    isGuest,
+    placesLoaded: places !== undefined,
+    placesError: !!placesError,
+    hasPlace: !!spot,
+    weatherLoaded: data !== undefined,
+    weatherError: !!weatherError,
+  })
+  return { weather: data || {}, weatherStatus, role }
+}
+
+/** The forecast by yyyy-MM-dd ({} until there is one); unchanged for existing callers. */
+export function useCalendarWeather(familyId: string | undefined): Record<string, DayWeather> {
+  return useCalendarWeatherState(familyId).weather
 }
 
 export function weatherEmoji(code: number): string {
