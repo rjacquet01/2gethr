@@ -9,7 +9,7 @@ import { z } from "zod"
 import { sendSMSMetered, SMS_TEMPLATES, isTwilioConfigured } from "@/lib/services/sms"
 import { sendEmail, EMAIL_TEMPLATES, isResendConfigured } from "@/lib/services/email"
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
-import { distanceMeters, evaluateGeofence, confirmsDeparture, suggestedPingIntervalSec } from "@/lib/geofence"
+import { distanceMeters, evaluateGeofence, confirmsDeparture, suggestedIntervalForGaps } from "@/lib/geofence"
 import { shouldMergeWithPrevious } from "@/lib/location-dedupe"
 import { fulfillLocationRequests } from "@/lib/location-schema"
 import { alertFamilyAdults } from "@/lib/family-alerts"
@@ -368,7 +368,7 @@ export async function POST(request: NextRequest) {
       geofenceChanged = geo.recorded > 0
       // Only report faster near a boundary while actually moving; a phone
       // standing still (e.g. at home) keeps its normal interval.
-      suggestedIntervalSec = suggestedPingIntervalSec(geo.nearestGap, moved)
+      suggestedIntervalSec = suggestedIntervalForGaps(geo.gaps, moved)
     }
 
     // The same person's other families (e.g. a child in two households):
@@ -393,7 +393,7 @@ export async function POST(request: NextRequest) {
         prevPing
       )
       if (geo.recorded > 0) geofenceChanged = true
-      const hint = suggestedPingIntervalSec(geo.nearestGap, moved)
+      const hint = suggestedIntervalForGaps(geo.gaps, moved)
       if (hint != null && (suggestedIntervalSec == null || hint < suggestedIntervalSec)) suggestedIntervalSec = hint
     }
 
@@ -526,7 +526,7 @@ async function checkGeofences(
   longitude: number,
   accuracy?: number | null,
   prevPing?: { latitude: number; longitude: number; accuracy: number | null; ageSec: number } | null
-): Promise<{ nearestGap: number | null; recorded: number }> {
+): Promise<{ gaps: number[]; recorded: number }> {
   // Geofence-enabled places in this family that apply to this person: ones
   // assigned to nobody (everyone) or assigned to their membership here.
   await ensurePlaceNotifyChannelsColumn()
@@ -545,7 +545,7 @@ async function checkGeofences(
         )
       )
   `
-  if (places.length === 0) return { nearestGap: null, recorded: 0 }
+  if (places.length === 0) return { gaps: [], recorded: 0 }
 
   // Last arrival/departure state per place for this user, in one query.
   // Events from before a place was turned on/off, moved or resized don't count.
@@ -560,14 +560,15 @@ async function checkGeofences(
   const lastByPlace = new Map<string, string>()
   for (const r of lastRows) lastByPlace.set(r.saved_place_id, r.event_type)
 
-  let nearestGap: number | null = null
+  // Distance to each place's edge (negative = inside); each gets its own hint.
+  const gaps: number[] = []
   let recordedCount = 0
 
   for (const place of places) {
     const radius = Number(place.radius)
     const distance = distanceMeters(latitude, longitude, Number(place.latitude), Number(place.longitude))
     const gap = distance - radius
-    if (nearestGap === null || gap < nearestGap) nearestGap = gap
+    gaps.push(gap)
 
     const wasInside = lastByPlace.get(place.id) === "ARRIVAL"
 
@@ -598,7 +599,7 @@ async function checkGeofences(
     }
   }
 
-  return { nearestGap, recorded: recordedCount }
+  return { gaps, recorded: recordedCount }
 }
 
 async function recordGeofenceEvent(

@@ -1,5 +1,5 @@
 import assert from "node:assert"
-import { distanceMeters, evaluateGeofence, suggestedPingIntervalSec, isTrustedFix, confirmsDeparture } from "../lib/geofence"
+import { distanceMeters, evaluateGeofence, suggestedPingIntervalSec, suggestedIntervalForGaps, isTrustedFix, confirmsDeparture } from "../lib/geofence"
 
 const HOME = { lat: 37.7749, lng: -122.4194 }
 const R = 100
@@ -68,7 +68,16 @@ assert.strictEqual(confirmsDeparture({ distance: 150, accuracy: null }, R), fals
 
 // 7. Adaptive interval hints.
 assert.strictEqual(suggestedPingIntervalSec(null), null)
-assert.strictEqual(suggestedPingIntervalSec(-50), 15)
+// Inside a place: only leaving matters, so no 15s GPS while moving around inside.
+assert.strictEqual(suggestedPingIntervalSec(-50), 30, "inside, near the edge")
+assert.strictEqual(suggestedPingIntervalSec(0), 30, "on the edge counts as inside")
+assert.strictEqual(suggestedPingIntervalSec(-250), 60, "deep inside a large place")
+assert.strictEqual(suggestedPingIntervalSec(1), 15, "just outside: arrivals stay fast")
+// Each place judged on its own gap: inside Home but approaching School stays fast.
+assert.strictEqual(suggestedIntervalForGaps([-80, 120], 50), 15)
+assert.strictEqual(suggestedIntervalForGaps([-250, 5000], 50), 60)
+assert.strictEqual(suggestedIntervalForGaps([-250, 5000], 5), null, "still: user's interval")
+assert.strictEqual(suggestedIntervalForGaps([]), null)
 assert.strictEqual(suggestedPingIntervalSec(500), 30)
 assert.strictEqual(suggestedPingIntervalSec(2000), 60)
 assert.strictEqual(suggestedPingIntervalSec(10000), null)

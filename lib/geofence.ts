@@ -81,13 +81,28 @@ export const STATIONARY_METERS = 25
  * sitting at home is always "near" the Home boundary, and used to be told to
  * report every 15s around the clock; when it hasn't moved, the user's own
  * interval is used instead, and fast reporting resumes as soon as it moves.
+ *
+ * Inside a place (gap <= 0) the only thing to catch is leaving, which needs
+ * getting past the edge plus the hysteresis margin, so someone moving around
+ * inside (a school, an office) reports every 30s near the edge and every 60s
+ * further in, instead of keeping GPS on every 15s all day.
  */
 export function suggestedPingIntervalSec(gapMeters: number | null, movedMeters: number | null = null): number | null {
   if (gapMeters === null) return null
   if (movedMeters !== null && movedMeters < STATIONARY_METERS) return null
-  const gap = Math.max(0, gapMeters)
-  if (gap <= 300) return 15
-  if (gap <= 1000) return 30
-  if (gap <= 3000) return 60
+  if (gapMeters <= 0) return -gapMeters <= 100 ? 30 : 60
+  if (gapMeters <= 300) return 15
+  if (gapMeters <= 1000) return 30
+  if (gapMeters <= 3000) return 60
   return null
+}
+
+/** The fastest hint any one place asks for (each place judged on its own gap). */
+export function suggestedIntervalForGaps(gaps: number[], movedMeters: number | null = null): number | null {
+  let best: number | null = null
+  for (const g of gaps) {
+    const h = suggestedPingIntervalSec(g, movedMeters)
+    if (h !== null && (best === null || h < best)) best = h
+  }
+  return best
 }
