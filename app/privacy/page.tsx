@@ -39,7 +39,7 @@ export default function PrivacyPage() {
         <h1 className="text-3xl font-bold mb-8">Privacy Policy</h1>
 
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: October 18, 2026</p>
+          <p className="text-muted-foreground">Last updated: October 19, 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Who we are</h2>
@@ -128,6 +128,7 @@ export default function PrivacyPage() {
                   <li>Stripe: payment processing and billing</li>
                   <li>Resend: transactional and notification email</li>
                   <li>Google Firebase Cloud Messaging: push notifications</li>
+                  <li>Open-Meteo: weather forecasts. We send approximate coordinates of your family's saved Home place (rounded to about 1 km) through our servers to retrieve the forecast shown on your calendar. No names, addresses or account details are sent.</li>
                   <li>OpenStreetMap-based services: map tiles and address lookup (the address or coordinates you look up may be sent to them)</li>
                   <li>Calendar providers you connect (Google, Apple)</li>
                 </ul>
