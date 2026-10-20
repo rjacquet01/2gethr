@@ -91,11 +91,15 @@ export async function deleteChildData(opts: {
   return { deleted: true, closedUserId }
 }
 
-/** A parent withdraws consent: the records are marked, then the child's data is deleted. */
-export async function withdrawChildConsent(opts: { familyId: string; childMemberId: string; parentUserId: string }) {
+/**
+ * Consent is withdrawn (by a parent in the app, or by a Togethr admin acting
+ * on a request): the records are marked withdrawn and kept, then the child's
+ * data is deleted. withdrawnBy is the parent's user id or the admin's id.
+ */
+export async function withdrawChildConsent(opts: { familyId: string; childMemberId: string; withdrawnBy: string }) {
   await ensureConsentSchema()
   await sql`
-    UPDATE parental_consents SET withdrawn_at = NOW(), withdrawn_by = ${opts.parentUserId}
+    UPDATE parental_consents SET withdrawn_at = NOW(), withdrawn_by = ${opts.withdrawnBy}
     WHERE child_member_id = ${opts.childMemberId} AND family_id = ${opts.familyId} AND withdrawn_at IS NULL
   `
   return deleteChildData({ familyId: opts.familyId, childMemberId: opts.childMemberId, closeAccount: "always" })

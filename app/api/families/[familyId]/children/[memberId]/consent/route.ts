@@ -51,7 +51,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     if (!g.ok) return g.res
     withdrawSchema.parse(await request.json().catch(() => ({})))
 
-    const result = await withdrawChildConsent({ familyId, childMemberId: memberId, parentUserId: g.user.id })
+    const result = await withdrawChildConsent({ familyId, childMemberId: memberId, withdrawnBy: g.user.id })
     await logAuditEvent(g.user.id, "DELETE", "parental_consent_withdrawn", memberId, {
       newValue: { familyId, childMemberId: memberId, closedChildUserId: result.closedUserId },
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,

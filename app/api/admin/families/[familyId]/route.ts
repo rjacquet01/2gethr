@@ -46,7 +46,7 @@ export async function GET(
     
     // Get children
     const children = await sql`
-      SELECT cp.*, fm.id as member_id
+      SELECT cp.*, fm.id as member_id, fm.user_id as member_user_id
       FROM child_profiles cp
       JOIN family_members fm ON cp.family_member_id = fm.id
       WHERE fm.family_id = ${familyId}
@@ -116,6 +116,8 @@ export async function GET(
       children: children.map(c => ({
         id: c.id,
         memberId: c.member_id,
+        // Only children without their own login can be deleted from here.
+        hasLogin: !!c.member_user_id,
         displayName: c.display_name,
         age: c.age,
         school: c.school,
