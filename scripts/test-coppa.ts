@@ -208,7 +208,8 @@ async function main() {
   {
     const ctx = () => ({ params: Promise.resolve({ familyId: FAMILY, memberId: CHILD_MEMBER }) })
     const childRow: typeof answers = [
-      ["SELECT fm.id, cp.display_name FROM family_members fm", () => [{ id: CHILD_MEMBER, display_name: "Robin" }]],
+      ["SELECT fm.id, fm.user_id, cp.display_name FROM family_members fm", () => [{ id: CHILD_MEMBER, user_id: null, display_name: "Robin" }]],
+      ["SELECT 1 FROM parental_consents WHERE child_member_id", () => [{ "?column?": 1 }]],
       ["SELECT fm.id, fm.user_id, fm.role, u.email", () => [{ id: CHILD_MEMBER, user_id: null, role: "CHILD", email: null }]],
     ]
     reset(childRow)
@@ -222,6 +223,7 @@ async function main() {
     assert.strictEqual(r.status, 200)
     assert.strictEqual(writes("UPDATE parental_consents SET withdrawn_at").length, 1, "record marked withdrawn, not deleted")
     assert.deepStrictEqual(writes("DELETE FROM parental_consents"), [])
+    assert.deepStrictEqual(writes("INSERT INTO parental_consents"), [], "an existing record is marked, not added to")
     const del = writes("DELETE FROM family_members")
     assert.strictEqual(del.length, 1)
     assert.strictEqual(del[0].v[0], CHILD_MEMBER, "the child's membership (and so profile, location settings) deleted")
