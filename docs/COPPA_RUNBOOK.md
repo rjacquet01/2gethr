@@ -30,12 +30,25 @@ Admin panel > **Users**: search by the email given. Note:
 
 ## 4. Act (delete within 10 business days of step 3)
 
+The 10-business-day target is met with the tools below. For a child profile without a login, use the admin panel's **Delete child profile** button.
+
 | Situation | How |
 |---|---|
 | Parent can do it themselves | Point them to **Family > the child > Consent > Withdraw consent**. It deletes the child's profile, login and location data right away. |
-| A child **login** (has an email) | Admin panel > Users > the user > **Close Account (permanent)**. This runs the same account closure as self-deletion: sessions revoked, personal fields scrubbed, location history and memberships deleted. |
-| A child **profile without a login** | Ask a parent in the family to use Remove (or Withdraw consent), which deletes the profile. **TODO:** there is no admin-panel button for this yet; until there is, an engineer runs `deleteChildData()` from `lib/parental-consent.ts` for that member. |
+| A child **profile without a login** | Admin panel > **Families** > the family > **Children** > **Delete child profile**. Enter the reason (who asked, when, how you verified them) and type `DELETE`. This deletes the child's profile (name, birthdate, school, notes), location settings and place assignments. It marks any parental consent withdrawn by you and keeps it, and writes an admin audit entry with your id, the family, the child and the reason. Other family members are not touched. |
+| A child **login** (has an email) | Admin panel > Users > the user > **Close Account (permanent)**. This runs the same account closure as self-deletion: sessions revoked, personal fields scrubbed, location history and memberships deleted. (The Delete child profile button refuses children with a login.) |
 | Parent wants a copy first | They can download it in Settings > **Export my data** (it includes their children's profiles and the consent records). |
+
+### A parent writes to admin@mytogethr.com asking to delete a child's data
+
+1. **Acknowledge** within 2 business days (step 1).
+2. **Find the family:** Admin panel > Users > search the sender's email > their family. Open the family (Admin panel > Families) and find the child under **Children**. The list shows whether the child has their own login.
+3. **Verify** (step 3, case B): the email must come from the address on file for a PARENT in that family. If not, email that address and wait for their reply. Don't confirm or share any child details until verified.
+4. **Offer self-service** if it's quicker for them: Family > the child > Consent > Withdraw consent does the same deletion immediately. If they'd rather we do it, continue.
+5. **Delete** within 10 business days of verification:
+   - no login: **Delete child profile** on the family page, with the reason, e.g. "Parent request by email on 2026-10-20, verified from the address on file";
+   - has a login: **Close Account (permanent)** on that child's user page, with the same kind of reason.
+6. **Reply** that it's done, without child details, and record it (step 5).
 
 Things that are **not** deleted: events and tasks the family created (they belong to the family; the child's name link is cleared from tasks), and the consent record itself (kept, marked withdrawn, as proof of what happened).
 
