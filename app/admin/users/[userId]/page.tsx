@@ -67,7 +67,6 @@ export default function AdminUserDetailPage() {
     reason: string
   }>({ type: null, reason: '' })
   const [actionLoading, setActionLoading] = useState(false)
-  const [tempPassword, setTempPassword] = useState<string | null>(null)
   const [flagOpen, setFlagOpen] = useState(false)
   const [flagType, setFlagType] = useState('TOS_VIOLATION')
   const [flagSeverity, setFlagSeverity] = useState('MEDIUM')
@@ -156,12 +155,8 @@ export default function AdminUserDetailPage() {
       
       toast.success(data.message)
       
-      if (data.tempPassword) {
-        setTempPassword(data.tempPassword)
-      } else {
-        setActionDialog({ type: null, reason: '' })
-        loadUser()
-      }
+      setActionDialog({ type: null, reason: '' })
+      loadUser()
     } catch {
       toast.error('Action failed')
     } finally {
@@ -283,7 +278,7 @@ export default function AdminUserDetailPage() {
               onClick={() => setActionDialog({ type: 'reset_password', reason: '' })}
             >
               <Key className="h-4 w-4 mr-2" />
-              Reset Password
+              Send Password Reset Link
             </Button>
             
             {!user.emailVerified && (
@@ -411,21 +406,21 @@ export default function AdminUserDetailPage() {
       </Card>
       
       {/* Action Dialog */}
-      <Dialog open={!!actionDialog.type && !tempPassword} onOpenChange={(open) => !open && setActionDialog({ type: null, reason: '' })}>
+      <Dialog open={!!actionDialog.type} onOpenChange={(open) => !open && setActionDialog({ type: null, reason: '' })}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {actionDialog.type === 'suspend' && 'Suspend User'}
               {actionDialog.type === 'unsuspend' && 'Unsuspend User'}
               {actionDialog.type === 'close' && 'Close Account'}
-              {actionDialog.type === 'reset_password' && 'Reset Password'}
+              {actionDialog.type === 'reset_password' && 'Send Password Reset Link'}
               {actionDialog.type === 'verify_email' && 'Verify Email'}
             </DialogTitle>
             <DialogDescription>
               {actionDialog.type === 'suspend' && 'This will prevent the user from accessing their account.'}
               {actionDialog.type === 'close' && 'PERMANENT: scrubs personal data, cancels billing and removes the user from all families. Use for Terms of Service violations. Cannot be undone.'}
               {actionDialog.type === 'unsuspend' && 'This will restore the user\'s access to their account.'}
-              {actionDialog.type === 'reset_password' && 'This will generate a temporary password for the user.'}
+              {actionDialog.type === 'reset_password' && 'Emails the user a link to choose a new password (valid for 1 hour). You never see their password.'}
               {actionDialog.type === 'verify_email' && 'This will mark the user\'s email as verified.'}
             </DialogDescription>
           </DialogHeader>
@@ -506,40 +501,6 @@ export default function AdminUserDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Temp Password Dialog */}
-      <Dialog open={!!tempPassword} onOpenChange={() => { setTempPassword(null); setActionDialog({ type: null, reason: '' }); loadUser(); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-500" />
-              Password Reset Successful
-            </DialogTitle>
-            <DialogDescription>
-              Share this temporary password with the user securely. They should change it immediately after logging in.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <div className="p-4 bg-muted rounded-lg font-mono text-center text-lg">
-              {tempPassword}
-            </div>
-            <Button 
-              variant="outline" 
-              className="w-full mt-4"
-              onClick={() => {
-                navigator.clipboard.writeText(tempPassword || '')
-                toast.success('Copied to clipboard')
-              }}
-            >
-              Copy to Clipboard
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => { setTempPassword(null); setActionDialog({ type: null, reason: '' }); loadUser(); }}>
-              Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

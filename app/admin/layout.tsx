@@ -12,7 +12,8 @@ import {
 import { Logo, LogoIcon } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { getAdminAccessToken, clearAdminTokens } from '@/hooks/use-admin-auth'
+import { getAdminAccessToken, getAdminRefreshToken, clearAdminTokens } from '@/hooks/use-admin-auth'
+import { AdminMfaCard } from '@/components/admin-mfa-card'
 
 interface AdminUser {
   id: string
@@ -21,6 +22,8 @@ interface AdminUser {
   lastName: string
   roles: string[]
   permissions: string[]
+  /** Production requires two-step sign-in; the API refuses this admin until it's on. */
+  mfaSetupRequired?: boolean
 }
 
 const navigation = [
@@ -89,10 +92,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const handleLogout = async () => {
     const token = getAdminAccessToken()
-    await fetch('/api/admin/auth/logout', { 
+    await fetch('/api/admin/auth/logout', {
       method: 'POST',
-      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-    })
+      headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ refreshToken: getAdminRefreshToken() }),
+    }).catch(() => {})
     clearAdminTokens()
     router.push('/admin/login')
   }
@@ -120,6 +124,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (!admin) {
     return null
+  }
+
+  // Nothing else works until two-step sign-in is on, so ask for it first.
+  if (admin.mfaSetupRequired) {
+    return (
+      <div className="min-h-screen bg-background px-4 py-10">
+        <div className="mx-auto max-w-lg space-y-4">
+          <h1 className="text-2xl font-semibold">Set up two-step sign-in</h1>
+          <p className="text-sm text-muted-foreground">
+            Every admin account needs an authenticator app code to sign in. Turn it on below, save your backup codes, then continue.
+          </p>
+          <AdminMfaCard />
+          <div className="flex gap-2">
+            <Button onClick={() => window.location.reload()}>Continue</Button>
+            <Button variant="outline" onClick={handleLogout}>Sign out</Button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

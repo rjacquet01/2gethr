@@ -99,9 +99,12 @@ export function useAdminAuth() {
   const logout = useCallback(async () => {
     const token = getAdminAccessToken()
     try {
+      // The refresh token lets the server end the sessions even if the access
+      // token has already expired.
       await fetch('/api/admin/auth/logout', {
         method: 'POST',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ refreshToken: getAdminRefreshToken() }),
       })
     } catch {
       // Ignore errors

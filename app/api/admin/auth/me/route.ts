@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminFromToken } from '@/lib/admin-auth'
+import { getAdminFromToken, adminMfaRequired } from '@/lib/admin-auth'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     
-    const admin = await getAdminFromToken(token)
+    // Allowed without two-step sign-in, so the portal can send them to set it up.
+    const admin = await getAdminFromToken(token, { allowWithoutMfa: true })
     
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -25,6 +26,7 @@ export async function GET(request: NextRequest) {
         lastName: admin.lastName,
         roles: admin.roles,
         permissions: admin.permissions,
+        mfaSetupRequired: adminMfaRequired() && !admin.mfaEnabled,
       },
     })
   } catch (error) {

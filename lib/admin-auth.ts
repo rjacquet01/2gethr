@@ -15,8 +15,8 @@ const ADMIN_JWT_SECRET = new TextEncoder().encode(
 )
 const ADMIN_ACCESS_TOKEN_EXPIRY = '15m'
 const ADMIN_REFRESH_TOKEN_EXPIRY = '8h' // Shorter for admin sessions
-const ADMIN_ACCESS_COOKIE = 'admin_access_token'
-const ADMIN_REFRESH_COOKIE = 'admin_refresh_token'
+export const ADMIN_ACCESS_COOKIE = 'admin_access_token'
+export const ADMIN_REFRESH_COOKIE = 'admin_refresh_token'
 
 // Types
 export interface AdminUser {
@@ -146,13 +146,13 @@ export async function clearAdminAuthCookies() {
 }
 
 // Get admin from request (checks Authorization header or cookies)
-export async function getAdminFromRequest(request: Request): Promise<{ admin: AdminUser | null; error?: string }> {
+export async function getAdminFromRequest(request: Request, opts: AdminLookupOptions = {}): Promise<{ admin: AdminUser | null; error?: string }> {
   try {
     // Check Authorization header first
     const authHeader = request.headers.get('Authorization')
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7)
-      const admin = await getAdminFromToken(token)
+      const admin = await getAdminFromToken(token, opts)
       if (admin) {
         return { admin }
       }
@@ -160,7 +160,7 @@ export async function getAdminFromRequest(request: Request): Promise<{ admin: Ad
     }
     
     // Fall back to cookies
-    const admin = await getAdminFromCookies()
+    const admin = await getAdminFromCookies(opts)
     if (admin) {
       return { admin }
     }
@@ -172,8 +172,20 @@ export async function getAdminFromRequest(request: Request): Promise<{ admin: Ad
   }
 }
 
+/**
+ * Two-step sign-in is required for every admin in production. Until an admin
+ * turns it on, only "who am I", MFA setup and logout accept their token
+ * (allowWithoutMfa). ADMIN_MFA_OPTIONAL=true in the environment lifts the
+ * requirement in an emergency, e.g. a lost phone.
+ */
+export function adminMfaRequired(): boolean {
+  return process.env.NODE_ENV === 'production' && process.env.ADMIN_MFA_OPTIONAL !== 'true'
+}
+
+type AdminLookupOptions = { allowWithoutMfa?: boolean }
+
 // Get admin from token (used with Authorization header)
-export async function getAdminFromToken(token: string): Promise<AdminUser | null> {
+export async function getAdminFromToken(token: string, opts: AdminLookupOptions = {}): Promise<AdminUser | null> {
   const payload = await verifyAdminToken(token)
   if (!payload || payload.type !== 'admin_access') return null
   
@@ -187,6 +199,7 @@ export async function getAdminFromToken(token: string): Promise<AdminUser | null
   if (adminResult.length === 0) return null
   
   const admin = adminResult[0]
+  if (!admin.mfa_enabled && adminMfaRequired() && !opts.allowWithoutMfa) return null
   const { roles, permissions } = await getAdminRolesAndPermissions(admin.id)
   
   return {
@@ -202,12 +215,12 @@ export async function getAdminFromToken(token: string): Promise<AdminUser | null
 }
 
 // Get admin from cookies (legacy, kept for backwards compatibility)
-export async function getAdminFromCookies(): Promise<AdminUser | null> {
+export async function getAdminFromCookies(opts: AdminLookupOptions = {}): Promise<AdminUser | null> {
   const cookieStore = await cookies()
   const accessToken = cookieStore.get(ADMIN_ACCESS_COOKIE)?.value
   
   if (!accessToken) return null
-  return getAdminFromToken(accessToken)
+  return getAdminFromToken(accessToken, opts)
 }
 
 // Get refresh token from cookies
@@ -394,14 +407,17 @@ export async function refreshAdminTokens(
 }
 
 // Logout admin
-export async function logoutAdmin(adminUserId: string) {
-  // Revoke all sessions
+/** End every session of this admin (their refresh tokens stop working). */
+export async function revokeAdminSessions(adminUserId: string) {
   await sql`
     UPDATE admin_sessions
     SET revoked_at = NOW(), revoked_reason = 'logout'
     WHERE admin_user_id = ${adminUserId} AND revoked_at IS NULL
   `
-  
+}
+
+export async function logoutAdmin(adminUserId: string) {
+  await revokeAdminSessions(adminUserId)
   await clearAdminAuthCookies()
 }
 

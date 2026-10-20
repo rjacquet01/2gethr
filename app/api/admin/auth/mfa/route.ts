@@ -6,13 +6,13 @@ import { adminMfaStatus, startAdminMfa, confirmAdminMfa, disableAdminMfa } from 
 // The signed-in admin's own two-step sign-in (authenticator app).
 // GET: status. POST { action: 'setup' | 'enable' (code) | 'disable' (password) }.
 export async function GET(request: NextRequest) {
-  const { admin } = await getAdminFromRequest(request)
+  const { admin } = await getAdminFromRequest(request, { allowWithoutMfa: true })
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   return NextResponse.json(await adminMfaStatus(admin.id))
 }
 
 export async function POST(request: NextRequest) {
-  const { admin } = await getAdminFromRequest(request)
+  const { admin } = await getAdminFromRequest(request, { allowWithoutMfa: true })
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await request.json().catch(() => ({}))
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || undefined

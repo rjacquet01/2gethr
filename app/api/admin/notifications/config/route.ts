@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { verifyAdminToken } from "@/lib/admin-auth"
+import { getAdminFromToken } from "@/lib/admin-auth"
 
 // POST - Save notification service configuration
 // Note: This endpoint provides guidance on configuring services via environment variables
@@ -12,7 +12,8 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.split(" ")[1]
-    const admin = await verifyAdminToken(token)
+    // The full check (active admin, access token, two-step sign-in), not just the signature.
+    const admin = await getAdminFromToken(token)
     if (!admin) {
       return NextResponse.json({ error: "Invalid admin token" }, { status: 401 })
     }

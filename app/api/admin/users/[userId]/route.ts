@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromToken, hasPermission, logAdminAction } from '@/lib/admin-auth'
-import { hashPassword, revokeAllUserTokens } from '@/lib/auth'
+import { revokeAllUserTokens } from '@/lib/auth'
 import { closeUserAccount } from '@/lib/account-closure'
 import { sql } from '@/lib/db'
-import crypto from 'crypto'
+import { sendPasswordResetLink } from '@/lib/password-reset'
 
 // Get user details
 export async function GET(
@@ -186,28 +186,27 @@ export async function PATCH(
     }
 
     if (action === 'reset_password') {
-      // Generate a temporary password and hash it with lib/auth.ts's
-      // hashPassword() (bcrypt cost 12), the same function/cost consumer
-      // signup and login use - this used to call bcrypt.hash(tempPassword, 10)
-      // directly, a weaker, inconsistent cost factor for the same kind of
-      // secret.
-      const tempPassword = crypto.randomBytes(8).toString('hex')
-      const hashedPassword = await hashPassword(tempPassword)
+      // Emails the user a one-hour reset link (the same one "Forgot password"
+      // sends). The admin never sees or sets a password, so this can't be used
+      // to sign in as someone.
+      const target = await sql`SELECT id, email, first_name, is_active FROM users WHERE id = ${userId}`
+      if (target.length === 0) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      }
+      if (String(target[0].email).startsWith('deleted-')) {
+        return NextResponse.json({ error: 'Account is closed' }, { status: 400 })
+      }
+      if (!target[0].is_active) {
+        return NextResponse.json({ error: 'Account is suspended. Unsuspend it first.' }, { status: 400 })
+      }
+      const sent = await sendPasswordResetLink({ id: target[0].id as string, email: target[0].email as string, first_name: target[0].first_name as string | null })
+      if (!sent) {
+        return NextResponse.json({ error: 'Email is not configured, so no reset link was sent' }, { status: 503 })
+      }
 
-      await sql`
-        UPDATE users SET password_hash = ${hashedPassword}, updated_at = NOW()
-        WHERE id = ${userId}
-      `
+      await logAdminAction(admin.id, 'SEND_PASSWORD_RESET', 'user', userId, { reason }, ipAddress, userAgent)
 
-      await logAdminAction(admin.id, 'RESET_USER_PASSWORD', 'user', userId, { reason }, ipAddress, userAgent)
-
-      // Return temp password - admin should communicate this to the user securely
-      return NextResponse.json({
-        success: true,
-        message: 'Password reset successfully',
-        tempPassword: tempPassword,
-        note: 'User should change this password immediately after logging in'
-      })
+      return NextResponse.json({ success: true, message: `Password reset link sent to ${target[0].email}` })
     }
 
     if (action === 'verify_email') {
