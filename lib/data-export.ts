@@ -1,6 +1,7 @@
 import { sql } from '@/lib/db'
 import { ensureSocialTables } from '@/lib/social'
 import { ensureBoardFlyerColumns } from '@/lib/board-flyers'
+import { ensureConsentSchema } from '@/lib/consent-schema'
 
 /**
  * Account data export ("data portability").
@@ -174,7 +175,8 @@ export async function collectUserExport(userId: Id, format = 'json'): Promise<Us
 
   await run('Child Profiles', 'Child profiles in families where you are a parent or guardian', async () =>
     (await sql`
-      SELECT cp.id, cp.display_name, cp.age, cp.grade, cp.school, cp.emergency_notes, cp.avatar_url,
+      SELECT cp.id, cp.display_name, cp.age, to_char(cp.date_of_birth, 'YYYY-MM-DD') AS date_of_birth,
+             cp.grade, cp.school, cp.emergency_notes, cp.avatar_url,
              f.name AS family_name, cp.created_at, cp.updated_at
       FROM child_profiles cp
       JOIN family_members fm ON fm.id = cp.family_member_id
@@ -184,6 +186,19 @@ export async function collectUserExport(userId: Id, format = 'json'): Promise<Us
       ORDER BY f.name, cp.display_name
     `) as ExportRow[]
   )
+
+  await run('Parental Consents', 'Consent you gave for your children, and consent given for you as a child', async () => {
+    await ensureConsentSchema()
+    return (await sql`
+      SELECT pc.scope, pc.consent_text_version, pc.consent_text, pc.granted_at, pc.withdrawn_at,
+             pc.ip_address, f.name AS family_name, cp.display_name AS child_name
+      FROM parental_consents pc
+      LEFT JOIN families f ON f.id = pc.family_id
+      LEFT JOIN child_profiles cp ON cp.family_member_id = pc.child_member_id
+      WHERE pc.parent_user_id = ${userId} OR pc.child_user_id = ${userId}
+      ORDER BY pc.granted_at DESC
+    `) as ExportRow[]
+  })
 
   await run('Location Settings', 'Your location sharing mode and interval', async () =>
     (await sql`

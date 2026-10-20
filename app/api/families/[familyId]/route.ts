@@ -6,6 +6,7 @@ import { childAgeInfo, GUEST_AGE_INFO } from "@/lib/age"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { removeFamilyFlyers } from "@/lib/board-flyers"
+import { deleteFamilyChildren } from "@/lib/parental-consent"
 
 const updateFamilySchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -320,6 +321,11 @@ export async function DELETE(
       SET status = 'CANCELLED', updated_at = NOW()
       WHERE family_id = ${familyId} AND status IN ('ACTIVE', 'TRIALING')
     `
+
+    // Children's data is deleted with the family, not just hidden: their
+    // profiles (name, birthdate, school, notes), location settings and, for a
+    // child login with no other family, the login itself.
+    await deleteFamilyChildren(familyId)
 
     // Unused invite codes for a deleted family must stop working.
     try {
