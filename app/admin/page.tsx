@@ -5,19 +5,20 @@ import { getAdminAccessToken } from '@/hooks/use-admin-auth'
 import Link from 'next/link'
 import {
   Users, Home, CreditCard, TicketIcon, AlertTriangle,
-  TrendingUp, Clock, ArrowRight, ArrowUpCircle
+  TrendingUp, Clock, ArrowRight
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { planName, describeTierCount, type TierBreakdown } from '@/lib/admin-tier-breakdown'
 
 interface DashboardStats {
   users: { total: number; active: number; newThisWeek: number; newThisMonth: number }
   families: { total: number; newThisWeek: number }
   subscriptions: { 
     total: number; active: number; trialing: number; pastDue: number; cancelled: number
-    byTier: Record<string, number>
+    byTier: Partial<TierBreakdown>
   }
   tickets: { 
     total: number; open: number; inProgress: number; waitingUser: number
@@ -184,22 +185,6 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* Quick links */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Link href="/admin/upgrades">
-          <Card className="hover:bg-muted/50 transition-colors">
-            <CardContent className="flex items-center gap-3 py-4">
-              <ArrowUpCircle className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="font-medium text-sm">Upgrade Requests</p>
-                <p className="text-xs text-muted-foreground">Review pending subscription upgrade requests</p>
-              </div>
-              <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground" />
-            </CardContent>
-          </Card>
-        </Link>
-      </div>
-
       {/* Secondary stats */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
@@ -207,18 +192,13 @@ export default function AdminDashboard() {
             <CardTitle className="text-base">Subscription Breakdown</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Premium Plus</span>
-              <Badge variant="secondary">{stats.subscriptions.byTier?.PREMIUM_PLUS || 0}</Badge>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Premium</span>
-              <Badge variant="secondary">{stats.subscriptions.byTier?.PREMIUM || 0}</Badge>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Free</span>
-              <Badge variant="secondary">{stats.subscriptions.byTier?.FREE || 0}</Badge>
-            </div>
+            {(['PREMIUM_PLUS', 'PREMIUM', 'FREE'] as const).map((tier) => (
+              <div key={tier} className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">{planName(tier)}</span>
+                <Badge variant="secondary">{describeTierCount(tier, stats.subscriptions.byTier?.[tier])}</Badge>
+              </div>
+            ))}
+            <p className="text-xs text-muted-foreground">Families by the plan they currently have; expired trials count as Free.</p>
             {stats.subscriptions.pastDue > 0 && (
               <div className="flex justify-between items-center pt-2 border-t">
                 <span className="text-sm text-destructive">Past Due</span>

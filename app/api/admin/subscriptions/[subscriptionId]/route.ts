@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromToken, hasPermission, logAdminAction } from '@/lib/admin-auth'
 import { sql } from '@/lib/db'
 import { stripe, getPriceId } from '@/lib/stripe'
-import { TRIAL_DAYS } from '@/lib/subscription-tiers'
+import { TRIAL_DAYS, getTierDefinition } from '@/lib/subscription-tiers'
 
 // History is an audit nicety: a failure to write it must never fail the change.
 async function safeHistory(run: () => Promise<unknown>) {
@@ -101,7 +101,7 @@ export async function PATCH(
         ticketId,
       }, ipAddress, userAgent, ticketId))
       
-      return NextResponse.json({ success: true, message: `Tier changed to ${tier}` })
+      return NextResponse.json({ success: true, message: `Tier changed to ${getTierDefinition(tier).name}` })
     }
     
     if (action === 'grant_trial') {
