@@ -1,7 +1,7 @@
 import { createNotification } from '@/lib/notifications'
 import { ensureAssignmentColumns, isSupervisorRole, needsParentToApprove, getParentUserIds, assigneesInFamily } from '@/lib/assignment'
 import { NextRequest, NextResponse } from 'next/server'
-import { sql } from '@/lib/db'
+import { sql, type Row } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
 import { filterTasksForGuest } from '@/lib/guest-scope'
@@ -22,10 +22,10 @@ export async function GET(request: NextRequest) {
     const assignedTo = searchParams.get('assignedTo')
     
     // Get user's family memberships
-    const memberships = await sql`
+    const memberships = (await sql`
       SELECT fm.family_id, fm.role FROM family_members fm
       WHERE fm.user_id = ${user.id} AND fm.is_active = true
-    `
+    `) as Row<{ family_id: string }>[]
     
     if (memberships.length === 0) {
       return NextResponse.json({ data: [] })

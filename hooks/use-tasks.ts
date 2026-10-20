@@ -29,6 +29,20 @@ interface Task {
   child_display_name: string | null
   child_avatar_url: string | null
   family_name: string
+  is_recurring?: boolean | null
+  recurrence_rule?: string | null
+  /** Not a tasks column: the edit page's "requires approval" toggle isn't stored yet, so this is always absent. */
+  requires_approval?: boolean
+  /** Not a tasks column either; always absent. */
+  reminder_at?: string | null
+}
+
+export interface TaskHistoryEntry {
+  id: string
+  first_name: string
+  last_name: string
+  action: string
+  created_at: string
 }
 
 const fetcher = async (url: string) => {
@@ -60,7 +74,7 @@ export function useTasks(familyId?: string, status?: string) {
 }
 
 export function useTask(taskId: string) {
-  const { data, error, isLoading, mutate } = useSWR<{ data: Task & { history: unknown[], comments: unknown[] } }>(
+  const { data, error, isLoading, mutate } = useSWR<{ data: Task & { history: TaskHistoryEntry[], comments: unknown[] } }>(
     taskId ? `/api/tasks/${taskId}` : null,
     fetcher
   )

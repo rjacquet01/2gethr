@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
-import { syncGoogleConnection, syncAppleConnection } from "@/lib/services/calendar-sync-core"
-import { syncAppleReminders } from "@/lib/services/apple-reminders-sync"
+import { syncGoogleConnection, syncAppleConnection, type GoogleConnectionRow, type AppleConnectionRow } from "@/lib/services/calendar-sync-core"
+import { syncAppleReminders, type AppleTaskConnectionRow } from "@/lib/services/apple-reminders-sync"
 import { ensureSyncSchema } from "@/lib/sync-schema"
 
 // Runs every 5 minutes (see vercel.json). For every enabled calendar-sync
@@ -69,14 +69,14 @@ export async function GET(request: NextRequest) {
 
       try {
         if (conn.provider === "google") {
-          await syncGoogleConnection(conn, conn.family_id, conn.user_id)
+          await syncGoogleConnection(conn as GoogleConnectionRow, conn.family_id, conn.user_id)
         } else if (conn.provider === "apple") {
           // A row with no external calendar is just the subscription link
           // (nothing to sync server-side).
           if (!conn.external_calendar_id) continue
-          await syncAppleConnection(conn, conn.family_id, conn.user_id)
+          await syncAppleConnection(conn as AppleConnectionRow, conn.family_id, conn.user_id)
           if (conn.sync_tasks && conn.apple_task_calendar_url) {
-            await syncAppleReminders(conn, conn.family_id, conn.user_id)
+            await syncAppleReminders(conn as AppleTaskConnectionRow, conn.family_id, conn.user_id)
           }
         } else {
           continue

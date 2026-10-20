@@ -1,6 +1,6 @@
 import { ensureEventParticipantChildColumns } from '@/lib/assignment'
 import { NextRequest, NextResponse } from 'next/server'
-import { sql } from '@/lib/db'
+import { sql, type Row } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { guestForbidden } from '@/lib/permissions'
 import { ensureMemberAppearanceColumns } from '@/lib/member-appearance'
@@ -36,7 +36,7 @@ export async function GET(
     const viewerIsAdult = membership[0].role === 'PARENT' || membership[0].role === 'GUARDIAN'
 
     // Get all family members with their tasks and upcoming events
-    const members = await sql`
+    const members = (await sql`
       SELECT 
         fm.id as member_id,
         fm.user_id,
@@ -57,10 +57,10 @@ export async function GET(
           ELSE 5
         END,
         fm.created_at
-    `
+    `) as Row<{ member_id: string; user_id: string | null; role: string; color: string | null; emoji: string | null; first_name: string | null; last_name: string | null; avatar_url: string | null; display_name: string | null }>[]
 
     // Get child profiles
-    const children = await sql`
+    const children = (await sql`
       SELECT 
         cp.id as child_id,
         cp.display_name,
@@ -69,10 +69,10 @@ export async function GET(
       FROM child_profiles cp
       JOIN family_members fm ON cp.family_member_id = fm.id
       WHERE fm.family_id = ${familyId} AND fm.is_active = true AND fm.role = 'CHILD'
-    `
+    `) as Row<{ child_id: string; display_name: string; avatar_url: string | null; family_member_id: string; color: string | null; emoji: string | null }>[]
 
     // Get tasks for all members (assigned tasks and child tasks)
-    const tasks = await sql`
+    const tasks = (await sql`
       SELECT 
         t.id,
         t.title,
@@ -88,11 +88,11 @@ export async function GET(
       -- Open tasks only: archived/approved ones were counted as open before.
       AND UPPER(t.status) NOT IN ('COMPLETED', 'APPROVED', 'CANCELLED', 'ARCHIVED')
       ORDER BY t.due_date ASC NULLS LAST, t.priority DESC
-    `
+    `) as Row<{ id: string; assigned_to_id: string | null; child_profile_id: string | null }>[]
 
     // Get upcoming events (next 7 days) with participants
     await ensureEventParticipantChildColumns()
-    const upcomingEvents = await sql`
+    const upcomingEvents = (await sql`
       SELECT 
         e.id,
         e.title,
@@ -115,18 +115,18 @@ export async function GET(
            OR (e.visibility = 'SELECTED_MEMBERS' AND EXISTS (
                  SELECT 1 FROM event_participants me WHERE me.event_id = e.id AND me.user_id = ${user.id})))
       ORDER BY e.start_time ASC
-    `
+    `) as Row<{ id: string; participant_user_id: string | null; participant_child_id: string | null }>[]
 
     // Pending reminders. Privacy: a reminder set for a child is visible to
     // parents/guardians (and the child's own login); anyone else's personal
     // reminder is visible only to the person it's for and whoever created it.
-    const reminderRows = await sql`
+    const reminderRows = (await sql`
       SELECT id, title, remind_at, user_id, created_by_id, child_profile_id,
              notify_channels, is_recurring, recurrence_rule
       FROM reminders
       WHERE family_id = ${familyId} AND status = 'PENDING'
       ORDER BY remind_at ASC
-    `
+    `) as Row<{ user_id: string; created_by_id: string; child_profile_id: string | null }>[]
     type ReminderRow = { user_id: string; created_by_id: string; child_profile_id: string | null }
     const visibleReminders = reminderRows.filter((r: ReminderRow) =>
       r.child_profile_id
@@ -135,33 +135,25 @@ export async function GET(
     )
 
     // Build member activity map
-    const memberActivities = members.map((member: {
-      member_id: string
-      user_id: string
-      role: string
-      first_name: string
-      last_name: string
-      avatar_url: string
-      display_name: string
-    }) => {
+    const memberActivities = members.map((member) => {
       // Get tasks assigned to this user
-      const memberTasks = tasks.filter((t: { assigned_to_id: string }) => 
+      const memberTasks = tasks.filter((t) =>
         t.assigned_to_id === member.user_id
       )
 
       // Get events this user is participating in
-      const memberEvents = upcomingEvents.filter((e: { participant_user_id: string }) => 
+      const memberEvents = upcomingEvents.filter((e) =>
         e.participant_user_id === member.user_id
       )
 
       // Find child profile if this member has one
-      const childProfile = children.find((c: { family_member_id: string }) => 
+      const childProfile = children.find((c) =>
         c.family_member_id === member.member_id
       )
 
       // Get tasks assigned to child profile
       const childTasks = childProfile 
-        ? tasks.filter((t: { child_profile_id: string }) => t.child_profile_id === childProfile.child_id)
+        ? tasks.filter((t) => t.child_profile_id === childProfile.child_id)
         : []
 
       const memberReminders = visibleReminders.filter((r: ReminderRow) =>
@@ -190,23 +182,16 @@ export async function GET(
     })
 
     // Also add standalone child profiles (those without linked users)
-    const standaloneChildren = children.filter((child: { family_member_id: string }) => {
-      const linkedMember = members.find((m: { member_id: string }) => m.member_id === child.family_member_id)
-      return !linkedMember?.user_id && !memberActivities.some((a: { memberId: string }) => a.memberId === child.family_member_id)
+    const standaloneChildren = children.filter((child) => {
+      const linkedMember = members.find((m) => m.member_id === child.family_member_id)
+      return !linkedMember?.user_id && !memberActivities.some((a) => a.memberId === child.family_member_id)
     })
 
-    standaloneChildren.forEach((child: {
-      child_id: string
-      display_name: string
-      avatar_url: string
-      family_member_id: string
-      color?: string
-      emoji?: string
-    }) => {
-      const childTasks = tasks.filter((t: { child_profile_id: string }) => t.child_profile_id === child.child_id)
+    standaloneChildren.forEach((child) => {
+      const childTasks = tasks.filter((t) => t.child_profile_id === child.child_id)
       const childReminders = visibleReminders.filter((r: ReminderRow) => r.child_profile_id === child.child_id)
       const seenEvents = new Set<string>()
-      const childEvents = upcomingEvents.filter((e: { id: string; participant_child_id: string | null }) => {
+      const childEvents = upcomingEvents.filter((e) => {
         if (e.participant_child_id !== child.child_id || seenEvents.has(e.id)) return false
         seenEvents.add(e.id)
         return true

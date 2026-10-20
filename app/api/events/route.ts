@@ -281,7 +281,7 @@ export async function GET(request: NextRequest) {
     
     if (eventIds.length > 0) {
       await ensureEventParticipantChildColumns()
-      participants = await sql`
+      participants = (await sql`
         SELECT 
           ep.event_id, ep.user_id, ep.child_profile_id, ep.status,
           u.first_name, u.last_name, cp.display_name AS child_name
@@ -289,7 +289,7 @@ export async function GET(request: NextRequest) {
         LEFT JOIN users u ON ep.user_id = u.id
         LEFT JOIN child_profiles cp ON ep.child_profile_id = cp.id
         WHERE ep.event_id = ANY(${eventIds})
-      `
+      `) as typeof participants
     }
 
     // Group participants by event
@@ -534,7 +534,7 @@ export async function POST(request: NextRequest) {
     // rest are copied from it after it is inserted. (The form used to send
     // isRecurring/recurrenceRule, which this route silently dropped, so
     // "recurring" events were only ever created once.)
-    let recurrenceInput: RecurrenceInput | null = validatedData.recurrence
+    const recurrenceInput: RecurrenceInput | null = validatedData.recurrence
       ? {
           frequency: validatedData.recurrence.frequency,
           interval: validatedData.recurrence.interval,

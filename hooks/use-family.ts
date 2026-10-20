@@ -196,7 +196,7 @@ export function useFamilies() {
   }
 }
 
-export function useFamily(familyId: string | null) {
+export function useFamily(familyId: string | null | undefined) {
   const { data, error, isLoading, mutate } = useSWR<{ family: Family }>(
     familyId ? `/api/families/${familyId}` : null,
     fetcher

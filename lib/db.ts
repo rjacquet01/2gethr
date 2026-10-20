@@ -16,4 +16,11 @@ export const sql = new Proxy(client, {
   get: (target, prop) => Reflect.get(testOverride ?? target, prop),
 }) as typeof client
 
+/**
+ * A query row with the columns the caller relies on spelled out; any other
+ * selected column is still there, untyped. Use as `(await sql`...`) as Row<{ id: string }>[]`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type Row<T> = Record<string, any> & T
+
 export default sql

@@ -7,6 +7,7 @@ const SubscriptionTier = {
   PREMIUM: "PREMIUM",
   PREMIUM_PLUS: "PREMIUM_PLUS",
 } as const
+type TierValue = (typeof SubscriptionTier)[keyof typeof SubscriptionTier]
 
 const SubscriptionStatus = {
   ACTIVE: "ACTIVE",
@@ -15,6 +16,7 @@ const SubscriptionStatus = {
   EXPIRED: "EXPIRED",
   TRIALING: "TRIALING",
 } as const
+type StatusValue = (typeof SubscriptionStatus)[keyof typeof SubscriptionStatus]
 
 // Premium feature definitions
 export const PREMIUM_FEATURES = {
@@ -144,7 +146,7 @@ export async function getFamilyPremiumAccess(familyId: string): Promise<{
     hasPremium: isActive && effectiveTier !== SubscriptionTier.FREE,
     tier: effectiveTier,
     features: TIER_FEATURES[effectiveTier] || [],
-    limits: TIER_LIMITS[effectiveTier] || TIER_LIMITS[SubscriptionTier.FREE],
+    limits: TIER_LIMITS[effectiveTier as TierValue] || TIER_LIMITS[SubscriptionTier.FREE],
   }
 }
 
@@ -195,7 +197,7 @@ export function normalizeSubscriptionStatus(
   const now = Date.now()
   
   // Determine tier from product ID
-  let tier = SubscriptionTier.FREE
+  let tier: TierValue = SubscriptionTier.FREE
   if (purchase.productId.includes("premium_plus")) {
     tier = SubscriptionTier.PREMIUM_PLUS
   } else if (purchase.productId.includes("premium")) {
@@ -203,7 +205,7 @@ export function normalizeSubscriptionStatus(
   }
   
   // Determine status
-  let status = SubscriptionStatus.ACTIVE
+  let status: StatusValue = SubscriptionStatus.ACTIVE
   const expiryTime = purchase.expiryTime || 0
   
   if (expiryTime && expiryTime < now) {

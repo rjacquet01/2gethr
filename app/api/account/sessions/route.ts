@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
-import { sql } from "@/lib/db"
+import { sql, type Row } from '@/lib/db'
 import { getUserFromRequest } from "@/lib/auth"
 
 // GET - List the current user's active (non-revoked, non-expired) sessions,
@@ -17,14 +17,14 @@ export async function GET(request: NextRequest) {
     const cookieStore = await cookies()
     const currentRefreshToken = cookieStore.get("refresh_token")?.value
 
-    const sessions = await sql`
+    const sessions = (await sql`
       SELECT id, token, user_agent, ip_address, created_at, expires_at
       FROM refresh_tokens
       WHERE user_id = ${user.id}
         AND revoked_at IS NULL
         AND expires_at > NOW()
       ORDER BY created_at DESC
-    `
+    `) as Row<{ id: string; token: string; user_agent: string | null; ip_address: string | null; created_at: string; expires_at: string }>[]
 
     const data = sessions.map((s: {
       id: string

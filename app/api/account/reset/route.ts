@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { neon } from '@neondatabase/serverless'
+import type { Row } from '@/lib/db'
 import { verifyAccessToken, getUserById } from '@/lib/auth'
 
 const sql = neon(process.env.DATABASE_URL!)
@@ -45,9 +46,9 @@ export async function POST(request: Request) {
     }
 
     // Get user's family memberships
-    const memberships = await sql`
+    const memberships = (await sql`
       SELECT family_id FROM family_members WHERE user_id = ${user.id}
-    `
+    `) as Row<{ family_id: string }>[]
     const familyIds = memberships.map((m: { family_id: string }) => m.family_id)
 
     // Delete user data in order (respecting foreign keys)

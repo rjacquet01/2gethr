@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
-import { syncAppleConnection } from '@/lib/services/calendar-sync-core'
+import { syncAppleConnection, type AppleConnectionRow } from '@/lib/services/calendar-sync-core'
 import { defaultFamilyFor } from '@/lib/permissions'
 
 // POST - Manually trigger Apple Calendar sync (also called by the
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     const familyId = familyMembership[0].family_id
 
-    const { imported, exported } = await syncAppleConnection(connection, familyId, user.id)
+    const { imported, exported } = await syncAppleConnection(connection as AppleConnectionRow, familyId, user.id)
 
     return NextResponse.json({
       success: true,

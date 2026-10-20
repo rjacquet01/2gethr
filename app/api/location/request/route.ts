@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     // Limit pings per person per hour: parents/guardians/adults 5, children 2.
     const requesterRole = membership[0].role as string
-    const limit = ["PARENT", "GUARDIAN", "ADULT", "ADMIN"].includes(requesterRole) ? PING_LIMIT_ADULT : PING_LIMIT_CHILD
+    const limit: number = ["PARENT", "GUARDIAN", "ADULT", "ADMIN"].includes(requesterRole) ? PING_LIMIT_ADULT : PING_LIMIT_CHILD
     const recent = await sql`
       SELECT created_at FROM location_requests
       WHERE requester_user_id = ${user.id} AND target_user_id = ${membership[0].target_user_id}

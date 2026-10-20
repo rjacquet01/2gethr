@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { sql } from "@/lib/db"
+import { sql, type Row } from '@/lib/db'
 import { sendEmail, EMAIL_TEMPLATES } from "@/lib/services/email"
 
 // Verify the request is from Vercel Cron
@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
         // went unnoticed). APPROVED is the status normal, non-rejected,
         // non-cancelled events end up with - same fix already applied to
         // the event-reminder cron's 'CONFIRMED' typo.
-        const familyEvents = await sql`
+        const familyEvents = (await sql`
           SELECT
             e.id, e.title, e.start_time, e.end_time, e.location,
             e.is_all_day, c.name as calendar_name
@@ -134,10 +134,10 @@ export async function GET(request: NextRequest) {
           AND e.start_time <= ${endOfWeek.toISOString()}
           ORDER BY e.start_time ASC
           LIMIT 20
-        `
+        `) as Row<{ title: string; start_time: string; location?: string }>[]
 
         // Get tasks summary for the past week
-        const tasksSummary = await sql`
+        const tasksSummary = (await sql`
           SELECT
             COALESCE(COUNT(*) FILTER (WHERE status = 'COMPLETED'), 0)::int as completed,
             COALESCE(COUNT(*) FILTER (WHERE status = 'PENDING'), 0)::int as pending,
@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
           WHERE family_id = ${user.family_id}
           AND (assignment_status IS NULL OR assignment_status = 'ACCEPTED')
           AND created_at >= NOW() - INTERVAL '7 days'
-        `
+        `) as Row<{ completed: number; pending: number; overdue: number }>[]
 
         const tasks = tasksSummary[0] || { completed: 0, pending: 0, overdue: 0 }
 

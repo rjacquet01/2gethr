@@ -228,7 +228,7 @@ export default function AdminDigestPage() {
             </p>
           </div>
         </div>
-        <Button onClick={loadStats} variant="outline" size="sm">
+        <Button onClick={() => loadStats(true)} variant="outline" size="sm">
           <RefreshCw className="h-4 w-4 mr-2" />
           Refresh
         </Button>

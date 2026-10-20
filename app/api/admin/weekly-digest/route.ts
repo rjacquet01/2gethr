@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { sql } from "@/lib/db"
+import { sql, type Row } from '@/lib/db'
 import { getAdminFromRequest, hasPermission, logAdminAction } from "@/lib/admin-auth"
 import { sendEmail, EMAIL_TEMPLATES } from "@/lib/services/email"
 
@@ -86,6 +86,8 @@ export async function GET(request: NextRequest) {
 
 // POST - Send weekly digest emails
 // Restricted to SUPER_ADMIN since this mass-emails every parent/guardian.
+type DigestUser = { id: string; email: string; first_name: string; last_name: string; family_name: string; family_id: string | null }
+
 export async function POST(request: NextRequest) {
   try {
     const { admin, error } = await getAdminFromRequest(request)
@@ -105,7 +107,7 @@ export async function POST(request: NextRequest) {
     const { testMode = false, testEmail = null } = body
 
     // Get users with weekly digest enabled (parents/guardians only)
-    const digestUsers = await sql`
+    const digestUsers = (await sql`
       SELECT
         u.id,
         u.email,
@@ -119,7 +121,7 @@ export async function POST(request: NextRequest) {
       WHERE u.is_active = true
       AND fm.is_active = true
       AND fm.role IN ('PARENT', 'GUARDIAN')
-    `
+    `) as DigestUser[]
 
     const startOfWeek = new Date()
     const endOfWeek = new Date()
@@ -134,11 +136,11 @@ export async function POST(request: NextRequest) {
     }
 
     // For test mode, create a test user object if the email isn't in the eligible list
-    let usersToProcess: Array<{ id: string; email: string; first_name: string; last_name: string; family_name: string; family_id: string }>
+    let usersToProcess: DigestUser[]
 
     if (testMode && testEmail) {
       // Check if test email exists in eligible users
-      const existingUser = digestUsers.find((u: { email: string }) => u.email === testEmail)
+      const existingUser = digestUsers.find((u) => u.email === testEmail)
       if (existingUser) {
         usersToProcess = [existingUser]
       } else {
@@ -168,7 +170,7 @@ export async function POST(request: NextRequest) {
         // Only query database if we have a valid family_id
         if (user.family_id) {
           // Get upcoming events for this user's family
-          familyEvents = await sql`
+          familyEvents = (await sql`
             SELECT
               e.id, e.title, e.start_time, e.end_time, e.location,
               e.is_all_day, c.name as calendar_name
@@ -180,10 +182,10 @@ export async function POST(request: NextRequest) {
             AND e.start_time <= ${endOfWeek.toISOString()}
             ORDER BY e.start_time ASC
             LIMIT 20
-          `
+          `) as typeof familyEvents
 
           // Get recent tasks summary
-          tasksSummary = await sql`
+          tasksSummary = (await sql`
             SELECT
               COUNT(*) FILTER (WHERE status = 'COMPLETED') as completed,
               COUNT(*) FILTER (WHERE status = 'PENDING') as pending,
@@ -191,7 +193,7 @@ export async function POST(request: NextRequest) {
             FROM tasks
             WHERE family_id = ${user.family_id}
             AND created_at >= NOW() - INTERVAL '7 days'
-          `
+          `) as typeof tasksSummary
         } else {
           // Test mode with no family - use sample data
           familyEvents = [

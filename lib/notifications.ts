@@ -1,4 +1,4 @@
-import { sql } from "@/lib/db"
+import { sql, type Row } from '@/lib/db'
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
 import { sendEmail, isResendConfigured, EMAIL_TEMPLATES } from "@/lib/services/email"
 import { sendSMSMetered, isTwilioConfigured } from "@/lib/services/sms"
@@ -485,8 +485,8 @@ export async function checkAndNotifyEventReminders(): Promise<{ notified: number
     `
     
     const usersToNotify = new Set<string>()
-    participants.forEach((p: { user_id: string }) => usersToNotify.add(p.user_id))
-    members.forEach((m: { user_id: string }) => usersToNotify.add(m.user_id))
+    participants.forEach((p) => usersToNotify.add(p.user_id as string))
+    members.forEach((m) => usersToNotify.add(m.user_id as string))
     
     const startTime = new Date(event.start_time)
     const timeText = startTime.toLocaleTimeString('en-US', { 
@@ -647,8 +647,8 @@ export async function checkAndNotifyUpcomingDueDates(): Promise<{
     `
     
     const usersToNotify = new Set<string>()
-    members.forEach((m: { user_id: string }) => usersToNotify.add(m.user_id))
-    participants.forEach((p: { user_id: string }) => usersToNotify.add(p.user_id))
+    members.forEach((m) => usersToNotify.add(m.user_id as string))
+    participants.forEach((p) => usersToNotify.add(p.user_id as string))
     
     const timeText = hoursUntilEvent <= 1 
       ? 'in less than an hour' 

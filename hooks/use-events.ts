@@ -32,6 +32,21 @@ export interface Event {
   createdAt: string
   participants?: EventParticipant[]
   recurrenceRule?: RecurrenceRule | null
+  // Also sent by the events API (app/api/events):
+  customColor?: string | null
+  isRecurring?: boolean
+  /** Alias of recurrenceRuleId (single-event route). */
+  recurrenceId?: string | null
+  /** Single-event route: the recurrence pattern, or null. */
+  recurrence?: {
+    frequency: string | null
+    interval: number | null
+    daysOfWeek: string[] | null
+    dayOfMonth: number | null
+    monthOfYear: number | null
+    endDate: string | null
+    occurrenceCount: number | null
+  } | null
 }
 
 export interface EventParticipant {

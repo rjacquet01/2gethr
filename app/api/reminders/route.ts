@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sql } from '@/lib/db'
+import { sql, type Row } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { createNotification, type NotificationChannel } from '@/lib/notifications'
 import { getHistoryDays } from '@/lib/history-limit'
@@ -29,10 +29,10 @@ export async function GET(request: NextRequest) {
     // Restrict to families the user actually belongs to (same guard as
     // /api/tasks) so a client-supplied familyId can't be used to read
     // another family's reminders.
-    const memberships = await sql`
+    const memberships = (await sql`
       SELECT family_id FROM family_members
       WHERE user_id = ${user.id} AND is_active = true
-    `
+    `) as Row<{ family_id: string }>[]
     const myFamilyIds = memberships.map((m: { family_id: string }) => m.family_id)
     if (familyId && !myFamilyIds.includes(familyId)) {
       return NextResponse.json({ error: 'Family not found or access denied' }, { status: 403 })
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
     // statusFilter is computed above in JS (never conditionally spliced
     // SQL), and r.status = ANY(...) against it needs no "IS NULL OR" at
     // all, so the same bug class doesn't apply there either.
-    const reminders = await sql`
+    const reminders = (await sql`
       SELECT r.*,
              u_creator.first_name as creator_first_name, u_creator.last_name as creator_last_name,
              u_owner.first_name as owner_first_name, u_owner.last_name as owner_last_name,
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
         AND r.status = ANY(${statusFilter})
         AND (${familyId || null}::text IS NULL OR r.family_id = ${familyId || null})
       ORDER BY r.remind_at ASC
-    `
+    `) as Row<{ family_id: string; updated_at: string }>[]
 
     // The archive view only reaches back as far as the family's plan allows
     // (hidden, not deleted).

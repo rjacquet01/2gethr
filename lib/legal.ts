@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { createHash } from "crypto"
-import { sql } from "./db"
+import { sql, type Row } from "./db"
 import { getAdminFromRequest, logAdminAction, type AdminUser } from "./admin-auth"
 
 // Legal requests (subpoena / warrant / court order / emergency).
@@ -201,7 +201,7 @@ export function mapCase(c: any) {
 }
 
 export async function getCase(id: string) {
-  const r = await sql`SELECT * FROM legal_cases WHERE id = ${id} LIMIT 1`
+  const r = (await sql`SELECT * FROM legal_cases WHERE id = ${id} LIMIT 1`) as Row<{ status: string; access_expires_at: string | null }>[]
   return r[0] || null
 }
 
