@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/hooks/use-auth'
 import { useNotifications } from '@/hooks/use-notifications'
 import { useMyRole } from '@/hooks/use-my-role'
+import { markChildDevice } from '@/components/privacy-analytics'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -87,8 +88,13 @@ export default function DashboardLayout({
   const { user, isLoading, isAuthenticated, logout } = useAuth()
   const { unreadCount } = useNotifications()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const { isGuest } = useMyRole()
+  const { isGuest, isChild, role } = useMyRole()
   const visibleNavItems = isGuest ? navItems.filter((item) => !GUEST_HIDDEN_HREFS.has(item.href)) : navItems
+
+  // No analytics from a child's device (components/privacy-analytics.tsx).
+  useEffect(() => {
+    if (role) markChildDevice(isChild)
+  }, [role, isChild])
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
