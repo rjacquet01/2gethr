@@ -148,20 +148,45 @@ export default function PrivacyPage() {
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">6. Children's privacy</h2>
             <p>
-              The Service is designed for families and is not directed to children to use on their own.
-              Only a parent or legal guardian can create a child profile or a child account. A parent can
-              create an account for a child aged 8 or older, and by doing so confirms that they are the
-              child's parent or legal guardian and consent to the collection and use of the child's
-              information as described here, including for a child under 13. We record that consent.
+              <strong>Togethr is for adults 18 and older.</strong> Only an adult can create their own
+              account, and they confirm they are 18 or older when they sign up. We do not knowingly collect
+              personal information from anyone under 13 without verifiable consent from their parent.
             </p>
             <p>
-              We collect only what is needed to run the Service for the child (such as name, date of
-              birth, and the calendar, tasks and messages the family creates). We do not use children's
-              information for advertising and do not sell it. A child's location is off by default and is
-              enabled only by the parent. Child accounts have restricted permissions. A parent can review,
-              correct, export or delete their child's information, or withdraw consent, at any time in the
-              app or by contacting <Contact />. If we learn we collected information from a child under 13
-              without parental consent, we will delete it.
+              <strong>Only a parent can add a child.</strong> A parent or legal guardian adds a child to
+              their family from inside the app. A child can never create an account or join a family on
+              their own, and an invite code can never create a child's account. A parent can also give a
+              child aged 8 or older their own login, using a one-time code the parent creates.
+            </p>
+            <p><strong>What we collect from a child, only after a parent agrees:</strong></p>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>Their name and date of birth, and their school, grade or notes only if the parent adds them</li>
+              <li>The calendar events, tasks, messages and board posts the family creates</li>
+              <li>If the parent gives them their own login: an email address and password to sign in (no phone number)</li>
+              <li>Their location only if a parent turns it on. It is off by default</li>
+            </ul>
+            <p>
+              <strong>No ads, no selling, no third-party tracking.</strong> We do not show ads, do not sell
+              children's information, and do not use it for anything other than running the family
+              features. Our page-view analytics is turned off on a device once a child signs in there. The
+              service providers in section 5 process data only to run the Service for us.
+            </p>
+            <p>
+              <strong>How consent is recorded.</strong> Before a child is added, the parent sees a short
+              notice of what we collect and must tick a consent box (it starts unticked). We record who gave
+              consent, for which child, when, from which IP address, and the exact text they agreed to.
+            </p>
+            <p>
+              <strong>Parents' rights.</strong> A parent can review their child's information, change or
+              delete it, export it, refuse further collection, or withdraw consent at any time: in the app
+              (Family, then the child's Consent button), or by emailing <Contact />. Withdrawing consent
+              deletes the child's profile, their login if they have one, and their location data. Events and
+              tasks the family created stay with the family.
+            </p>
+            <p>
+              <strong>If a child signed up without a parent.</strong> If we learn that a child under 13 has
+              given us personal information without a parent's consent (for example, someone tells us so),
+              we will delete that information and the account. You can report it to <Contact />.
             </p>
             <p>
               When a child turns 18, they become an adult member with their own controls, and location
