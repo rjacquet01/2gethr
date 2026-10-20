@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { stripe, getTierFromPriceId } from "@/lib/stripe"
 import { notifyAdmin, EMAIL_TEMPLATES } from "@/lib/services/email"
+import { handleChargeRefunded, handleDisputeClosed, handleDisputeCreated } from "@/lib/stripe-disputes"
 import type Stripe from "stripe"
 
 // Looks up the family name and the owning user's email for the admin
@@ -36,6 +37,10 @@ async function getFamilyOwnerInfo(familyId: string): Promise<{ familyName: strin
 //  - customer.subscription.deleted
 //  - invoice.paid
 //  - invoice.payment_failed
+//  - charge.dispute.created  (admin alert + history note; tier unchanged)
+//  - charge.dispute.closed   (admin alert; lost marks the payment; tier unchanged)
+//  - charge.refunded         (payment row updated + admin alert; tier unchanged)
+// (lib/stripe-disputes.ts)
 
 export async function POST(request: NextRequest) {
   const signature = request.headers.get("stripe-signature")
@@ -105,6 +110,18 @@ export async function POST(request: NextRequest) {
         await recordInvoicePayment(invoice, "FAILED")
         break
       }
+
+      case "charge.dispute.created":
+        await handleDisputeCreated(event.data.object as Stripe.Dispute, event.livemode)
+        break
+
+      case "charge.dispute.closed":
+        await handleDisputeClosed(event.data.object as Stripe.Dispute, event.livemode)
+        break
+
+      case "charge.refunded":
+        await handleChargeRefunded(event.data.object as Stripe.Charge, event.livemode)
+        break
 
       default:
         // Unhandled event types are fine to ignore — we only listen for
