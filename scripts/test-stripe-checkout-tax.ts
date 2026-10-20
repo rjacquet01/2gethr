@@ -2,6 +2,8 @@
 // Checkout Session params with STRIPE_TAX_ENABLED off (exactly the pre-tax
 // session) and on. Pure function, no Stripe calls.
 import assert from "node:assert"
+import fs from "node:fs"
+import path from "node:path"
 import { buildCheckoutSessionParams, subscriptionUpdateTaxParams, stripeTaxEnabled } from "../lib/stripe-checkout"
 
 let passed = 0
@@ -61,5 +63,30 @@ for (const v of [undefined, "true"]) {
   assert.ok(!("payment_method_types" in buildCheckoutSessionParams(opts)))
 }
 ok("never sets payment_method_types, flag on or off")
+
+// Prices are tax-inclusive in the Stripe Dashboard: code must never set
+// tax_behavior (or create prices) anywhere, flag on or off.
+{
+  const hasTaxBehavior = (x: unknown): boolean =>
+    !!x && typeof x === "object" && Object.entries(x as Record<string, unknown>).some(([k, v]) => k === "tax_behavior" || hasTaxBehavior(v))
+  for (const v of [undefined, "true"]) {
+    if (v === undefined) delete process.env.STRIPE_TAX_ENABLED
+    else process.env.STRIPE_TAX_ENABLED = v
+    assert.ok(!hasTaxBehavior(buildCheckoutSessionParams(opts)), "no tax_behavior in session params")
+    assert.ok(!hasTaxBehavior(subscriptionUpdateTaxParams()), "no tax_behavior in plan-switch params")
+  }
+  const files: string[] = []
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name)
+      if (e.isDirectory()) walk(p)
+      else if (/\.(ts|tsx)$/.test(e.name)) files.push(p)
+    }
+  }
+  for (const d of ["app", "lib", "components", "hooks"]) walk(path.join(process.cwd(), d))
+  const offenders = files.filter((f) => /tax_behavior|prices\.create/.test(fs.readFileSync(f, "utf8").replace(/\/\/.*$|\/\*[\s\S]*?\*\//gm, "")))
+  assert.deepStrictEqual(offenders, [], "tax_behavior / prices.create must not appear in app code")
+}
+ok("no tax_behavior set in code (session, plan switch, and a scan of app/lib/components/hooks)")
 
 console.log(`\nAll ${passed} checkout tax checks passed.`)

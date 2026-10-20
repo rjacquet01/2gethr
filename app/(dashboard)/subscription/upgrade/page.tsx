@@ -21,7 +21,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { SUBSCRIPTION_TIERS, annualSavingsPercent } from '@/lib/subscription-tiers'
+import { SUBSCRIPTION_TIERS, annualSavingsPercent, PRICE_TAX_NOTE } from '@/lib/subscription-tiers'
 
 // Sourced from lib/subscription-tiers.ts rather than a hand-typed copy, so
 // this checkout page can't go out of sync with what /pricing and
@@ -286,6 +286,7 @@ function UpgradeForm() {
                 <span>Total</span>
                 <span>${price.toFixed(2)}</span>
               </div>
+              <p className="-mt-2 text-right text-xs text-muted-foreground">{PRICE_TAX_NOTE}</p>
               {billingCycle === 'annual' && (
                 <p className="text-center text-xs text-muted-foreground">That&apos;s just ${monthlyEquivalent}/month</p>
               )}

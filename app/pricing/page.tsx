@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Check, Sparkles } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import { cn } from '@/lib/utils'
-import { listTierDefinitions, annualSavingsPercent, SUBSCRIPTION_TIERS, TRIAL_DAYS } from '@/lib/subscription-tiers'
+import { listTierDefinitions, annualSavingsPercent, SUBSCRIPTION_TIERS, TRIAL_DAYS, PRICE_TAX_NOTE } from '@/lib/subscription-tiers'
 
 // Pulled from lib/subscription-tiers.ts (the same data the in-app
 // /subscription page reads) so this public page can't drift out of sync
@@ -121,7 +121,8 @@ export default function PricingPage() {
                     </span>
                     <span className="text-muted-foreground">/month</span>
                   </div>
-                  
+                  {price > 0 && <p className="-mt-3 text-xs text-muted-foreground">{PRICE_TAX_NOTE}</p>}
+
                   {billingCycle === 'annual' && price > 0 && (
                     <p className="text-sm text-muted-foreground">
                       ${price.toFixed(2)}/year billed annually · about 2 months free
