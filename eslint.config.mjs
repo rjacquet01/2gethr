@@ -28,5 +28,6 @@ export default defineConfig([
     files: ["scripts/**/*.js"],
     rules: { "@typescript-eslint/no-require-imports": "off" },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "public/**"]),
+  // .claude/ holds local tool files (e.g. temporary worktrees), not app code.
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "public/**", ".claude/**"]),
 ])

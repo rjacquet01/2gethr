@@ -13,3 +13,6 @@ node_modules/
 
 # TypeScript incremental build cache (machine-local, not meant to be committed)
 *.tsbuildinfo
+
+# Temporary git worktrees made by Claude Code
+.claude/worktrees/
