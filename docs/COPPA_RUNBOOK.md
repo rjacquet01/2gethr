@@ -59,3 +59,10 @@ Things that are **not** deleted: events and tasks the family created (they belon
 - Email the requester that it's done (no child details in the email).
 - Add a short internal note (support ticket): date received, what was deleted, by whom, date done.
 - If it was case A, look at how it happened (it should be impossible) and tell engineering.
+
+## Accounts and children from before consent was recorded
+
+Nothing is deleted automatically. The app asks once:
+
+- **Adults** with no `age_confirmed_at` or `terms_accepted_at` see a blocking "Confirm you are 18 or older and accept the Terms and Privacy Policy" dialog on login or app load. Confirming stores both timestamps, `terms_version` and Terms/Privacy rows in `consents` (with IP). Declining signs them out; they are asked again next time. Their API access is not blocked. Child accounts are never asked.
+- **Parents** (or the family owner) are shown each child with no `parental_consents` row at all, with the usual consent box and "This profile was created before consent was recorded. Please confirm." Confirming writes a consent row. Declining offers withdrawal; only if the parent confirms that is the child's data deleted, and a withdrawn record is kept (its text starts "No consent was on record").
