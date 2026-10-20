@@ -36,6 +36,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { TRIAL_DAYS } from '@/lib/subscription-tiers'
+import { planName, describeTierCount, type TierBreakdown } from '@/lib/admin-tier-breakdown'
 
 interface SubscriptionData {
   id: string
@@ -68,7 +69,7 @@ const statusColors: Record<string, string> = {
 export default function AdminSubscriptionsPage() {
   const [subscriptions, setSubscriptions] = useState<SubscriptionData[]>([])
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 })
-  const [stats, setStats] = useState<{ byTier: Record<string, number> }>({ byTier: {} })
+  const [stats, setStats] = useState<{ byTier: Partial<TierBreakdown> }>({ byTier: {} })
   const [loading, setLoading] = useState(true)
   const [tier, setTier] = useState<string>('all')
   const [status, setStatus] = useState<string>('all')
@@ -167,15 +168,11 @@ export default function AdminSubscriptionsPage() {
 
       {/* Quick stats */}
       <div className="flex flex-wrap gap-2">
-        <Badge variant="outline" className="px-3 py-1">
-          Premium Plus: {stats.byTier?.PREMIUM_PLUS || 0}
-        </Badge>
-        <Badge variant="outline" className="px-3 py-1">
-          Premium: {stats.byTier?.PREMIUM || 0}
-        </Badge>
-        <Badge variant="outline" className="px-3 py-1">
-          Free: {stats.byTier?.FREE || 0}
-        </Badge>
+        {(['PREMIUM_PLUS', 'PREMIUM', 'FREE'] as const).map((t) => (
+          <Badge key={t} variant="outline" className="px-3 py-1">
+            {planName(t)}: {describeTierCount(t, stats.byTier?.[t])}
+          </Badge>
+        ))}
       </div>
 
       <Card>
@@ -187,9 +184,9 @@ export default function AdminSubscriptionsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Tiers</SelectItem>
-                <SelectItem value="PREMIUM_PLUS">Premium Plus</SelectItem>
-                <SelectItem value="PREMIUM">Premium</SelectItem>
-                <SelectItem value="FREE">Free</SelectItem>
+                <SelectItem value="PREMIUM_PLUS">{planName('PREMIUM_PLUS')}</SelectItem>
+                <SelectItem value="PREMIUM">{planName('PREMIUM')}</SelectItem>
+                <SelectItem value="FREE">{planName('FREE')}</SelectItem>
               </SelectContent>
             </Select>
             <Select value={status} onValueChange={(v) => { setStatus(v); setPagination(p => ({ ...p, page: 1 })) }}>
@@ -240,7 +237,7 @@ export default function AdminSubscriptionsPage() {
                         {sub.ownerEmail}
                       </TableCell>
                       <TableCell>
-                        <Badge className={tierColors[sub.tier]}>{sub.tier}</Badge>
+                        <Badge className={tierColors[sub.tier]}>{planName(sub.tier)}</Badge>
                       </TableCell>
                       <TableCell>
                         <Badge className={statusColors[sub.status]}>{sub.status}</Badge>
@@ -351,9 +348,9 @@ export default function AdminSubscriptionsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="PREMIUM_PLUS">Premium Plus</SelectItem>
-                    <SelectItem value="PREMIUM">Premium</SelectItem>
-                    <SelectItem value="FREE">Free</SelectItem>
+                    <SelectItem value="PREMIUM_PLUS">{planName('PREMIUM_PLUS')}</SelectItem>
+                    <SelectItem value="PREMIUM">{planName('PREMIUM')}</SelectItem>
+                    <SelectItem value="FREE">{planName('FREE')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

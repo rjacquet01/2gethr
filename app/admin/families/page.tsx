@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { planName } from '@/lib/admin-tier-breakdown'
 
 interface FamilyData {
   id: string
@@ -133,9 +134,9 @@ export default function AdminFamiliesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Tiers</SelectItem>
-                <SelectItem value="FREE">Free</SelectItem>
-                <SelectItem value="PREMIUM">Premium</SelectItem>
-                <SelectItem value="PREMIUM_PLUS">Premium Plus</SelectItem>
+                <SelectItem value="FREE">{planName('FREE')}</SelectItem>
+                <SelectItem value="PREMIUM">{planName('PREMIUM')}</SelectItem>
+                <SelectItem value="PREMIUM_PLUS">{planName('PREMIUM_PLUS')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -198,7 +199,7 @@ export default function AdminFamiliesPage() {
                       <TableCell>
                         <Badge variant={getTierBadgeVariant(family.subscriptionTier)}>
                           {family.subscriptionTier === 'PREMIUM_PLUS' && <Crown className="h-3 w-3 mr-1" />}
-                          {family.subscriptionTier?.replace('_', ' ') || 'FREE'}
+                          {planName(family.subscriptionTier)}
                         </Badge>
                       </TableCell>
                       <TableCell>

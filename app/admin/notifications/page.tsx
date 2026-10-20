@@ -34,6 +34,14 @@ interface ServiceStatus {
   configured: boolean
   lastTested?: string
   lastTestResult?: 'success' | 'failed'
+  /** false: the server keeps no record of test sends, so there is no history. */
+  testsRecorded?: boolean
+}
+
+function lastTestedText(status?: ServiceStatus) {
+  if (status?.lastTested) return `Last tested: ${new Date(status.lastTested).toLocaleString()}`
+  if (status?.testsRecorded === false) return 'Test results are not recorded'
+  return 'Never tested'
 }
 
 interface NotificationServices {
@@ -224,9 +232,7 @@ export default function AdminNotificationsPage() {
           <CardContent>
             <ServiceStatusBadge status={services?.sms || { configured: false }} />
             <p className="text-xs text-muted-foreground mt-2">
-              {services?.sms?.lastTested
-                ? `Last tested: ${new Date(services.sms.lastTested).toLocaleString()}`
-                : 'Never tested'}
+              {lastTestedText(services?.sms)}
             </p>
           </CardContent>
         </Card>
@@ -239,9 +245,7 @@ export default function AdminNotificationsPage() {
           <CardContent>
             <ServiceStatusBadge status={services?.email || { configured: false }} />
             <p className="text-xs text-muted-foreground mt-2">
-              {services?.email?.lastTested
-                ? `Last tested: ${new Date(services.email.lastTested).toLocaleString()}`
-                : 'Never tested'}
+              {lastTestedText(services?.email)}
             </p>
           </CardContent>
         </Card>
@@ -254,9 +258,7 @@ export default function AdminNotificationsPage() {
           <CardContent>
             <ServiceStatusBadge status={services?.push || { configured: false }} />
             <p className="text-xs text-muted-foreground mt-2">
-              {services?.push?.lastTested
-                ? `Last tested: ${new Date(services.push.lastTested).toLocaleString()}`
-                : 'Never tested'}
+              {lastTestedText(services?.push)}
             </p>
           </CardContent>
         </Card>
@@ -683,24 +685,24 @@ export default function AdminNotificationsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Notification Usage</CardTitle>
-          <CardDescription>Monitor notification delivery across all channels</CardDescription>
+          <CardDescription>Delivery counts are not recorded yet. Check the Twilio, Resend and hosting dashboards for send volumes and failures.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-4">
             <div className="text-center p-4 border rounded-lg">
-              <p className="text-3xl font-bold text-primary">-</p>
+              <p className="text-sm font-medium text-muted-foreground">Not recorded</p>
               <p className="text-sm text-muted-foreground">SMS Sent (This Month)</p>
             </div>
             <div className="text-center p-4 border rounded-lg">
-              <p className="text-3xl font-bold text-blue-500">-</p>
+              <p className="text-sm font-medium text-muted-foreground">Not recorded</p>
               <p className="text-sm text-muted-foreground">Emails Sent (This Month)</p>
             </div>
             <div className="text-center p-4 border rounded-lg">
-              <p className="text-3xl font-bold text-green-500">-</p>
+              <p className="text-sm font-medium text-muted-foreground">Not recorded</p>
               <p className="text-sm text-muted-foreground">Push Notifications</p>
             </div>
             <div className="text-center p-4 border rounded-lg">
-              <p className="text-3xl font-bold text-red-500">-</p>
+              <p className="text-sm font-medium text-muted-foreground">Not recorded</p>
               <p className="text-sm text-muted-foreground">Failed Deliveries</p>
             </div>
           </div>

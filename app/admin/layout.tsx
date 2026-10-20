@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, Home, CreditCard,
   TicketIcon, AlertTriangle, LogOut,
   Menu, X, ChevronDown, Settings, Mail, Bell,
-  ArrowUpCircle, Scale
+  Scale
 } from 'lucide-react'
 import { Logo, LogoIcon } from '@/components/logo'
 import { Button } from '@/components/ui/button'
@@ -31,7 +31,6 @@ const navigation = [
   { name: 'Users', href: '/admin/users', icon: Users, permission: 'users.read' },
   { name: 'Families', href: '/admin/families', icon: Home, permission: 'families.read' },
   { name: 'Subscriptions', href: '/admin/subscriptions', icon: CreditCard, permission: 'subscriptions.read' },
-  { name: 'Upgrade Requests', href: '/admin/upgrades', icon: ArrowUpCircle, permission: null },
   { name: 'Support Tickets', href: '/admin/tickets', icon: TicketIcon, permission: 'support.read' },
   { name: 'Risk Flags', href: '/admin/risk-flags', icon: AlertTriangle, permission: 'trust.read' },
   { name: 'Legal Requests', href: '/admin/legal', icon: Scale, permission: 'legal.manage', explicit: true },

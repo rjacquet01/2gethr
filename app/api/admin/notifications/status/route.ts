@@ -12,24 +12,29 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
     }
 
+    // Test results are not stored anywhere (see config-status/route.ts), so
+    // lastTested stays null and testsRecorded: false says so.
     const status = {
       sms: {
         configured: isTwilioConfigured(),
         provider: 'Twilio',
         lastTested: null,
-        lastTestResult: null
+        lastTestResult: null,
+        testsRecorded: false
       },
       email: {
         configured: isResendConfigured(),
         provider: 'Resend',
         lastTested: null,
-        lastTestResult: null
+        lastTestResult: null,
+        testsRecorded: false
       },
       push: {
         configured: isFirebaseConfigured(),
         provider: 'Web Push (VAPID)',
         lastTested: null,
-        lastTestResult: null
+        lastTestResult: null,
+        testsRecorded: false
       }
     }
 

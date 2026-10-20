@@ -23,6 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { planName } from '@/lib/admin-tier-breakdown'
 
 interface FamilyDetail {
   id: string
@@ -247,7 +248,7 @@ export default function AdminFamilyDetailPage() {
           <div className="flex items-center gap-2">
             <Badge variant={getTierBadgeVariant(subscription.tier)}>
               {subscription.tier === 'PREMIUM_PLUS' && <Crown className="h-3 w-3 mr-1" />}
-              {subscription.tier?.replace('_', ' ') || 'FREE'}
+              {planName(subscription.tier)}
             </Badge>
             <Badge variant={getStatusBadgeVariant(subscription.status)}>
               {subscription.status}

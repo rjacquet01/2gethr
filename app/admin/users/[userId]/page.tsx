@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
+import { planName } from '@/lib/admin-tier-breakdown'
 
 interface UserDetail {
   id: string
@@ -362,7 +363,7 @@ export default function AdminUserDetailPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     {family.subscriptionTier && (
-                      <Badge variant="outline">{family.subscriptionTier}</Badge>
+                      <Badge variant="outline">{planName(family.subscriptionTier)}</Badge>
                     )}
                     {family.isActive ? (
                       <Badge className="bg-green-500/10 text-green-600">Active</Badge>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromToken, hasPermission } from '@/lib/admin-auth'
 import { sql } from '@/lib/db'
+import { computeTierBreakdown, type LatestFamilySubscription } from '@/lib/admin-tier-breakdown'
 
 // Admin subscriptions management API - List with filtering and pagination
 export async function GET(request: NextRequest) {
@@ -72,12 +73,18 @@ export async function GET(request: NextRequest) {
       countResult = await sql`SELECT COUNT(*) as total FROM subscriptions s`
     }
     
-    // Get tier stats
-    const tierStats = await sql`
-      SELECT tier, COUNT(*) as count
-      FROM subscriptions
-      WHERE status = 'ACTIVE'
-      GROUP BY tier
+    // Plan breakdown: every family's latest subscription row (or none), counted
+    // by the plan the customer app gives it, with trials kept separate.
+    const latestSubscriptions = await sql`
+      SELECT ls.tier, ls.status, ls.trial_ends_at
+      FROM families f
+      LEFT JOIN LATERAL (
+        SELECT s.tier, s.status, s.trial_ends_at
+        FROM subscriptions s
+        WHERE s.family_id = f.id
+        ORDER BY s.created_at DESC
+        LIMIT 1
+      ) ls ON true
     `
     
     return NextResponse.json({
@@ -102,10 +109,7 @@ export async function GET(request: NextRequest) {
         totalPages: Math.ceil(parseInt(countResult[0].total) / limit),
       },
       stats: {
-        byTier: tierStats.reduce((acc, t) => {
-          acc[t.tier] = parseInt(t.count)
-          return acc
-        }, {} as Record<string, number>),
+        byTier: computeTierBreakdown(latestSubscriptions as LatestFamilySubscription[]),
       },
     })
   } catch (error) {
