@@ -46,6 +46,8 @@ export interface User {
     name: string
   } | null
   primaryFamilyRole?: string | null
+  /** Signed up before the 18+ / Terms confirmation existed and hasn't confirmed yet. */
+  needsAgeTermsConfirmation?: boolean
 }
 
 export interface AuthState {

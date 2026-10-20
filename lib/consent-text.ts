@@ -24,3 +24,9 @@ export const CHILD_CONSENT_TEXT = [CHILD_CONSENT_STATEMENT, ...CHILD_DATA_NOTICE
 
 /** Sign-up confirmations (adults only). */
 export const AGE_CONFIRMATION_LABEL = "I am 18 or older"
+
+/** Shown with the consent box for a child added before consent was recorded. */
+export const CHILD_CONSENT_EXISTING_PROFILE_LINE = "This profile was created before consent was recorded. Please confirm."
+
+/** One-time prompt for adults who signed up before the age confirmation existed. */
+export const EXISTING_USER_CONFIRMATION_TITLE = "Confirm you are 18 or older and accept the Terms and Privacy Policy"

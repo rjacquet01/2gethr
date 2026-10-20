@@ -22,6 +22,13 @@ export function requestMeta(request: Request): { ip: string | null; userAgent: s
   return { ip, userAgent: request.headers.get("user-agent") || null }
 }
 
+/** Does this child have any consent record (current or withdrawn)? */
+export async function hasParentalConsentRecord(familyId: string, childMemberId: string): Promise<boolean> {
+  await ensureConsentSchema()
+  const rows = await sql`SELECT 1 FROM parental_consents WHERE child_member_id = ${childMemberId} AND family_id = ${familyId} LIMIT 1`
+  return rows.length > 0
+}
+
 export async function recordParentalConsent(opts: {
   familyId: string
   parentUserId: string
@@ -96,14 +103,46 @@ export async function deleteChildData(opts: {
  * on a request): the records are marked withdrawn and kept, then the child's
  * data is deleted. withdrawnBy is the parent's user id or the admin's id.
  */
-export async function withdrawChildConsent(opts: { familyId: string; childMemberId: string; withdrawnBy: string }) {
+export async function withdrawChildConsent(opts: {
+  familyId: string
+  childMemberId: string
+  withdrawnBy: string
+  /**
+   * A parent withdrawing for a child added before consent was recorded: with
+   * no record to mark, one is written (granted and withdrawn at once) so the
+   * decision is kept.
+   */
+  recordIfNone?: { parentUserId: string; request: Request }
+}) {
   await ensureConsentSchema()
+  if (opts.recordIfNone) {
+    if (!(await hasParentalConsentRecord(opts.familyId, opts.childMemberId))) {
+      const child = await sql`SELECT user_id FROM family_members WHERE id = ${opts.childMemberId} AND family_id = ${opts.familyId} AND role = 'CHILD' LIMIT 1`
+      if (child[0]) {
+        const { ip, userAgent } = requestMeta(opts.recordIfNone.request)
+        await sql`
+          INSERT INTO parental_consents (
+            id, family_id, parent_user_id, child_member_id, child_user_id, scope,
+            consent_text_version, consent_text, ip_address, user_agent, granted_at, withdrawn_at, withdrawn_by
+          ) VALUES (
+            ${crypto.randomUUID()}, ${opts.familyId}, ${opts.recordIfNone.parentUserId}, ${opts.childMemberId}, ${(child[0].user_id as string) ?? null},
+            ${child[0].user_id ? "CHILD_ACCOUNT" : "CHILD_PROFILE"}, ${CHILD_CONSENT_VERSION}, ${NO_PRIOR_CONSENT_NOTE + "\n" + CHILD_CONSENT_TEXT},
+            ${ip}, ${userAgent}, NOW(), NOW(), ${opts.withdrawnBy}
+          )
+        `
+      }
+    }
+  }
   await sql`
     UPDATE parental_consents SET withdrawn_at = NOW(), withdrawn_by = ${opts.withdrawnBy}
     WHERE child_member_id = ${opts.childMemberId} AND family_id = ${opts.familyId} AND withdrawn_at IS NULL
   `
   return deleteChildData({ familyId: opts.familyId, childMemberId: opts.childMemberId, closeAccount: "always" })
 }
+
+/** Stored ahead of the consent text when a parent withdraws for a child with no earlier record. */
+export const NO_PRIOR_CONSENT_NOTE =
+  "No consent was on record: this profile was created before consent was recorded. The parent withdrew instead of confirming."
 
 /** A family is deleted: delete every child's data in it (logins only if they have no other family). */
 export async function deleteFamilyChildren(familyId: string): Promise<number> {
