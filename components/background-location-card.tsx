@@ -14,7 +14,8 @@ import { AlertTriangle, MapPin } from 'lucide-react'
 export const BACKGROUND_LOCATION_DISCLOSURE =
   'Togethr collects location data to share your live location with your family and to send arrival and departure alerts for saved places, even when the app is closed or not in use.'
 
-// The background service polls every 45 s; this long without an update
+// The background service reaches the server at least every 2 min (5 min
+// while paused; 45 s on app 1.2.4 and older); this long without an update
 // means Android stopped it (battery saver, force stop, app update...).
 const STOPPED_AFTER_MIN = 15
 

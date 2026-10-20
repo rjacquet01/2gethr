@@ -82,7 +82,7 @@ import { MemberAvatar, AppearanceButton } from '@/components/member-avatar'
 import { AccountStatusBadge } from '@/components/account-status-badge'
 import { JoinFamilyButton } from '@/components/join-family-dialog'
 import { StartOwnFamilyButton, useCanStartOwnFamily } from '@/components/start-own-family'
-import { BirthdateInput, ChildAccountDialog, RoleChoiceCard, Turns18Chip, type AgeAwareChild } from '@/components/child-age'
+import { BirthdateInput, ChildAccountDialog, ChildConsentBox, ChildConsentDialog, RoleChoiceCard, Turns18Chip, type AgeAwareChild } from '@/components/child-age'
 
 export default function FamilyPage() {
   const { families, isLoading: familiesLoading } = useFamilies()
@@ -104,11 +104,14 @@ export default function FamilyPage() {
   const viewerIsParent = (viewerRole?.currentUserRole || viewerRole?.userRole) === 'PARENT' || (!!family && !!user && family.ownerId === user.id)
   const [childBirthdate, setChildBirthdate] = useState('')
   const [accountChild, setAccountChild] = useState<AgeAwareChild | null>(null)
+  const [consentChild, setConsentChild] = useState<{ memberId: string; name: string } | null>(null)
   
   const [copiedCode, setCopiedCode] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isAddingChild, setIsAddingChild] = useState(false)
   const [addChildOpen, setAddChildOpen] = useState(false)
+  // The parent's consent for this child (starts unchecked; required by the server).
+  const [childConsent, setChildConsent] = useState(false)
   const [childName, setChildName] = useState('')
   const [selectedMemberId, setSelectedMemberId] = useState<string>('')
   const [addMode, setAddMode] = useState<'select' | 'create'>('select')
@@ -116,7 +119,7 @@ export default function FamilyPage() {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [manageOpen, setManageOpen] = useState(false)
 
-  const [memberToRemove, setMemberToRemove] = useState<{ id: string; name: string; isSelf: boolean } | null>(null)
+  const [memberToRemove, setMemberToRemove] = useState<{ id: string; name: string; isSelf: boolean; isChild?: boolean } | null>(null)
   const [isRemovingMember, setIsRemovingMember] = useState(false)
 
   const handleConfirmRemove = async () => {
@@ -288,6 +291,7 @@ export default function FamilyPage() {
       const result = await addChild({
         displayName: childName.trim() || selectedMember.displayName,
         existingMemberId: selectedMemberId,
+        consent: childConsent,
         ...(childBirthdate ? { dateOfBirth: childBirthdate } : {}),
       })
 
@@ -297,6 +301,7 @@ export default function FamilyPage() {
         setChildBirthdate('')
         setSelectedMemberId('')
         setAddChildOpen(false)
+        setChildConsent(false)
         mutateUnassigned()
         refreshActivities()
       } else {
@@ -314,7 +319,7 @@ export default function FamilyPage() {
     }
     
     setIsAddingChild(true)
-    const result = await addChild({ displayName: childName, ...(childBirthdate ? { dateOfBirth: childBirthdate } : {}) })
+    const result = await addChild({ displayName: childName, consent: childConsent, ...(childBirthdate ? { dateOfBirth: childBirthdate } : {}) })
 
     if (result.success) {
       toast.success('Child added successfully!')
@@ -322,6 +327,7 @@ export default function FamilyPage() {
       setChildName('')
       setChildBirthdate('')
       setAddChildOpen(false)
+      setChildConsent(false)
     } else {
       toast.error(result.error || 'Failed to add child')
     }
@@ -397,7 +403,9 @@ export default function FamilyPage() {
           <AlertDialogDescription>
             {memberToRemove?.isSelf
               ? 'You will lose access to this family\'s calendar, tasks and locations. You can rejoin later with a new invite code.'
-              : 'They will immediately lose access to this family\'s calendar, tasks and locations. A new invite code will be generated so they can\'t rejoin with the old one.'}
+              : memberToRemove?.isChild
+                ? `${memberToRemove.name}'s child profile (name, birthdate, school and notes), location settings and, if this is their only family, their login will be permanently deleted. This can't be undone.`
+                : 'They will immediately lose access to this family\'s calendar, tasks and locations. A new invite code will be generated so they can\'t rejoin with the old one.'}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -949,7 +957,7 @@ export default function FamilyPage() {
                           variant="ghost"
                           size="sm"
                           className="text-destructive hover:text-destructive"
-                          onClick={() => setMemberToRemove({ id: member.id, name: member.displayName, isSelf: false })}
+                          onClick={() => setMemberToRemove({ id: member.id, name: member.displayName, isSelf: false, isChild: member.role === 'CHILD' })}
                           aria-label={`Remove ${member.displayName}`}
                         >
                           <UserMinus className="w-4 h-4 mr-1" />
@@ -973,7 +981,7 @@ export default function FamilyPage() {
                 {family.children?.length || 0} of {access.limits.maxChildren === -1 ? 'unlimited' : access.limits.maxChildren}
               </CardDescription>
             </div>
-            <Dialog open={addChildOpen} onOpenChange={setAddChildOpen}>
+            <Dialog open={addChildOpen} onOpenChange={(open) => { setAddChildOpen(open); if (!open) setChildConsent(false) }}>
               <DialogTrigger asChild>
                 <Button size="sm">
                   <UserPlus className="w-4 h-4 mr-2" />
@@ -1074,6 +1082,9 @@ export default function FamilyPage() {
                       </div>
                     </div>
                   )}
+                  {!(addMode === 'select' && unassignedMembers.length === 0) && (
+                    <ChildConsentBox id="add-child-consent" checked={childConsent} onCheckedChange={setChildConsent} />
+                  )}
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => {
@@ -1081,12 +1092,13 @@ export default function FamilyPage() {
                     setSelectedMemberId('')
                     setChildName('')
                     setChildBirthdate('')
+                    setChildConsent(false)
                   }}>
                     Cancel
                   </Button>
-                  <Button 
-                    onClick={handleAddChild} 
-                    disabled={isAddingChild || (addMode === 'select' && !selectedMemberId && unassignedMembers.length > 0) || (addMode === 'create' && !childName.trim())}
+                  <Button
+                    onClick={handleAddChild}
+                    disabled={isAddingChild || !childConsent || (addMode === 'select' && !selectedMemberId && unassignedMembers.length > 0) || (addMode === 'create' && !childName.trim())}
                   >
                     {isAddingChild ? <Spinner className="w-4 h-4 mr-2" /> : null}
                     {addMode === 'select' && selectedMemberId ? 'Assign as Child' : 'Add Child'}
@@ -1158,6 +1170,20 @@ export default function FamilyPage() {
                           Create account
                         </Button>
                       )}
+                      {viewerIsParent && child.familyMemberId && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="shrink-0"
+                          onClick={(ev) => {
+                            ev.preventDefault()
+                            ev.stopPropagation()
+                            setConsentChild({ memberId: child.familyMemberId as string, name: child.displayName })
+                          }}
+                        >
+                          Consent
+                        </Button>
+                      )}
                       {child.familyMemberId && (
                         <AppearanceButton familyId={family.id} memberId={child.familyMemberId} name={child.displayName} avatarUrl={child.avatarUrl} color={child.color} emoji={child.emoji} />
                       )}
@@ -1171,6 +1197,7 @@ export default function FamilyPage() {
       </div>
       </div>
       <ChildAccountDialog familyId={family.id} child={accountChild} onOpenChange={(open) => { if (!open) setAccountChild(null) }} />
+      <ChildConsentDialog familyId={family.id} child={consentChild} onOpenChange={(open) => { if (!open) setConsentChild(null) }} onWithdrawn={() => { mutateFamily(); refreshActivities() }} />
     </div>
   )
 }

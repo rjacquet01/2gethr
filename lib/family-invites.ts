@@ -1,4 +1,7 @@
 import { sql } from "./db"
+import { ensureAgeColumns } from "./age-schema"
+import { MIN_ACCOUNT_AGE, effectiveAge } from "./age"
+import { ensureConsentSchema } from "./consent-schema"
 
 // Invite codes are single-use and bound to a role (PARENT, CHILD or GUEST) on
 // the server. The role is never taken from the person joining. Parent joins
@@ -190,4 +193,101 @@ export async function activateMember(opts: { familyId: string; userId: string; r
     }
   }
   return memberId
+}
+
+export interface ChildAccountInvite {
+  id: string
+  familyId: string
+  familyName: string
+  childMemberId: string
+  childName: string
+  consentBy: string
+}
+
+/**
+ * A parent-made account code for an existing child profile (the parent ticked
+ * the consent box when making it). This is the only way a child gets a login:
+ * it is used while creating the account (/register), never by an existing one.
+ */
+export async function findChildAccountInvite(code: string): Promise<{ ok: true; invite: ChildAccountInvite } | { ok: false; error: string; childCode: boolean }> {
+  await ensureInviteTables()
+  await ensureAgeColumns()
+  const rows = await sql`
+    SELECT i.id, i.family_id, i.role, i.expires_at, i.used_at, i.revoked_at, i.child_member_id, i.consent_by,
+           f.name AS family_name, fm.user_id AS child_user_id, fm.role AS child_role, fm.is_active AS child_active,
+           cp.display_name, cp.age, to_char(cp.date_of_birth, 'YYYY-MM-DD') AS dob
+    FROM family_invites i
+    JOIN families f ON f.id = i.family_id
+    LEFT JOIN family_members fm ON fm.id = i.child_member_id AND fm.family_id = i.family_id
+    LEFT JOIN child_profiles cp ON cp.family_member_id = fm.id
+    WHERE i.code = ${code.trim().toUpperCase()}
+    LIMIT 1
+  `
+  const r = rows[0]
+  // childCode: the code is a child account code, just not usable now.
+  const bad = (error: string, childCode = true) => ({ ok: false as const, error, childCode })
+  if (!r) return bad("Invalid invite code. Ask a parent for a new one.", false)
+  if (r.role !== "CHILD" || !r.child_member_id || !r.consent_by) return bad("This code can't create a child's account. A parent adds children in Family > Add child.", false)
+  if (r.revoked_at) return bad("This code was cancelled. Ask a parent for a new one.")
+  if (r.used_at) return bad("This code was already used. Ask a parent for a new one.")
+  if (new Date(r.expires_at) < new Date()) return bad("This code has expired. Ask a parent for a new one.")
+  if (r.child_role !== "CHILD" || !r.child_active || r.child_user_id) return bad("This account code is no longer valid. Ask a parent for a new one.")
+  const age = effectiveAge(r.dob, r.age)
+  if (age === null || age < MIN_ACCOUNT_AGE) return bad(`Children can have their own account from age ${MIN_ACCOUNT_AGE}. Ask a parent for help.`)
+  return {
+    ok: true,
+    invite: {
+      id: r.id,
+      familyId: r.family_id,
+      familyName: r.family_name,
+      childMemberId: r.child_member_id,
+      childName: (r.display_name as string) || "Your child",
+      consentBy: r.consent_by,
+    },
+  }
+}
+
+/** Use up a child account code for a just-created user. Returns false if someone else used it first. */
+export async function consumeChildAccountInvite(invite: ChildAccountInvite, userId: string): Promise<boolean> {
+  const consumed = await sql`
+    UPDATE family_invites SET used_at = NOW(), used_by = ${userId}
+    WHERE id = ${invite.id} AND used_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()
+    RETURNING id
+  `
+  return consumed.length > 0
+}
+
+/** Give a consumed code back (the account could not be finished). */
+export async function releaseChildAccountInvite(invite: ChildAccountInvite, userId: string): Promise<void> {
+  await sql`UPDATE family_invites SET used_at = NULL, used_by = NULL WHERE id = ${invite.id} AND used_by = ${userId}`
+}
+
+/**
+ * Attach a new login to the child's existing membership. Location sharing
+ * stays off. The parent's consent record is tied to the new login.
+ */
+export async function linkChildLogin(invite: ChildAccountInvite, userId: string): Promise<boolean> {
+  const linked = await sql`
+    UPDATE family_members SET user_id = ${userId}, is_active = true, updated_at = NOW()
+    WHERE id = ${invite.childMemberId} AND family_id = ${invite.familyId} AND user_id IS NULL AND role = 'CHILD'
+    RETURNING id
+  `
+  if (linked.length === 0) return false
+  const ls = await sql`
+    UPDATE location_settings SET mode = 'OFF', share_with_family = false, updated_at = NOW()
+    WHERE family_member_id = ${invite.childMemberId} RETURNING id
+  `
+  if (ls.length === 0) {
+    await sql`
+      INSERT INTO location_settings (id, family_member_id, mode, share_with_family, update_interval_sec, created_at, updated_at)
+      VALUES (${crypto.randomUUID()}, ${invite.childMemberId}, 'OFF', false, 300, NOW(), NOW())
+    `
+  }
+  await ensureConsentSchema()
+  await sql`
+    UPDATE parental_consents SET child_user_id = ${userId}
+    WHERE child_member_id = ${invite.childMemberId} AND family_id = ${invite.familyId} AND scope = 'CHILD_ACCOUNT'
+      AND child_user_id IS NULL AND withdrawn_at IS NULL
+  `
+  return true
 }

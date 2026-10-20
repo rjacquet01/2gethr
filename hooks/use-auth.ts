@@ -46,6 +46,8 @@ export interface User {
     name: string
   } | null
   primaryFamilyRole?: string | null
+  /** Signed up before the 18+ / Terms confirmation existed and hasn't confirmed yet. */
+  needsAgeTermsConfirmation?: boolean
 }
 
 export interface AuthState {
@@ -181,7 +183,7 @@ const fetcher = async (url: string) => {
 export function useAuth(): AuthState & {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; requiresTwoFactor?: boolean; challengeToken?: string }>
   verifyTwoFactor: (challengeToken: string, code: string) => Promise<{ success: boolean; error?: string }>
-  register: (data: { email: string; password: string; displayName?: string; phone?: string; smsConsent?: boolean }) => Promise<{ success: boolean; error?: string }>
+  register: (data: { email: string; password: string; displayName?: string; phone?: string; smsConsent?: boolean; ageConfirmed?: boolean; termsAccepted?: boolean; childInviteCode?: string }) => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
   updateProfile: (data: Partial<User>) => Promise<{ success: boolean; error?: string }>
   uploadPhoto: (file: File) => Promise<{ success: boolean; pathname?: string; error?: string }>
@@ -264,7 +266,7 @@ export function useAuth(): AuthState & {
     }
   }, [mutate])
   
-  const register = useCallback(async (registerData: { email: string; password: string; displayName?: string; phone?: string; smsConsent?: boolean }) => {
+  const register = useCallback(async (registerData: { email: string; password: string; displayName?: string; phone?: string; smsConsent?: boolean; ageConfirmed?: boolean; termsAccepted?: boolean; childInviteCode?: string }) => {
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',

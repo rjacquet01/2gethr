@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { purchaseBlockedForRequest } from "@/lib/android-app"
 import { stripe, getPriceId } from "@/lib/stripe"
+import { buildCheckoutSessionParams, subscriptionUpdateTaxParams } from "@/lib/stripe-checkout"
 
 // POST - Create a Stripe Checkout Session for a subscription upgrade.
 //
@@ -127,6 +128,7 @@ export async function POST(request: NextRequest) {
               proration_behavior: "create_prorations",
               cancel_at_period_end: false,
               metadata: { familyId, requestedTier: tier.toUpperCase(), billingCycle },
+              ...subscriptionUpdateTaxParams(),
             })
           } else if (current.cancel_at_period_end) {
             // Same plan, but set to end: subscribing again means "keep it".
@@ -158,30 +160,20 @@ export async function POST(request: NextRequest) {
     // Stripe's Checkout Session tracking recommendation.
     const randomSuffix = Math.random().toString(36).replace(/[^a-z]/g, "").padEnd(8, "x").slice(0, 8)
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer: customerId,
-      // Intentionally no payment_method_types here — Stripe determines
-      // eligible payment methods dynamically from the Dashboard config.
-      line_items: [{ price: priceId, quantity: 1 }],
-      subscription_data: {
-        metadata: {
-          familyId,
-          requestedTier: tier.toUpperCase(),
-          billingCycle,
-          requestedBy: user.id,
-        },
-      },
-      metadata: {
+    // Intentionally no payment_method_types (see lib/stripe-checkout.ts).
+    // Stripe Tax fields are added only when STRIPE_TAX_ENABLED is "true".
+    const session = await stripe.checkout.sessions.create(
+      buildCheckoutSessionParams({
+        customerId,
+        priceId,
         familyId,
-        requestedTier: tier.toUpperCase(),
+        tier,
         billingCycle,
-        requestedBy: user.id,
-      },
-      integration_identifier: `togethr_${randomSuffix}`,
-      success_url: `${appUrl}/subscription/confirmation?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/subscription/upgrade?tier=${encodeURIComponent(tier)}`,
-    })
+        userId: user.id,
+        appUrl,
+        randomSuffix,
+      })
+    )
 
     return NextResponse.json({
       success: true,

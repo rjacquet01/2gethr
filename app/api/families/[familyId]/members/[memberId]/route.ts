@@ -4,6 +4,7 @@ import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { isParentInOtherFamily, getRolePermissions } from "@/lib/family-invites"
 import { canManageFamily } from "@/lib/permissions"
+import { deleteChildData } from "@/lib/parental-consent"
 
 const updateMemberSchema = z.object({
   role: z.enum(["PARENT", "GUARDIAN", "ADULT", "CHILD", "GUEST"]).optional(),
@@ -203,12 +204,19 @@ export async function DELETE(
       }
     }
 
-    // Soft delete member
-    await sql`
-      UPDATE family_members 
-      SET is_active = false, updated_at = NOW()
-      WHERE id = ${memberId}
-    `
+    if (member.role === "CHILD") {
+      // A child's data is deleted, not just hidden: their profile (name,
+      // birthdate, school, notes), location settings and, if this was their
+      // only family, their login.
+      await deleteChildData({ familyId, childMemberId: memberId, closeAccount: "if-no-other-family" })
+    } else {
+      // Soft delete member
+      await sql`
+        UPDATE family_members
+        SET is_active = false, updated_at = NOW()
+        WHERE id = ${memberId}
+      `
+    }
 
     // When someone is removed by an admin, rotate the invite code so they
     // can't simply walk back in with the code they already have. (Leaving on

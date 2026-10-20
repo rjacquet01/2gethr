@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { authFetch } from '@/hooks/use-auth'
-import { UserPlus, Copy, Share2, Mail, MessageSquare, X, Check, ShieldCheck, Baby, UserRound } from 'lucide-react'
+import { UserPlus, Copy, Share2, Mail, MessageSquare, X, Check, ShieldCheck, UserRound } from 'lucide-react'
 
 type Role = 'PARENT' | 'CHILD' | 'GUEST'
 type CrossFamilyRole = 'GUARDIAN' | 'GUEST'
@@ -44,7 +44,7 @@ export function InviteCodesCard({ familyId, familyName }: { familyId: string; fa
 
   useEffect(() => { load() }, [load])
 
-  const create = async (role: Role) => {
+  const create = async (role: 'PARENT' | 'GUEST') => {
     setCreating(role)
     try {
       const res = await authFetch(`/api/families/${familyId}/invite`, {
@@ -94,7 +94,7 @@ export function InviteCodesCard({ familyId, familyName }: { familyId: string; fa
           Invite Family Members
         </CardTitle>
         <CardDescription>
-          Choose who you are inviting. Each code works once, expires in 7 days, and sets the account type, so a child can never join as a parent.
+          Invite another adult. Each code works once, expires in 7 days, and sets the account type. Children are added by a parent with Add child, not with a code.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -104,13 +104,6 @@ export function InviteCodesCard({ familyId, familyName }: { familyId: string; fa
             <span>
               <span className="block font-medium">New parent code</span>
               <span className="block text-xs text-muted-foreground font-normal">A parent approves them before they get in</span>
-            </span>
-          </Button>
-          <Button variant="outline" className="h-auto justify-start py-3 text-left" onClick={() => create('CHILD')} disabled={creating !== null}>
-            {creating === 'CHILD' ? <Spinner className="w-4 h-4 mr-2" /> : <Baby className="w-4 h-4 mr-2 shrink-0" />}
-            <span>
-              <span className="block font-medium">New child code</span>
-              <span className="block text-xs text-muted-foreground font-normal">Joins right away with child permissions</span>
             </span>
           </Button>
           <Button variant="outline" className="h-auto justify-start py-3 text-left" onClick={() => create('GUEST')} disabled={creating !== null}>

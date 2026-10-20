@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter, Geist_Mono } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
+import { PrivacyAnalytics } from '@/components/privacy-analytics'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/theme-provider'
 import { AndroidAppDetector } from '@/components/android-app-detector'
@@ -70,7 +70,7 @@ export default function RootLayout({
           <AndroidAppDetector />
           <Toaster position="top-center" richColors />
         </ThemeProvider>
-        <Analytics />
+        <PrivacyAnalytics />
         <ServiceWorkerRegistration />
       </body>
     </html>

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/hooks/use-auth'
 import { useNotifications } from '@/hooks/use-notifications'
 import { useMyRole } from '@/hooks/use-my-role'
+import { markChildDevice } from '@/components/privacy-analytics'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +23,7 @@ import { FavoritesDropdown } from '@/components/favorites-dropdown'
 import { CalendarAutoSync } from '@/components/calendar-auto-sync'
 import { TimezoneSync } from '@/components/timezone-sync'
 import { PresenceHeartbeat } from '@/components/presence-heartbeat'
+import { ExistingUserConfirmations } from '@/components/existing-user-confirmations'
 import { Logo, LogoIcon } from '@/components/logo'
 import { FamilySwitcher } from '@/components/family-switcher'
 import { 
@@ -87,8 +89,13 @@ export default function DashboardLayout({
   const { user, isLoading, isAuthenticated, logout } = useAuth()
   const { unreadCount } = useNotifications()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const { isGuest } = useMyRole()
+  const { isGuest, isChild, role } = useMyRole()
   const visibleNavItems = isGuest ? navItems.filter((item) => !GUEST_HIDDEN_HREFS.has(item.href)) : navItems
+
+  // No analytics from a child's device (components/privacy-analytics.tsx).
+  useEffect(() => {
+    if (role) markChildDevice(isChild)
+  }, [role, isChild])
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -122,6 +129,7 @@ export default function DashboardLayout({
       <CalendarAutoSync />
       <TimezoneSync />
       <PresenceHeartbeat />
+      <ExistingUserConfirmations />
       {/* Desktop Sidebar */}
       <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 border-r border-sidebar-border bg-sidebar lg:block">
         <div className="flex h-full flex-col">

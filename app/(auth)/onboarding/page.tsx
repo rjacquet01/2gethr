@@ -84,8 +84,24 @@ export default function OnboardingPage() {
       // Opened an invite link without being signed in. The code stays saved
       // on this device; signing in returns here (registering does too), so
       // an existing user's invite isn't lost on the way to the dashboard.
-      toast.info('Sign in (or create an account) first - your invite code will be waiting.')
-      router.push('/login?redirect=%2Fonboarding')
+      // A parent's code for a child's own account is used while creating
+      // that account, so go straight to sign-up for it.
+      let childCode = false
+      try {
+        const res = await fetch('/api/auth/invite-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: inviteCode }),
+        })
+        const json = await res.json().catch(() => null)
+        childCode = json?.data?.kind === 'CHILD_ACCOUNT'
+      } catch {}
+      if (childCode) {
+        router.push('/register')
+      } else {
+        toast.info('Sign in (or create an account) first - your invite code will be waiting.')
+        router.push('/login?redirect=%2Fonboarding')
+      }
     } else {
       toast.error(result.error || 'Failed to join family')
     }

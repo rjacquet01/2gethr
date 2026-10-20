@@ -4,7 +4,8 @@ import { verifyDeviceToken } from "@/lib/device-token"
 import { hasPendingLocationRequest } from "@/lib/location-schema"
 import { guestForbidden } from "@/lib/permissions"
 
-// Cheap check the Android background service makes every minute or so:
+// Cheap check the Android background service makes when nothing else has
+// reached the server for a while (app 1.2.5+: 2 min, 5 min paused; older: 45 s):
 // "should I be sharing, and has a parent asked for my location right now?"
 // Authenticated with the same scoped device token as POST /api/location.
 export async function GET(request: NextRequest) {

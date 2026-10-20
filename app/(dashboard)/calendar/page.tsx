@@ -52,8 +52,9 @@ import {
   endOfDay,
 } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { WeatherSetupPrompt } from '@/components/weather-setup-prompt'
 import {
-  useCalendarWeather,
+  useCalendarWeatherState,
   CellWeather,
   DayWeatherLine,
   ParticipantDots,
@@ -96,7 +97,7 @@ export default function CalendarPage() {
   
   const { families, isLoading: familiesLoading } = useFamilies()
   const primaryFamily = families[0]
-  const weather = useCalendarWeather(primaryFamily?.id)
+  const { weather, weatherStatus, role } = useCalendarWeatherState(primaryFamily?.id)
   const [personFilter, setPersonFilter] = useState('ALL')
   
   const monthStart = startOfMonth(currentDate)
@@ -286,6 +287,8 @@ export default function CalendarPage() {
             </TabsList>
           </Tabs>
         </div>
+
+        <WeatherSetupPrompt status={weatherStatus} role={role} familyId={primaryFamily?.id} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -463,6 +466,16 @@ export default function CalendarPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Open-Meteo attribution, only while weather is shown (never to guests). */}
+      {weatherStatus === 'ready' && (
+        <p className="text-center text-xs text-muted-foreground">
+          Weather data by{' '}
+          <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
+            Open-Meteo.com
+          </a>
+        </p>
+      )}
 
       {/* Mobile: Bottom Sheet for Selected Day Events */}
       <Sheet open={showEventSheet} onOpenChange={setShowEventSheet}>

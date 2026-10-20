@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { getAdminAccessToken } from '@/hooks/use-admin-auth'
+import { getAdminAccessToken, useAdminAuth } from '@/hooks/use-admin-auth'
 import {
   ArrowLeft, Users, Mail, Calendar, Crown, Baby,
   AlertTriangle, History, Home
@@ -12,6 +12,17 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface FamilyDetail {
   id: string
@@ -45,6 +56,7 @@ interface Child {
   age: number | null
   school: string | null
   grade: string | null
+  hasLogin: boolean
 }
 
 interface Subscription {
@@ -109,6 +121,47 @@ export default function AdminFamilyDetailPage() {
   const [riskFlags, setRiskFlags] = useState<RiskFlag[]>([])
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
+  // Delete a child profile with no login (docs/COPPA_RUNBOOK.md). Shown only to
+  // admins with families.delete (super admins); the server checks it too.
+  const { hasPermission } = useAdminAuth()
+  const canDeleteChildren = hasPermission('families.delete')
+  const [deleteChild, setDeleteChild] = useState<Child | null>(null)
+  const [deleteReason, setDeleteReason] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  function openDelete(child: Child) {
+    setDeleteChild(child)
+    setDeleteReason('')
+    setDeleteConfirm('')
+    setDeleteError(null)
+  }
+
+  async function confirmDeleteChild() {
+    if (!deleteChild) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const token = getAdminAccessToken()
+      const res = await fetch(`/api/admin/families/${familyId}/children/${deleteChild.memberId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ reason: deleteReason, confirm: deleteConfirm }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setDeleteError(data?.error || 'Failed to delete child profile')
+        return
+      }
+      setDeleteChild(null)
+      await loadFamily()
+    } catch {
+      setDeleteError('Failed to delete child profile')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   useEffect(() => {
     loadFamily()
@@ -328,8 +381,14 @@ export default function AdminFamilyDetailPage() {
                       {child.age !== null ? `Age ${child.age}` : 'Age unknown'}
                       {child.school ? ` · ${child.school}` : ''}
                       {child.grade ? ` · Grade ${child.grade}` : ''}
+                      {child.hasLogin ? ' · Has own login' : ''}
                     </p>
                   </div>
+                  {canDeleteChildren && !child.hasLogin && (
+                    <Button variant="destructive" size="sm" onClick={() => openDelete(child)}>
+                      Delete child profile
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
@@ -404,6 +463,45 @@ export default function AdminFamilyDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!deleteChild} onOpenChange={(open) => { if (!open && !deleting) setDeleteChild(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {deleteChild?.displayName}&apos;s child profile?</DialogTitle>
+            <DialogDescription>
+              Permanently deletes this child&apos;s profile (name, birthdate, school, notes), location settings and place
+              assignments. Any parental consent record is kept and marked withdrawn by you. Other family members are
+              not affected. This can&apos;t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="delete-child-reason">Reason (required)</Label>
+              <Textarea
+                id="delete-child-reason"
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="e.g. Parent request by email on 2026-10-20, verified from the address on file"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="delete-child-confirm">Type DELETE to confirm</Label>
+              <Input id="delete-child-confirm" value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} autoComplete="off" />
+            </div>
+            {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteChild(null)} disabled={deleting}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteChild}
+              disabled={deleting || deleteConfirm !== 'DELETE' || !deleteReason.trim()}
+            >
+              {deleting ? 'Deleting...' : 'Delete child profile'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

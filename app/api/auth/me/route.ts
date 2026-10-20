@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { verifyAccessToken, getUserWithFamily } from "@/lib/auth"
+import { needsAgeTermsConfirmation } from "@/lib/existing-user-confirmations"
 
 export async function GET(request: NextRequest) {
   try {
@@ -60,6 +61,11 @@ export async function GET(request: NextRequest) {
       primaryFamily: user.primaryFamily,
       primaryFamilyRole: user.primaryFamilyRole,
       permissions: user.permissions,
+      // An adult from before the age rule: the app asks once (never a child account).
+      needsAgeTermsConfirmation: await needsAgeTermsConfirmation(user.id).catch((err) => {
+        console.error("Age/terms check failed (non-fatal):", err)
+        return false
+      }),
     }
 
     return NextResponse.json({ user: transformedUser })

@@ -7,18 +7,25 @@ import { ensureInviteTables, generateInviteCode, canManageInvites, INVITE_ROLES 
 const INVITE_DAYS = 7
 const MAX_ACTIVE = 20
 
-const createSchema = z.object({ role: z.enum(INVITE_ROLES) })
+// Join codes are for adults only (parents and guests). A child is added by a
+// parent (Family > Add child, with consent), and a child's own login comes
+// from that child's account code (children/[memberId]/account-invite).
+const createSchema = z.object({
+  role: z.enum(INVITE_ROLES).refine((r) => r !== "CHILD", {
+    message: "Child codes are no longer used. Add children in Family > Add child.",
+  }),
+})
 
 async function guard(request: NextRequest, familyId: string) {
   const { user, error } = await getUserFromRequest(request)
-  if (!user) return { res: NextResponse.json({ success: false, error: error || "Not authenticated" }, { status: 401 }) }
+  if (!user) return { ok: false as const, res: NextResponse.json({ success: false, error: error || "Not authenticated" }, { status: 401 }) }
   const fam = await sql`SELECT id FROM families WHERE id = ${familyId} LIMIT 1`
-  if (fam.length === 0) return { res: NextResponse.json({ success: false, error: "Family not found" }, { status: 404 }) }
+  if (fam.length === 0) return { ok: false as const, res: NextResponse.json({ success: false, error: "Family not found" }, { status: 404 }) }
   if (!(await canManageInvites(familyId, user.id))) {
-    return { res: NextResponse.json({ success: false, error: "Only the family owner or a parent can manage invite codes" }, { status: 403 }) }
+    return { ok: false as const, res: NextResponse.json({ success: false, error: "Only the family owner or a parent can manage invite codes" }, { status: 403 }) }
   }
   await ensureInviteTables()
-  return { user }
+  return { ok: true as const, user }
 }
 
 // List the codes that can still be used.
@@ -26,7 +33,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const { familyId } = await params
     const g = await guard(request, familyId)
-    if ("res" in g) return g.res
+    if (!g.ok) return g.res
     const rows = await sql`
       SELECT code, role, created_at, expires_at FROM family_invites
       WHERE family_id = ${familyId} AND used_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()
@@ -47,7 +54,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const { familyId } = await params
     const g = await guard(request, familyId)
-    if ("res" in g) return g.res
+    if (!g.ok) return g.res
     const { role } = createSchema.parse(await request.json())
 
     const active = await sql`
@@ -90,7 +97,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   try {
     const { familyId } = await params
     const g = await guard(request, familyId)
-    if ("res" in g) return g.res
+    if (!g.ok) return g.res
     const code = new URL(request.url).searchParams.get("code")?.toUpperCase()
     if (!code) return NextResponse.json({ success: false, error: "Code is required" }, { status: 400 })
     await sql`

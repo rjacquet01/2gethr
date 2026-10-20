@@ -48,6 +48,12 @@ export const TRIAL_DAYS = 7
 /** Text messages per month while a family is on its free trial. */
 export const TRIAL_SMS_QUOTA = 10
 
+/**
+ * Shown under paid prices. Prices are set tax-inclusive in the Stripe
+ * Dashboard (docs/STRIPE_TAX_SETUP.md), so the amounts above stay the same.
+ */
+export const PRICE_TAX_NOTE = "Price includes applicable sales tax"
+
 /** Yearly price as a whole-percent saving over 12 monthly payments (e.g. 17). */
 export function annualSavingsPercent(def: Pick<TierDefinition, "priceMonthlyCents" | "priceAnnualCents">): number {
   if (def.priceMonthlyCents <= 0) return 0

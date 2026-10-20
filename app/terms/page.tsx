@@ -29,7 +29,7 @@ export default function TermsPage() {
         <h1 className="text-3xl font-bold mb-8">Terms of Service</h1>
         
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: October 16, 2026</p>
+          <p className="text-muted-foreground">Last updated: October 19, 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Acceptance of Terms</h2>
@@ -54,7 +54,8 @@ export default function TermsPage() {
               confidentiality of your account credentials and for all activities under your account.
             </p>
             <ul className="list-disc pl-6 space-y-2">
-              <li>You must be at least 18 years old to create an account, except that a parent or legal guardian may create a supervised account for a child aged 8 or older and consents to that child's use of the Service</li>
+              <li>Togethr is for adults. You must be at least 18 years old to create an account, and you confirm this when you sign up. Children cannot create an account or join a family on their own</li>
+              <li>Only a parent or legal guardian can add a child to their family. A parent may also give a child aged 8 or older their own supervised login, using a one-time code the parent creates, and in doing so consents to that child's use of the Service as described in our Privacy Policy</li>
               <li>You must provide accurate and complete information</li>
               <li>You are responsible for all activity on your account</li>
               <li>You must notify us immediately of any unauthorized access</li>
@@ -69,8 +70,13 @@ export default function TermsPage() {
             <ul className="list-disc pl-6 space-y-2">
               <li>You have legal authority to add and manage these profiles</li>
               <li>You have obtained necessary consent from adult family members</li>
-              <li>You are the legal guardian of any children added to the account</li>
+              <li>You are the parent or legal guardian of any children added to the account, and you consent to the collection and use of their information as described in our Privacy Policy</li>
             </ul>
+            <p>
+              We do not knowingly collect personal information from anyone under 13 without their parent's
+              consent. If we learn that a child has used the Service without a parent, we will delete their
+              information and account.
+            </p>
           </section>
 
           <section className="space-y-4">
