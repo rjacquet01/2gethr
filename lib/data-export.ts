@@ -106,17 +106,22 @@ export async function collectUserExport(userId: Id, format = 'json'): Promise<Us
     }
   }
 
-  // Families the user belongs to (any status), used by many sections.
+  // Families the user is still an active member of, used by the sections
+  // with family-wide data. Someone removed from a family (is_active = false)
+  // no longer gets its roster, places or calendars.
   let familyIds: Id[] = []
   let ownedFamilyIds: Id[] = []
   let guardianFamilyIds: Id[] = []
+  // Saved places: not for guests (the Places page refuses them too).
+  let placeFamilyIds: Id[] = []
   try {
     const m = (await sql`
       SELECT fm.family_id, fm.role, f.owner_id
       FROM family_members fm JOIN families f ON f.id = fm.family_id
-      WHERE fm.user_id = ${userId}
+      WHERE fm.user_id = ${userId} AND fm.is_active = true
     `) as ExportRow[]
     familyIds = m.map((r) => r.family_id as string)
+    placeFamilyIds = m.filter((r) => r.role !== 'GUEST' || r.owner_id === userId).map((r) => r.family_id as string)
     ownedFamilyIds = m.filter((r) => r.owner_id === userId).map((r) => r.family_id as string)
     guardianFamilyIds = m
       .filter((r) => r.role === 'PARENT' || r.role === 'GUARDIAN' || r.owner_id === userId)
@@ -244,7 +249,7 @@ export async function collectUserExport(userId: Id, format = 'json'): Promise<Us
                  sp.geofence_enabled, sp.alert_on_arrival, sp.alert_on_departure, sp.icon, sp.color,
                  sp.notify_channels, sp.created_at, sp.updated_at
           FROM saved_places sp JOIN families f ON f.id = sp.family_id
-          WHERE sp.family_id = ANY(${familyIds}) ORDER BY f.name, sp.name
+          WHERE sp.family_id = ANY(${placeFamilyIds}) ORDER BY f.name, sp.name
         `) as ExportRow[])
       : []
   )

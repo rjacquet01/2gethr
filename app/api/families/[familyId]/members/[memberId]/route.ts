@@ -72,6 +72,18 @@ export async function PATCH(
     const body = await request.json()
     const validatedData = updateMemberSchema.parse(body)
 
+    // Child is never set or cleared here. A child joins only through Add child
+    // (with a parent's consent) and leaves the role only through the
+    // 18th-birthday promotion, which checks their age. Without this a parent
+    // could make a co-parent a "child" and then withdraw consent, closing
+    // their account.
+    if (validatedData.role && validatedData.role !== targetMember[0].role && (validatedData.role === "CHILD" || targetMember[0].role === "CHILD")) {
+      return NextResponse.json(
+        { success: false, error: targetMember[0].role === "CHILD" ? "A child's role changes only when they turn 18 (on their profile)." : "Only a child added with Add child can have the child role." },
+        { status: 403 }
+      )
+    }
+
     // A parent/owner of a different family can be at most a GUARDIAN here.
     if (validatedData.role === "PARENT" && (await isParentInOtherFamily(familyId, targetMember[0].user_id))) {
       return NextResponse.json(
@@ -186,6 +198,15 @@ export async function DELETE(
     if (member.user_id === member.owner_id) {
       return NextResponse.json(
         { success: false, error: "Family owner cannot be removed. Delete the family instead." },
+        { status: 403 }
+      )
+    }
+
+    // A child can't remove themselves: that deletes their profile and login,
+    // which is a parent's decision.
+    if (isSelf && member.role === "CHILD" && !isOwner) {
+      return NextResponse.json(
+        { success: false, error: "Ask a parent to remove you from this family." },
         { status: 403 }
       )
     }
