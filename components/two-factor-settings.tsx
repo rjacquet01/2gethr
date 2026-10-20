@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Spinner } from '@/components/ui/spinner'
+import { TotpQr } from '@/components/totp-qr'
 
 type Step = 'closed' | 'qr' | 'confirm' | 'backupCodes' | 'disable'
 
@@ -143,13 +144,14 @@ export function TwoFactorSettings() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col items-center gap-3 py-2">
+            {otpAuthUrl && <TotpQr otpAuthUrl={otpAuthUrl} />}
             {otpAuthUrl && (
               // Opens Google Authenticator, Authy, 1Password etc. on this phone.
               <Button asChild variant="outline">
                 <a href={otpAuthUrl}>Add to authenticator app</a>
               </Button>
             )}
-            <p className="text-xs text-muted-foreground">Or enter this key in your authenticator app:</p>
+            <p className="text-xs text-muted-foreground">Scan this with your authenticator app, or enter the key below.</p>
             <code className="text-sm font-mono bg-muted px-3 py-1.5 rounded select-all">{secret}</code>
           </div>
           <form onSubmit={confirmEnroll} className="space-y-4">

@@ -39,9 +39,10 @@ export async function startEnrollment(userId: string, userEmail: string): Promis
     WHERE id = ${userId}
   `
 
-  // No QR image: rendering it through a third-party image service put the
-  // TOTP secret in that service's logs. The client offers the otpauth:// link
-  // (opens the authenticator app on a phone) and the manual-entry secret.
+  // No QR image from the server: rendering it through a third-party image
+  // service put the TOTP secret in that service's logs. The client draws the
+  // QR in the browser (components/totp-qr.tsx) and also offers the
+  // otpauth:// link and the manual-entry secret.
   return { secret, otpAuthUrl }
 }
 
