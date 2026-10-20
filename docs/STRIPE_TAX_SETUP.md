@@ -67,7 +67,7 @@ Customers outside your registered states pay no tax, and you keep the full amoun
    - the receipt/invoice shows the tax portion.
    Also try a non-Massachusetts address (no tax) and a plan switch for an existing test subscriber.
 4. **Turn it on in Production** on or just before **2026-11-02**: Vercel > Project > Settings > Environment Variables > `STRIPE_TAX_ENABLED` = `true` (Production), then redeploy.
-5. **First live check:** make one real purchase with a Massachusetts address, confirm the tax shows as included, then refund it. The refund should arrive at the webhook: the admin gets the refund email, and the payment row records the refund.
+5. **First live check:** make one real purchase with a Massachusetts address, confirm the tax shows as included, then refund it. The refund should arrive at the webhook: the admin gets the refund email, the family owner gets "Your Togethr refund" (sent for a full refund of their latest invoice), and the payment row records the refund.
 
 The pricing and upgrade pages show "Price includes applicable sales tax" as soon as this branch is deployed, before collection starts on 2026-11-02. If you'd rather show it only once tax is on, say so and it can be tied to a public flag.
 

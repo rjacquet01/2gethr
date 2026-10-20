@@ -1,18 +1,24 @@
 import type Stripe from "stripe"
 import { sql } from "./db"
 import { stripe } from "./stripe"
-import { notifyAdmin } from "./services/email"
+import { notifyAdmin, sendEmail } from "./services/email"
 
 // Disputes and refunds from the Stripe webhook. None of these change a
 // family's tier or status: a dispute or refund doesn't by itself end a plan,
 // and downgrading is the owner's (admin's) decision. They record what
-// happened and tell the admin. Every handler is safe to run twice for the
-// same event (Stripe redelivers).
+// happened and tell the admin, and tell the family's owner when a dispute is
+// opened, a dispute is lost, or their latest subscription payment is fully
+// refunded. Every handler is safe to run twice for the same event (Stripe
+// redelivers): emails go out only on the first run.
+
+/** Where owner emails point for questions (the app's support contact). */
+const SUPPORT_EMAIL = "admin@mytogethr.com"
 
 /** Swappable in tests (scripts/test-stripe-webhook-events.ts); production uses the real ones. */
 export const disputeDeps = {
   sql: sql as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<Record<string, any>[]>,
   notifyAdmin,
+  sendEmail,
 }
 
 const esc = (s: unknown) =>
@@ -30,14 +36,18 @@ interface FamilyRow {
   subscriptionId: string
   status: string
   familyName: string
+  /** For the admin email (a placeholder when unknown). */
   ownerEmail: string
+  /** The owner's real address, or null: then no owner email is sent. */
+  ownerAddress: string | null
+  ownerFirstName: string | null
 }
 
 /** The family paying through this Stripe customer, or null (then the event is ignored). */
 async function familyForCustomer(customerId: string | null): Promise<FamilyRow | null> {
   if (!customerId) return null
   const rows = await disputeDeps.sql`
-    SELECT s.id AS subscription_id, s.status, f.name AS family_name, u.email AS owner_email
+    SELECT s.id AS subscription_id, s.status, f.name AS family_name, u.email AS owner_email, u.first_name AS owner_first_name
     FROM subscriptions s
     JOIN families f ON f.id = s.family_id
     LEFT JOIN users u ON u.id = f.owner_id
@@ -50,8 +60,35 @@ async function familyForCustomer(customerId: string | null): Promise<FamilyRow |
     status: rows[0].status,
     familyName: rows[0].family_name ?? "(unnamed family)",
     ownerEmail: rows[0].owner_email ?? "(unknown)",
+    ownerAddress: rows[0].owner_email ?? null,
+    ownerFirstName: rows[0].owner_first_name ?? null,
   }
 }
+
+/** A short, plain email to the family's owner. Never throws; skipped without an address. */
+async function emailOwner(f: FamilyRow, subject: string, paragraphs: string[]): Promise<void> {
+  if (!f.ownerAddress) return
+  const hello = f.ownerFirstName ? `Hi ${f.ownerFirstName},` : "Hi,"
+  const contact = `Questions? Email us at ${SUPPORT_EMAIL}.`
+  const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; color: #1f2937;">
+        <p>${esc(hello)}</p>
+        ${paragraphs.map((p) => `<p>${esc(p)}</p>`).join("\n        ")}
+        <p>${esc(contact)}</p>
+        <p style="color: #6b7280;">The Togethr team</p>
+      </div>
+    `
+  const text = [hello, ...paragraphs, contact, "The Togethr team"].join("\n\n")
+  try {
+    const r = await disputeDeps.sendEmail({ to: f.ownerAddress, subject, html, text, replyTo: SUPPORT_EMAIL })
+    if (!r?.success) console.error("[stripe-disputes] owner email failed:", subject, r?.error)
+  } catch (err) {
+    console.error("[stripe-disputes] owner email threw:", subject, (err as Error)?.message)
+  }
+}
+
+const shortDate = (unixSec: number | null | undefined) =>
+  unixSec ? new Date(unixSec * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }) : null
 
 /** A dispute only names its charge; the charge names the customer and payment. */
 async function chargeForDispute(dispute: Stripe.Dispute): Promise<Stripe.Charge | null> {
@@ -110,6 +147,7 @@ export async function handleDisputeCreated(dispute: Stripe.Dispute, livemode: bo
   const family = await familyForCustomer(idOf(charge?.customer as string | { id: string } | null))
   if (!family) return
   if (!(await recordHistoryOnce(family, `Dispute opened ${dispute.id}`))) return
+  console.warn(`[stripe-disputes] DISPUTE OPENED ${dispute.id} (subscription ${family.subscriptionId}, ${money(dispute.amount, dispute.currency)}); tier unchanged`)
 
   const dueBy = dispute.evidence_details?.due_by
   const { html, text } = adminEmail(
@@ -127,6 +165,13 @@ export async function handleDisputeCreated(dispute: Stripe.Dispute, livemode: bo
     dashboardUrl("disputes", dispute.id, livemode)
   )
   await disputeDeps.notifyAdmin(`Dispute opened: ${family.familyName} (${money(dispute.amount, dispute.currency)})`, html, text)
+
+  const paid = shortDate(charge?.created)
+  await emailOwner(family, "A payment dispute was opened", [
+    `Your bank or card issuer has told us that a payment of ${money(dispute.amount, dispute.currency)} for your Togethr subscription${paid ? ` (charged ${paid})` : ""} is being disputed.`,
+    "If you didn't mean to dispute it, or don't recognize it, please contact your bank and let us know. We're happy to help sort it out.",
+    "Your family's plan hasn't been changed.",
+  ])
 }
 
 export async function handleDisputeClosed(dispute: Stripe.Dispute, livemode: boolean): Promise<void> {
@@ -166,6 +211,14 @@ export async function handleDisputeClosed(dispute: Stripe.Dispute, livemode: boo
     dashboardUrl("disputes", dispute.id, livemode)
   )
   await disputeDeps.notifyAdmin(`Dispute ${outcome}: ${family.familyName}`, html, text)
+
+  if (outcome === "lost") {
+    console.warn(`[stripe-disputes] dispute ${dispute.id} lost (subscription ${family.subscriptionId}); tier unchanged`)
+    await emailOwner(family, "Your payment dispute has been closed", [
+      `The dispute on your ${money(dispute.amount, dispute.currency)} Togethr payment has been closed, and your bank has returned that payment to you.`,
+      "Your family's plan hasn't been changed. If you have any questions about your subscription, just reply to this email.",
+    ])
+  }
 }
 
 export async function handleChargeRefunded(charge: Stripe.Charge, livemode: boolean): Promise<void> {
@@ -218,4 +271,22 @@ export async function handleChargeRefunded(charge: Stripe.Charge, livemode: bool
     dashboardUrl("payments", idOf(charge.payment_intent as string | { id: string } | null) ?? charge.id, livemode)
   )
   await disputeDeps.notifyAdmin(`Refund: ${family.familyName} (${money(refunded, charge.currency)})`, html, text)
+
+  // Tell the owner only for a full refund of their latest subscription
+  // invoice (the usual "refund my last payment"), not for older or partial ones.
+  if (full && invoiceId) {
+    const latest = await disputeDeps.sql`
+      SELECT stripe_payment_id FROM payment_transactions
+      WHERE subscription_id = ${family.subscriptionId} AND stripe_payment_id LIKE 'in\_%'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `
+    if (latest[0]?.stripe_payment_id === invoiceId) {
+      console.warn(`[stripe-disputes] latest invoice ${invoiceId} fully refunded (subscription ${family.subscriptionId}); tier unchanged`)
+      await emailOwner(family, "Your Togethr refund", [
+        `We've refunded your latest Togethr payment of ${money(refunded, charge.currency)}. It usually shows on your statement within 5 to 10 business days, depending on your bank.`,
+        "Your family's plan hasn't been changed by this refund.",
+      ])
+    }
+  }
 }

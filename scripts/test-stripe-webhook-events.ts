@@ -23,12 +23,13 @@ async function main() {
   // ---- fake database ----------------------------------------------------------
   const db = {
     subscriptions: [
-      { subscription_id: "subrow_1", family_id: "fam_1", status: "ACTIVE", tier: "PREMIUM", stripe_customer_id: "cus_known", family_name: "Test <Family>", owner_email: "owner@example.invalid" },
+      { subscription_id: "subrow_1", family_id: "fam_1", status: "ACTIVE", tier: "PREMIUM", stripe_customer_id: "cus_known", family_name: "Test <Family>", owner_email: "owner@example.invalid", owner_first_name: "Pat<b>" },
+      { subscription_id: "subrow_2", family_id: "fam_2", status: "ACTIVE", tier: "PREMIUM", stripe_customer_id: "cus_noemail", family_name: "No Email Family", owner_email: null, owner_first_name: null },
     ] as Row[],
     history: [] as Row[],
     payments: [
-      { id: "pt_1", stripe_payment_id: "in_paid_1", status: "COMPLETED", amount: 999, metadata: { hostedInvoiceUrl: null } },
-      { id: "pt_2", stripe_payment_id: "in_paid_2", status: "COMPLETED", amount: 999, metadata: {} },
+      { id: "pt_1", subscription_id: "subrow_1", created_at: 1, stripe_payment_id: "in_paid_1", status: "COMPLETED", amount: 999, metadata: { hostedInvoiceUrl: null } },
+      { id: "pt_2", subscription_id: "subrow_1", created_at: 2, stripe_payment_id: "in_paid_2", status: "COMPLETED", amount: 999, metadata: {} },
     ] as Row[],
     queries: [] as string[],
   }
@@ -64,9 +65,13 @@ async function main() {
     }
     if (q.startsWith("INSERT INTO payment_transactions")) {
       if (!db.payments.some((p) => p.stripe_payment_id === v[1])) {
-        db.payments.push({ id: `pt_${db.payments.length + 1}`, subscription_id: v[0], stripe_payment_id: v[1], amount: v[2], currency: v[3], status: v[4], metadata: JSON.parse(v[5] as string) })
+        db.payments.push({ id: `pt_${db.payments.length + 1}`, created_at: 100 + db.payments.length, subscription_id: v[0], stripe_payment_id: v[1], amount: v[2], currency: v[3], status: v[4], metadata: JSON.parse(v[5] as string) })
       }
       return []
+    }
+    if (q.startsWith("SELECT stripe_payment_id FROM payment_transactions WHERE subscription_id")) {
+      return db.payments.filter((p) => p.subscription_id === v[0] && String(p.stripe_payment_id).startsWith("in_"))
+        .sort((a, b) => b.created_at - a.created_at).slice(0, 1)
     }
     throw new Error(`unexpected query in test: ${q}`)
   }
@@ -74,10 +79,15 @@ async function main() {
 
   const mails: { subject: string; html: string; text?: string }[] = []
   disputeDeps.notifyAdmin = async (subject: string, html: string, text?: string) => { mails.push({ subject, html, text }) }
+  const ownerMails: { to: string | string[]; subject: string; html: string; text?: string; replyTo?: string }[] = []
+  disputeDeps.sendEmail = (async (p: (typeof ownerMails)[number]) => { ownerMails.push(p); return { success: true } }) as typeof disputeDeps.sendEmail
+  const warns: string[] = []
+  console.warn = (...a: unknown[]) => { warns.push(a.map(String).join(" ")) }
 
   // ---- fake Stripe lookups (no network) -----------------------------------------------
   const charges: Record<string, Row> = {
-    ch_known: { id: "ch_known", customer: "cus_known", payment_intent: "pi_1", amount: 999, currency: "usd" },
+    ch_known: { id: "ch_known", customer: "cus_known", payment_intent: "pi_1", amount: 999, currency: "usd", created: 1760000000 },
+    ch_noemail: { id: "ch_noemail", customer: "cus_noemail", payment_intent: "pi_n", amount: 999, currency: "usd", created: 1760000000 },
     ch_unknown: { id: "ch_unknown", customer: "cus_nobody", payment_intent: "pi_x", amount: 500, currency: "usd" },
   }
   const invoiceByPi: Record<string, string> = { pi_1: "in_paid_1", pi_2: "in_paid_2" }
@@ -124,11 +134,32 @@ async function main() {
     assert.deepStrictEqual(touchedSubscriptions(), [])
     assert.strictEqual(db.subscriptions[0].tier, "PREMIUM")
     ok("history row with status unchanged; tier and status never written")
+    assert.strictEqual(ownerMails.length, 1)
+    const o = ownerMails[0]
+    assert.strictEqual(o.to, "owner@example.invalid")
+    assert.strictEqual(o.subject, "A payment dispute was opened")
+    assert.strictEqual(o.replyTo, "admin@mytogethr.com")
+    assert.ok(o.html.includes("Hi Pat&lt;b&gt;,"), "owner name escaped")
+    assert.ok((o.text || "").includes("9.99 USD") && (o.text || "").includes("charged October 9, 2025"))
+    assert.ok((o.text || "").includes("plan hasn't been changed") && (o.text || "").includes("admin@mytogethr.com"))
+    assert.ok(!o.html.includes("du_1") && !o.html.includes("fraudulent"), "owner email has no internal dispute details")
+    assert.ok(warns.some((w) => w.includes("DISPUTE OPENED du_1")), "logged loudly")
+    ok("owner emailed: 'A payment dispute was opened' with amount, date and support contact")
     r = await send(payload)
     assert.strictEqual(r.status, 200)
     assert.strictEqual(mails.length, 1, "no second email on redelivery")
+    assert.strictEqual(ownerMails.length, 1, "no second owner email on redelivery")
     assert.strictEqual(db.history.length, 1, "no second history row")
     ok("redelivery does nothing twice")
+
+    mails.length = 0
+    ownerMails.length = 0
+    const noEmail = event("evt_d0", "charge.dispute.created", { ...dispute("needs_response"), id: "du_n", charge: "ch_noemail" })
+    assert.strictEqual((await send(noEmail)).status, 200)
+    assert.strictEqual(mails.length, 1, "admin still told")
+    assert.strictEqual(ownerMails.length, 0, "no owner address: no owner email")
+    ok("owner without an email address: admin told, nothing sent to the owner")
+    mails.length = 0
   }
 
   // 2. dispute lost: payment marked, admin told, tier untouched.
@@ -144,14 +175,21 @@ async function main() {
     assert.match(mails[0].subject, /^Dispute lost: /)
     assert.deepStrictEqual(touchedSubscriptions(), [])
     ok("lost: payment row REFUNDED with the dispute noted; admin told; tier unchanged")
+    assert.strictEqual(ownerMails.length, 1)
+    assert.strictEqual(ownerMails[0].subject, "Your payment dispute has been closed")
+    assert.ok((ownerMails[0].text || "").includes("returned that payment to you"))
+    ok("lost: owner emailed that the dispute closed and the payment was returned")
     assert.strictEqual((await send(payload)).status, 200)
     assert.strictEqual(mails.length, 1)
-    ok("redelivery of the closed event: no second email")
+    assert.strictEqual(ownerMails.length, 1)
+    ok("redelivery of the closed event: no second email to admin or owner")
     mails.length = 0
+    ownerMails.length = 0
     const won = event("evt_d3", "charge.dispute.closed", { ...dispute("won"), id: "du_2" })
     assert.strictEqual((await send(won)).status, 200)
     assert.match(mails[0].subject, /^Dispute won: /)
-    ok("won: admin told the outcome")
+    assert.strictEqual(ownerMails.length, 0, "won: nothing sent to the owner")
+    ok("won: admin told the outcome; owner not emailed")
   }
 
   // 3. refunds: recorded once, partial keeps status.
@@ -172,8 +210,21 @@ async function main() {
     assert.strictEqual(mails.length, 1, "no second email")
     assert.deepStrictEqual(touchedSubscriptions(), [])
     ok("full refund updates the invoice's row once; redelivery changes nothing; tier unchanged")
+    assert.strictEqual(ownerMails.length, 1, "latest invoice fully refunded: owner told once (incl. redelivery)")
+    assert.strictEqual(ownerMails[0].subject, "Your Togethr refund")
+    assert.ok((ownerMails[0].text || "").includes("9.99 USD"))
+    ok("full refund of the latest invoice: owner emailed once")
 
     mails.length = 0
+    ownerMails.length = 0
+    const older = { id: "ch_1", object: "charge", customer: "cus_known", payment_intent: "pi_1", amount: 999, amount_refunded: 999, refunded: true, currency: "usd" }
+    assert.strictEqual((await send(event("evt_r0", "charge.refunded", older))).status, 200)
+    assert.strictEqual(mails.length, 1, "admin told")
+    assert.strictEqual(ownerMails.length, 0, "older invoice: owner not emailed")
+    ok("full refund of an older invoice: admin told, owner not emailed")
+
+    mails.length = 0
+    ownerMails.length = 0
     const partial = { id: "ch_3", object: "charge", customer: "cus_known", payment_intent: "pi_none", amount: 2000, amount_refunded: 500, refunded: false, currency: "usd" }
     const pp = event("evt_r2", "charge.refunded", partial)
     assert.strictEqual((await send(pp)).status, 200)
@@ -183,7 +234,8 @@ async function main() {
     assert.strictEqual(rows[0].status, "COMPLETED")
     assert.strictEqual(rows[0].metadata.refundedAmount, 500)
     assert.strictEqual(mails.length, 1)
-    ok("partial refund with no invoice row: one charge row, status kept, amount noted")
+    assert.strictEqual(ownerMails.length, 0, "partial refund: owner not emailed")
+    ok("partial refund with no invoice row: one charge row, status kept, amount noted, owner not emailed")
   }
 
   // 4. unknown customer: 200, nothing written, nobody emailed.
@@ -199,6 +251,7 @@ async function main() {
       assert.strictEqual((await send(event(id, type, obj))).status, 200, type)
     }
     assert.strictEqual(mails.length, 0)
+    assert.strictEqual(ownerMails.length, 0)
     assert.strictEqual(db.queries.filter((q) => /^(INSERT|UPDATE)/.test(q)).length, writesBefore)
     ok("unknown customer (or missing charge) returns 200 and does nothing")
   }
