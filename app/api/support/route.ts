@@ -69,6 +69,18 @@ export async function POST(request: NextRequest) {
       PRIORITY_ALIASES[requestedPriority] ??
       (ALLOWED_PRIORITIES.includes(requestedPriority) ? requestedPriority : 'NORMAL')
 
+    // Same for category: the CHECK constraint has no GENERAL, but the form's
+    // "General Inquiry" option sends it, so those tickets failed with a 500.
+    const CATEGORY_ALIASES: Record<string, string> = { GENERAL: 'OTHER' }
+    const ALLOWED_CATEGORIES = [
+      'BILLING', 'TECHNICAL', 'ACCOUNT', 'SUBSCRIPTION', 'LOCATION',
+      'PRIVACY', 'ABUSE_REPORT', 'FEATURE_REQUEST', 'OTHER',
+    ]
+    const requestedCategory = String(category).toUpperCase()
+    const normalizedCategory =
+      CATEGORY_ALIASES[requestedCategory] ??
+      (ALLOWED_CATEGORIES.includes(requestedCategory) ? requestedCategory : 'OTHER')
+
     // The ticket can only be linked to (and get priority from) a family the
     // sender actually belongs to.
     const familyOk = familyId
@@ -98,7 +110,7 @@ export async function POST(request: NextRequest) {
         category, priority, status, created_at, updated_at
       ) VALUES (
         gen_random_uuid(), ${ticketNumber}, ${user.id}, ${familyId || null}, 
-        ${subject}, ${description}, ${category.toUpperCase()},
+        ${subject}, ${description}, ${normalizedCategory},
         ${finalPriority}, 'OPEN', NOW(), NOW()
       )
       RETURNING *

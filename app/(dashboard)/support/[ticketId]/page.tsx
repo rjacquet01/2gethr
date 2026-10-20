@@ -153,6 +153,7 @@ export default function TicketDetailPage() {
       ACCOUNT: 'Account & Profile',
       FEATURE_REQUEST: 'Feature Request',
       GENERAL: 'General Inquiry',
+      OTHER: 'General Inquiry',
     }
     return labels[category] || category
   }
