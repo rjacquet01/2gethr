@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { getAdminAccessToken } from '@/hooks/use-admin-auth'
+import { getAdminAccessToken, useAdminAuth } from '@/hooks/use-admin-auth'
 import {
   ArrowLeft, Users, Mail, Calendar, Crown, Baby,
   AlertTriangle, History, Home
@@ -121,7 +121,10 @@ export default function AdminFamilyDetailPage() {
   const [riskFlags, setRiskFlags] = useState<RiskFlag[]>([])
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
-  // Delete a child profile with no login (docs/COPPA_RUNBOOK.md).
+  // Delete a child profile with no login (docs/COPPA_RUNBOOK.md). Shown only to
+  // admins with families.delete (super admins); the server checks it too.
+  const { hasPermission } = useAdminAuth()
+  const canDeleteChildren = hasPermission('families.delete')
   const [deleteChild, setDeleteChild] = useState<Child | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState('')
@@ -381,7 +384,7 @@ export default function AdminFamilyDetailPage() {
                       {child.hasLogin ? ' · Has own login' : ''}
                     </p>
                   </div>
-                  {!child.hasLogin && (
+                  {canDeleteChildren && !child.hasLogin && (
                     <Button variant="destructive" size="sm" onClick={() => openDelete(child)}>
                       Delete child profile
                     </Button>
