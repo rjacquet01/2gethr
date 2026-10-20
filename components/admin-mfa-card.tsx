@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { getAdminAccessToken } from '@/hooks/use-admin-auth'
+import { TotpQr } from '@/components/totp-qr'
 
 async function call(method: 'GET' | 'POST', body?: Record<string, unknown>) {
   const res = await fetch('/api/admin/auth/mfa', {
@@ -100,10 +101,11 @@ export function AdminMfaCard() {
 
         {setup && (
           <form onSubmit={confirm} className="space-y-3">
+            <TotpQr otpAuthUrl={setup.otpAuthUrl} />
             <Button asChild variant="outline">
               <a href={setup.otpAuthUrl}>Add to authenticator app</a>
             </Button>
-            <p className="text-xs text-muted-foreground">Or enter this key in the app:</p>
+            <p className="text-xs text-muted-foreground">Scan this with your authenticator app, or enter the key below.</p>
             <code className="block text-sm font-mono bg-muted px-3 py-1.5 rounded select-all break-all">{setup.secret}</code>
             <div className="space-y-2">
               <Label htmlFor="admin-mfa-code">6-digit code from the app</Label>
