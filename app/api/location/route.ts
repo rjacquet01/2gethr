@@ -10,11 +10,11 @@ import { sendSMSMetered, SMS_TEMPLATES, isTwilioConfigured } from "@/lib/service
 import { sendEmail, EMAIL_TEMPLATES, isResendConfigured } from "@/lib/services/email"
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
 import { distanceMeters, evaluateGeofence, confirmsDeparture, suggestedIntervalForGaps } from "@/lib/geofence"
-import { shouldMergeWithPrevious } from "@/lib/location-dedupe"
+import { shouldMergeWithPrevious, oneTimePingId, isOneTimePingId } from "@/lib/location-dedupe"
 import { fulfillLocationRequests } from "@/lib/location-schema"
 import { alertFamilyAdults } from "@/lib/family-alerts"
 import { ensureMemberAppearanceColumns } from "@/lib/member-appearance"
-import { guestForbidden, isGuestInFamily, isGuestOnly } from "@/lib/permissions"
+import { guestForbidden, isAdultMemberRole, isGuestInFamily, isGuestOnly } from "@/lib/permissions"
 
 const pingFields = {
   latitude: z.number().min(-90).max(90),
@@ -34,7 +34,13 @@ const locationPingSchema = z.object({
   // Fixes the device recorded while it was offline, oldest first. The
   // top-level fields above are always the newest fix.
   pings: z.array(z.object(pingFields)).max(200).optional(),
+  // "Share now": a single fix sent on purpose. Lets a grown-up share once
+  // while their sharing is off or paused, without changing that setting.
+  once: z.boolean().optional(),
 })
+
+// How long a one-time "Share now" stays on the family map.
+const ONE_TIME_SHARE_VISIBLE_MS = 60 * 60_000
 
 // Get family members' locations (for authorized users)
 export async function GET(request: NextRequest) {
@@ -92,7 +98,7 @@ export async function GET(request: NextRequest) {
         fm.id as member_id, fm.user_id, fm.nickname, fm.role, fm.color, fm.emoji,
         COALESCE(ls.mode, 'OFF') as location_mode, 
         COALESCE(ls.share_with_family, false) as share_with_family,
-        lp.latitude, lp.longitude, lp.accuracy, lp.altitude,
+        lp.id as ping_id, lp.latitude, lp.longitude, lp.accuracy, lp.altitude,
         lp.speed, lp.heading, lp.battery_level, lp.timestamp,
         u.first_name, u.last_name, u.profile_photo_path,
         cp.display_name as child_display_name
@@ -131,8 +137,12 @@ export async function GET(request: NextRequest) {
     const filteredLocations = locations.filter(l => {
       // Guests never take part in family location.
       if (l.role === 'GUEST') return false
-      // Must have share_with_family enabled and not be OFF
-      if (l.share_with_family !== true || l.location_mode === 'OFF') {
+      // Must have share_with_family enabled and not be OFF - except a
+      // grown-up's "Share now" here (their newest fix is a one-time share
+      // from this membership), shown for an hour like approved snapshots.
+      const sharedOnce = l.role !== 'CHILD' && isOneTimePingId(l.ping_id, l.member_id) &&
+        Date.now() - new Date(l.timestamp).getTime() < ONE_TIME_SHARE_VISIBLE_MS
+      if ((l.share_with_family !== true || l.location_mode === 'OFF') && !sharedOnce) {
         return false
       }
       // Children and adult members only see the grown-ups who are sharing
@@ -256,9 +266,11 @@ export async function POST(request: NextRequest) {
     let settings
     if (validatedData.memberId && validatedData.familyId) {
       settings = await sql`
-        SELECT ls.mode, ls.share_with_family, fm.family_id, fm.id as member_id
+        SELECT ls.mode, ls.share_with_family, fm.family_id, fm.id as member_id,
+          fm.role, (f.owner_id = ${user.id}) AS is_owner
         FROM location_settings ls
         JOIN family_members fm ON ls.family_member_id = fm.id
+        JOIN families f ON f.id = fm.family_id
         WHERE fm.id = ${validatedData.memberId}
           AND fm.family_id = ${validatedData.familyId}
           AND fm.user_id = ${user.id}
@@ -268,9 +280,11 @@ export async function POST(request: NextRequest) {
       `
     } else {
       settings = await sql`
-        SELECT ls.mode, ls.share_with_family, fm.family_id, fm.id as member_id
+        SELECT ls.mode, ls.share_with_family, fm.family_id, fm.id as member_id,
+          fm.role, (f.owner_id = ${user.id}) AS is_owner
         FROM location_settings ls
         JOIN family_members fm ON ls.family_member_id = fm.id
+        JOIN families f ON f.id = fm.family_id
         WHERE fm.user_id = ${user.id} AND fm.is_active = true AND fm.role <> 'GUEST'
         LIMIT 1
       `
@@ -285,8 +299,15 @@ export async function POST(request: NextRequest) {
 
     const setting = settings[0]
 
-    // Check if location sharing is enabled and mode allows sharing
-    if (!setting.share_with_family || setting.mode === "OFF" || setting.mode === "PAUSED") {
+    // Check if location sharing is enabled and mode allows sharing. With
+    // sharing off or paused, a grown-up (PARENT/GUARDIAN/ADULT or the family
+    // owner) may still send one fix on purpose ("Share now", once: true); the
+    // saved setting is left as it is. A child's location stays off until a
+    // parent turns it on, so children can't, and guests were refused above.
+    const sharingOn = !!setting.share_with_family && setting.mode !== "OFF" && setting.mode !== "PAUSED"
+    const oneTime = !sharingOn && validatedData.once === true &&
+      (isAdultMemberRole(setting.role as string) || setting.is_owner === true)
+    if (!sharingOn && !oneTime) {
       return NextResponse.json(
         { success: false, error: "Location sharing is disabled" },
         { status: 400 }
@@ -327,8 +348,9 @@ export async function POST(request: NextRequest) {
     // Fixes queued while the phone had no signal: store them (oldest first,
     // skipping duplicates and anything absurdly old/future) so the history
     // trail has no gaps. Only the newest fix drives geofence alerts below.
+    // A one-time share is a single fix: no offline backlog comes with it.
     const nowMs = Date.now()
-    const queued = (validatedData.pings ?? [])
+    const queued = (oneTime ? [] : validatedData.pings ?? [])
       .filter((q) => {
         const t = q.timestamp ? Date.parse(q.timestamp) : NaN
         return Number.isFinite(t) && t > nowMs - 7 * 86400_000 && t < nowMs + 300_000
@@ -356,7 +378,10 @@ export async function POST(request: NextRequest) {
       : null
     let suggestedIntervalSec: number | null = null
     let geofenceChanged = false
-    if (subscription.features.geofencing) {
+    // Not for a one-time share while sharing is off here: the last arrival/
+    // departure state may be days old, so a single fix would fire a late
+    // "arrived"/"left" alert (with no recent fix to confirm a departure).
+    if (subscription.features.geofencing && !oneTime) {
       const geo = await checkGeofences(
         user.id,
         setting.family_id,
@@ -408,7 +433,7 @@ export async function POST(request: NextRequest) {
     const pingTimestamp = Number.isFinite(sentMs) && sentMs <= Date.now() + 300_000
       ? (validatedData.timestamp as string)
       : new Date().toISOString()
-    const merge = shouldMergeWithPrevious({
+    const merge = !oneTime && shouldMergeWithPrevious({
       prev: prevPings[0]
         ? { id: prevPings[0].id as string, latitude: Number(prevPings[0].latitude), longitude: Number(prevPings[0].longitude) }
         : null,
@@ -427,8 +452,11 @@ export async function POST(request: NextRequest) {
         WHERE id = ${pingId}
       `
     } else {
-      // Store location ping - use text-based ID to match column type
-      pingId = `ping_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+      // Store location ping - use text-based ID to match column type. A
+      // one-time share always gets its own, marked row (lib/location-dedupe.ts).
+      pingId = oneTime
+        ? oneTimePingId(Date.now(), setting.member_id as string)
+        : `ping_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
       await sql`
         INSERT INTO location_pings (
           id, user_id, latitude, longitude, accuracy, altitude,
@@ -476,8 +504,10 @@ export async function POST(request: NextRequest) {
     if (battery != null && battery <= 15 && (prevBattery == null || prevBattery > 15)) {
       try {
         const who = (await sql`SELECT first_name FROM users WHERE id = ${user.id}`)[0]?.first_name || "A family member"
-        // Every family that can see this person's location hears about it.
-        for (const familyId of [setting.family_id as string, ...otherFamilies.map((o) => o.family_id as string)]) {
+        // Every family that can see this person's location hears about it
+        // (not one they only shared with once: nothing there stops updating).
+        const alertFamilies = [...(oneTime ? [] : [setting.family_id as string]), ...otherFamilies.map((o) => o.family_id as string)]
+        for (const familyId of alertFamilies) {
           await alertFamilyAdults(familyId, user.id, {
             title: `${who}'s battery is low`,
             body: `${who}'s phone is at ${battery}%. Their location may stop updating soon.`,

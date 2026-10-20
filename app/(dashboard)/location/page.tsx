@@ -126,7 +126,7 @@ async function currentBatteryLevel(): Promise<number | null> {
 // Guests don't get family location: show a notice instead of mounting the
 // page (whose hooks would call the location APIs).
 export default function LocationPage() {
-  const { isGuest, isLoading } = useMyRole()
+  const { isGuest, isChild, isLoading } = useMyRole()
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -135,10 +135,10 @@ export default function LocationPage() {
     )
   }
   if (isGuest) return <GuestAreaNotice />
-  return <LocationPageContent />
+  return <LocationPageContent isChild={isChild} />
 }
 
-function LocationPageContent() {
+function LocationPageContent({ isChild }: { isChild: boolean }) {
   const { families, isLoading: familiesLoading } = useFamilies()
   // Use the first family as the selected family (primary family)
   const selectedFamily = families[0] || null
@@ -367,7 +367,7 @@ function LocationPageContent() {
       return
     }
 
-    const userIntervalMs = (mySettings.updateIntervalSec || 60) * 1000
+    const userIntervalMs = (mySettings.updateIntervalSec || 300) * 1000
     const MIN_GAP_MS = 10_000 // never send faster than this
     const MOVE_SEND_METERS = 50 // also report promptly after real movement
 
@@ -702,6 +702,9 @@ function LocationPageContent() {
                   batteryLevel: await currentBatteryLevel(),
                   memberId,
                   familyId,
+                  // One fix on purpose: works while sharing is off or paused
+                  // (grown-ups only) and leaves that setting as it is.
+                  once: true,
                 }),
               })
 
@@ -988,7 +991,10 @@ function LocationPageContent() {
               <p className="text-xs text-muted-foreground">
                 {iAmSharing
                   ? 'Family can see where you are.'
-                  : 'Turn it on so family can see you, or share just once.'}
+                  : isChild
+                    // A child can't share once while off (server refuses it).
+                    ? 'Turn it on so family can see you.'
+                    : 'Turn it on so family can see you, or share just once.'}
               </p>
             </div>
           </div>
@@ -1394,10 +1400,10 @@ function LocationPageContent() {
                   <SelectValue placeholder="Select frequency" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="30">Every 30 seconds (High accuracy)</SelectItem>
-                  <SelectItem value="60">Every 1 minute</SelectItem>
+                  {/* The server accepts 60 s and up (battery over speed). */}
+                  <SelectItem value="60">Every 1 minute (High accuracy)</SelectItem>
                   <SelectItem value="120">Every 2 minutes</SelectItem>
-                  <SelectItem value="300">Every 5 minutes (Recommended)</SelectItem>
+                  <SelectItem value="300">Every 5 minutes (Default)</SelectItem>
                   <SelectItem value="600">Every 10 minutes</SelectItem>
                   <SelectItem value="900">Every 15 minutes (Battery saver)</SelectItem>
                 </SelectContent>

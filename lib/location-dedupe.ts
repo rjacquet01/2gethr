@@ -24,6 +24,24 @@ export function pingInsertedAt(id: string | null | undefined): number | null {
   return Number.isFinite(ms) ? ms : null
 }
 
+/**
+ * A grown-up's "Share now" while their sharing is off stores one fix with a
+ * marked id (`ping_<ms>_once_<memberId>_<random>`, still readable by
+ * pingInsertedAt), so GET /api/location can show that single fix to the one
+ * family it was shared with, for a while, without turning sharing on. Such a
+ * row is never merged into, so later fixes can't extend it.
+ */
+export function oneTimePingId(nowMs: number, memberId: string): string {
+  return `ping_${nowMs}_once_${memberId}_${Math.random().toString(36).substring(2, 9)}`
+}
+
+/** A one-time share row; with memberId, one shared by that membership. */
+export function isOneTimePingId(id: string | null | undefined, memberId?: string): boolean {
+  const s = id ?? ''
+  if (!/^ping_\d{12,}_once_/.test(s)) return false
+  return memberId == null || s.slice(s.indexOf('_once_') + 6).startsWith(`${memberId}_`)
+}
+
 export function shouldMergeWithPrevious(opts: {
   /** previous row: its id and position */
   prev: { id: string; latitude: number; longitude: number } | null
@@ -38,6 +56,7 @@ export function shouldMergeWithPrevious(opts: {
 }): boolean {
   const { prev, distanceM, nowMs, geofenceChanged, hasQueued } = opts
   if (!prev || geofenceChanged || hasQueued || distanceM == null) return false
+  if (isOneTimePingId(prev.id)) return false
   if (distanceM >= DEDUPE_RADIUS_M) return false
   const insertedAt = pingInsertedAt(prev.id)
   if (insertedAt == null) return false
