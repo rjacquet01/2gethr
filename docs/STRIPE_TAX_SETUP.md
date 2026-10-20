@@ -4,9 +4,19 @@ Togethr can have Stripe calculate sales tax at checkout. **It is off until you t
 
 **Whether tax applies to Togethr, where, and at what rate is a decision for you and your accountant.** Nothing in this guide or in the code settles any tax rule. These steps only cover the mechanics once you have decided.
 
-## Before you turn it on
+## Current status (as of 2026-10-19)
 
-Do these in the Stripe Dashboard, in **test mode first**, then repeat in live mode.
+Stripe Dashboard configuration is **done**:
+
+- **Tax registration:** Massachusetts, SLS ID ending **003**, collecting from **2026-11-02**.
+- **Prices:** set to **tax-inclusive**.
+- **Product tax code:** set.
+
+What's left is the code rollout: see **Rollout checklist** below. `STRIPE_TAX_ENABLED` stays off until on or just before 2026-11-02.
+
+## Dashboard setup (reference)
+
+Already done, per the status above. Kept here in case it has to be redone, for example for a new state or a new product. Do these in the Stripe Dashboard, in **test mode first**, then repeat in live mode.
 
 1. **Business address.** Settings > Business > Business details: set the business's legal address. Stripe uses it as the origin address for tax.
 2. **Tax registration.** Tax > Registrations: add the Massachusetts registration *only after confirming with your accountant* that you are registered and should collect, plus any other states they advise. **Automatic tax calculates nothing without a registration**: with the flag on and no registration, checkout silently charges no tax.
@@ -45,9 +55,31 @@ With inclusive pricing the customer pays the same, and the tax comes out of your
 
 Customers outside your registered states pay no tax, and you keep the full amount (before fees).
 
-## Turning it on
+## Rollout checklist
 
-6. In Vercel > Project > Settings > Environment Variables, add `STRIPE_TAX_ENABLED` = `true` for **Production** (and Preview if you want to test there with test keys). Redeploy.
+1. **Deploy with the flag off.** Merge and deploy the branch with `STRIPE_TAX_ENABLED` unset in Production. Checkout behaves exactly as before.
+2. **Add the new webhook events.** Stripe Dashboard > Developers > Webhooks > your live endpoint (`https://mytogethr.com/api/webhooks/stripe`) > add `charge.dispute.created`, `charge.dispute.closed` and `charge.refunded`. The full list the endpoint should have:
+   `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`, `charge.dispute.created`, `charge.dispute.closed`, `charge.refunded`.
+   Do the same on the test-mode endpoint if the preview uses one.
+3. **Test in Stripe test mode on a preview.** Set `STRIPE_TAX_ENABLED=true` for **Preview** only (with test-mode keys and test price IDs), redeploy the preview, and buy a plan with a **Massachusetts** billing address. Check:
+   - the tax line is **included in** the price, not added on top;
+   - the **total equals the advertised price** ($5.99, $9.99, ...);
+   - the receipt/invoice shows the tax portion.
+   Also try a non-Massachusetts address (no tax) and a plan switch for an existing test subscriber.
+4. **Turn it on in Production** on or just before **2026-11-02**: Vercel > Project > Settings > Environment Variables > `STRIPE_TAX_ENABLED` = `true` (Production), then redeploy.
+5. **First live check:** make one real purchase with a Massachusetts address, confirm the tax shows as included, then refund it. The refund should arrive at the webhook: the admin gets the refund email, and the payment row records the refund.
+
+The pricing and upgrade pages show "Price includes applicable sales tax" as soon as this branch is deployed, before collection starts on 2026-11-02. If you'd rather show it only once tax is on, say so and it can be tied to a public flag.
+
+## Environment variables
+
+| Variable | Where | Values | Default |
+|---|---|---|---|
+| `STRIPE_TAX_ENABLED` | Vercel (Production; Preview for testing) | exactly `true` turns Stripe Tax on; anything else is off | off (unset) |
+| `OPEN_METEO_API_KEY` | Vercel (Production; Preview optional) | your Open-Meteo key, after subscribing to the Standard plan (see `docs/WEATHER_OPEN_METEO.md`) | unset: free endpoint |
+| `STRIPE_PRICE_BASIC_MONTHLY`, `STRIPE_PRICE_BASIC_ANNUAL`, `STRIPE_PRICE_PREMIUM_MONTHLY`, `STRIPE_PRICE_PREMIUM_ANNUAL` | Vercel | the inclusive price IDs (table above) | existing |
+
+Never put any of these values in code, git or chat.
 
 ## What changes when it's on
 
