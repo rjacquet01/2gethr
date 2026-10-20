@@ -2,7 +2,7 @@
 // The server stores CHILD_CONSENT_TEXT with every parental consent record.
 
 /** Terms of Service / Privacy Policy version accepted at sign-up (their "Last updated" date). */
-export const TERMS_VERSION = "2026-10-19"
+export const TERMS_VERSION = "2026-10-20"
 
 /** Bump when CHILD_CONSENT_STATEMENT or CHILD_DATA_NOTICE changes. */
 export const CHILD_CONSENT_VERSION = "child-consent-2026-10-19"
