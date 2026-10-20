@@ -73,7 +73,7 @@ export async function POST(request: Request) {
                     This is a test email from the Togethr admin portal.
                   </p>
                   <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">
-                    <strong>Sent by:</strong> ${admin.first_name} ${admin.last_name}<br>
+                    <strong>Sent by:</strong> ${admin.firstName} ${admin.lastName}<br>
                     <strong>Timestamp:</strong> ${new Date().toLocaleString()}
                   </p>
                   <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 0;">
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
             </body>
             </html>
           `,
-          text: `Test Email from Togethr Admin Portal. Sent by: ${admin.first_name} ${admin.last_name} at ${new Date().toLocaleString()}`
+          text: `Test Email from Togethr Admin Portal. Sent by: ${admin.firstName} ${admin.lastName} at ${new Date().toLocaleString()}`
         })
 
         return NextResponse.json({ success: result.success, error: result.error })

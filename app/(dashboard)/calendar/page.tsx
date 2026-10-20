@@ -155,7 +155,7 @@ export default function CalendarPage() {
       const matchesPerson =
         personFilter === 'ALL' ||
         ((event.participants || []) as any[]).some((p) => (p.name || p.displayName) === personFilter)
-      return matchesCategory && matchesPerson && coversDay && (event.status === 'APPROVED' || event.status === 'ACTIVE')
+      return matchesCategory && matchesPerson && coversDay && event.status === 'APPROVED'
     })
   }
 

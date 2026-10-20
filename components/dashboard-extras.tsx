@@ -85,7 +85,7 @@ export function FloatingEmergencyButton({ familyId }: { familyId: string }) {
 
 interface UEvent { id: string; title: string; startTime: string; status?: string }
 interface UReminder { id: string; title: string; remind_at: string }
-interface UTask { id: string; title: string; status?: string; dueDate?: string; due_date?: string }
+interface UTask { id: string; title: string; status?: string; dueDate?: string; due_date?: string | null }
 
 type Row = { key: string; at: Date; title: string; href: string; kind: 'event' | 'task' | 'reminder' }
 

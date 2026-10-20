@@ -293,7 +293,7 @@ interface TimelineTask {
   title: string
   status?: string
   dueDate?: string
-  due_date?: string
+  due_date?: string | null
 }
 
 type TimelineItem = {

@@ -108,8 +108,9 @@ export default function DashboardPage() {
   }, [fetchReminders])
 
   // Helper to check if a task is past due
-  const isPastDue = (t: { dueDate?: string; due_date?: string }) => {
-    const dueDateStr = t.dueDate || t.due_date
+  // The tasks API returns rows as stored (due_date); there is no dueDate.
+  const isPastDue = (t: { due_date?: string | null }) => {
+    const dueDateStr = t.due_date
     if (!dueDateStr) return false
     const dueDate = new Date(dueDateStr)
     dueDate.setHours(23, 59, 59, 999) // End of due date day
@@ -129,8 +130,8 @@ export default function DashboardPage() {
       if (aOverdue && !bOverdue) return -1
       if (!aOverdue && bOverdue) return 1
       // Then sort by due date
-      const aDate = a.dueDate || a.due_date
-      const bDate = b.dueDate || b.due_date
+      const aDate = a.due_date
+      const bDate = b.due_date
       if (aDate && bDate) return new Date(aDate).getTime() - new Date(bDate).getTime()
       if (aDate) return -1
       if (bDate) return 1
@@ -147,21 +148,11 @@ export default function DashboardPage() {
   // Get tasks pending approval (for parents) - exclude past due
   const pendingApprovalTasks = tasks.filter(t => {
     if (t.status?.toLowerCase() !== 'pending_approval') return false
-    if (t.dueDate) {
-      const dueDate = new Date(t.dueDate)
-      dueDate.setHours(23, 59, 59, 999)
-      return dueDate >= new Date()
-    }
-    return true
+    return !isPastDue(t)
   })
   
   // Helper to check if task is not past due
-  const isNotPastDue = (t: { dueDate?: string }) => {
-    if (!t.dueDate) return true
-    const dueDate = new Date(t.dueDate)
-    dueDate.setHours(23, 59, 59, 999)
-    return dueDate >= new Date()
-  }
+  const isNotPastDue = (t: { due_date?: string | null }) => !isPastDue(t)
   
   // Task status counts for dashboard bubbles - exclude past due tasks
   const taskStatusCounts = {

@@ -189,14 +189,11 @@ const NOTIFICATION_TEMPLATES = {
     body: `"${data.eventTitle}" was updated by ${data.updatedBy}`,
   }),
   
-  [NotificationType.GEOFENCE_ARRIVAL]: (data: { childName: string; placeName: string }) => ({
-    title: 'Arrival Alert',
-    body: `${data.childName} arrived at ${data.placeName}`,
-  }),
-  
-  [NotificationType.GEOFENCE_DEPARTURE]: (data: { childName: string; placeName: string }) => ({
-    title: 'Departure Alert',
-    body: `${data.childName} left ${data.placeName}`,
+  // GEOFENCE_ARRIVAL and GEOFENCE_DEPARTURE are both 'GEOFENCE_ALERT', so one
+  // template (two keys was a duplicate: departure replaced arrival).
+  [NotificationType.GEOFENCE_ARRIVAL]: (data: { childName: string; placeName: string; departed?: boolean }) => ({
+    title: data.departed ? 'Departure Alert' : 'Arrival Alert',
+    body: data.departed ? `${data.childName} left ${data.placeName}` : `${data.childName} arrived at ${data.placeName}`,
   }),
   
   [NotificationType.SUBSCRIPTION_STATUS_CHANGED]: (data: { newStatus: string; tier?: string }) => ({
