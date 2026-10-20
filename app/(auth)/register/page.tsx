@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/use-auth'
@@ -13,6 +13,8 @@ import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 import { Eye, EyeOff, Check, Phone } from 'lucide-react'
 import { LogoIcon } from '@/components/logo'
+import { AGE_CONFIRMATION_LABEL } from '@/lib/consent-text'
+import { markChildDevice } from '@/components/privacy-analytics'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -27,6 +29,41 @@ export default function RegisterPage() {
     confirmPassword: '',
   })
   const [smsConsent, setSmsConsent] = useState(false)
+  // Adults confirm both (the server refuses the sign-up otherwise).
+  const [ageConfirmed, setAgeConfirmed] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  // A parent's account code for their child (saved by /onboarding?code=...):
+  // then this form creates the child's account instead of an adult's.
+  const [childInvite, setChildInvite] = useState<{ code: string; childName: string; familyName: string } | null>(null)
+  const [childInviteError, setChildInviteError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let code = ''
+    try {
+      code = new URLSearchParams(window.location.search).get('code') || localStorage.getItem('togethr-pending-invite') || ''
+    } catch {}
+    code = code.trim().toUpperCase()
+    if (!code) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/auth/invite-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code }),
+        })
+        const json = await res.json().catch(() => null)
+        if (cancelled || !json?.success) return
+        if (json.data.kind === 'CHILD_ACCOUNT') {
+          setChildInvite({ code, childName: json.data.childName, familyName: json.data.familyName })
+          markChildDevice(true) // no analytics from here on (components/privacy-analytics.tsx)
+        }
+        else if (json.data.kind === 'CHILD_ACCOUNT_UNUSABLE') setChildInviteError(json.data.error)
+      } catch {}
+    })()
+    return () => { cancelled = true }
+  }, [])
+  const isChildSignup = !!childInvite
 
   const passwordRequirements = [
     { label: 'At least 8 characters', met: formData.password.length >= 8 },
@@ -50,24 +87,46 @@ export default function RegisterPage() {
       return
     }
 
-    if (formData.phone && !smsConsent) {
+    if (!isChildSignup && formData.phone && !smsConsent) {
       toast.error('Please check the box to consent to SMS messages, or remove your phone number')
+      return
+    }
+
+    if (!isChildSignup && (!ageConfirmed || !termsAccepted)) {
+      toast.error('Please confirm you are 18 or older and accept the Terms and Privacy Policy')
       return
     }
 
     setIsLoading(true)
 
-    const result = await register({
-      email: formData.email,
-      password: formData.password,
-      displayName: formData.displayName || undefined,
-      phone: formData.phone || undefined,
-      smsConsent: formData.phone ? smsConsent : undefined,
-    })
+    const result = await register(
+      isChildSignup
+        ? {
+            email: formData.email,
+            password: formData.password,
+            displayName: formData.displayName || undefined,
+            childInviteCode: childInvite.code,
+          }
+        : {
+            email: formData.email,
+            password: formData.password,
+            displayName: formData.displayName || undefined,
+            phone: formData.phone || undefined,
+            smsConsent: formData.phone ? smsConsent : undefined,
+            ageConfirmed,
+            termsAccepted,
+          }
+    )
 
     if (result.success) {
       toast.success('Account created successfully!')
-      router.push('/onboarding')
+      if (isChildSignup) {
+        // The child's account is already in their family.
+        try { localStorage.removeItem('togethr-pending-invite') } catch {}
+        router.push('/dashboard')
+      } else {
+        router.push('/onboarding')
+      }
     } else {
       toast.error(result.error || 'Registration failed')
     }
@@ -88,8 +147,13 @@ export default function RegisterPage() {
 
         <Card className="border-border/50 shadow-lg">
           <CardHeader className="text-center">
-            <CardTitle className="text-xl">Create your account</CardTitle>
-            <CardDescription>Start coordinating your family today</CardDescription>
+            <CardTitle className="text-xl">{isChildSignup ? `Create ${childInvite.childName}'s account` : 'Create your account'}</CardTitle>
+            <CardDescription>
+              {isChildSignup
+                ? `A parent in ${childInvite.familyName} set this up. This account joins the family as ${childInvite.childName}.`
+                : 'Togethr accounts are for adults 18 and older. Children are added by a parent.'}
+            </CardDescription>
+            {childInviteError && <p className="text-xs text-destructive">{childInviteError}</p>}
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
@@ -118,6 +182,7 @@ export default function RegisterPage() {
                   className="h-11"
                 />
               </div>
+              {!isChildSignup && (
               <div className="space-y-2">
                 <Label htmlFor="phone">
                   Phone Number <span className="text-muted-foreground text-xs">(optional)</span>
@@ -152,6 +217,7 @@ export default function RegisterPage() {
                   </Label>
                 </div>
               </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
@@ -203,12 +269,32 @@ export default function RegisterPage() {
                   </p>
                 )}
               </div>
+              {!isChildSignup && (
+                <div className="space-y-3 rounded-lg border p-3">
+                  <div className="flex items-start gap-2">
+                    <Checkbox id="age-confirmed" checked={ageConfirmed} onCheckedChange={(c) => setAgeConfirmed(c === true)} className="mt-0.5" />
+                    <Label htmlFor="age-confirmed" className="text-sm font-normal leading-snug">{AGE_CONFIRMATION_LABEL}</Label>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Checkbox id="terms-accepted" checked={termsAccepted} onCheckedChange={(c) => setTermsAccepted(c === true)} className="mt-0.5" />
+                    <Label htmlFor="terms-accepted" className="text-sm font-normal leading-snug">
+                      I agree to the{' '}
+                      <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link>
+                      {' '}and{' '}
+                      <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>
+                    </Label>
+                  </div>
+                </div>
+              )}
             </CardContent>
             <CardFooter className="flex flex-col gap-4">
               <Button 
                 type="submit" 
                 className="w-full h-11" 
-                disabled={isLoading || !isPasswordValid || !passwordsMatch || (Boolean(formData.phone) && !smsConsent)}
+                disabled={
+                  isLoading || !isPasswordValid || !passwordsMatch ||
+                  (!isChildSignup && ((Boolean(formData.phone) && !smsConsent) || !ageConfirmed || !termsAccepted))
+                }
               >
                 {isLoading ? <Spinner className="w-4 h-4" /> : 'Create account'}
               </Button>
@@ -223,9 +309,8 @@ export default function RegisterPage() {
         </Card>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          By creating an account, you agree to our{' '}
           <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link>
-          {' '}and{' '}
+          {' · '}
           <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>
         </p>
       </div>
