@@ -23,13 +23,14 @@ export async function DELETE(
   try {
     const authHeader = request.headers.get('authorization')
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-    const admin = token ? await getAdminFromToken(token) : null
-
-    if (!admin) {
+    if (!token) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    if (!hasPermission(admin, 'families.update')) {
-      return NextResponse.json({ error: 'No permission to delete child profiles' }, { status: 403 })
+    // Signed in but not an admin, or an admin without the delete permission
+    // (only SUPER_ADMIN holds families.delete in the seeded roles): 403.
+    const admin = await getAdminFromToken(token)
+    if (!admin || !hasPermission(admin, 'families.delete')) {
+      return NextResponse.json({ error: 'Not allowed to delete child profiles' }, { status: 403 })
     }
 
     const { familyId, memberId } = await params

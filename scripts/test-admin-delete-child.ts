@@ -22,6 +22,7 @@ const SIBLING = "m-child-b"   // no login: must survive
 const TEEN = "m-child-c"      // has a login: refused here
 const ADMIN = "admin-1"
 const WEAK_ADMIN = "admin-2"
+const SUPPORT = "admin-3"
 
 async function main() {
   const { __setSqlForTests } = await import("../lib/db")
@@ -63,7 +64,8 @@ async function main() {
   }
   fresh()
   const admins: Record<string, { roles: string[]; permissions: string[] }> = {
-    [ADMIN]: { roles: ["SUPPORT"], permissions: ["families.read", "families.update"] },
+    [ADMIN]: { roles: ["SUPER_ADMIN"], permissions: [] }, // super admins hold every permission
+    [SUPPORT]: { roles: ["SUPPORT_ADMIN"], permissions: ["families.read", "families.update"] },
     [WEAK_ADMIN]: { roles: ["READ_ONLY"], permissions: ["families.read"] },
   }
 
@@ -120,17 +122,18 @@ async function main() {
     assert.deepStrictEqual(db.adminLog, [], "no audit entry")
   }
 
-  // 1. Only admins with families.update.
+  // 1. Only admins with families.delete (super admins in the seeded roles).
   console.log("access")
   {
     fresh()
-    assert.strictEqual((await call(CHILD, good, null)).status, 401)
+    assert.strictEqual((await call(CHILD, good, null)).status, 401, "no token at all")
     const appUserToken = await generateAccessToken("u-parent")
-    assert.strictEqual((await call(CHILD, good, appUserToken)).status, 401, "a regular app login is not an admin")
-    const r = await call(CHILD, good, await adminToken(WEAK_ADMIN))
-    assert.strictEqual(r.status, 403)
+    assert.strictEqual((await call(CHILD, good, appUserToken)).status, 403, "a regular app login is not an admin")
+    assert.strictEqual((await call(CHILD, good, "not-a-token")).status, 403)
+    assert.strictEqual((await call(CHILD, good, await adminToken(WEAK_ADMIN))).status, 403, "read-only admin")
+    assert.strictEqual((await call(CHILD, good, await adminToken(SUPPORT))).status, 403, "support admin (families.update only)")
     untouched()
-    ok("no token or an app user's token: 401; an admin without families.update: 403; nothing changed")
+    ok("no token: 401; non-admin or an admin without families.delete (incl. support admins): 403; nothing changed")
   }
 
   // 2. Input checks.
