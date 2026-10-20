@@ -130,7 +130,7 @@ async function main() {
     ok("a child-account code can't attach an existing (adult) account to a child")
 
     reset()
-    r = (await invite.POST(req("POST", `/api/families/${FAMILY}/invite`, { role: "CHILD" }), { params: Promise.resolve({ familyId: FAMILY }) })) as Response
+    r = await invite.POST(req("POST", `/api/families/${FAMILY}/invite`, { role: "CHILD" }), { params: Promise.resolve({ familyId: FAMILY }) })
     assert.strictEqual(r.status, 400)
     assert.deepStrictEqual(writes("INSERT INTO family_invites"), [])
     ok("parents can no longer create CHILD join codes")
