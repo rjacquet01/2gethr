@@ -28,7 +28,7 @@ function cell(v: unknown): string | number | boolean | null {
 }
 
 function sheetName(name: string, used: Set<string>): string {
-  let base = name.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Sheet'
+  const base = name.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Sheet'
   let n = base
   let i = 2
   while (used.has(n.toLowerCase())) n = base.slice(0, 28) + ' ' + i++

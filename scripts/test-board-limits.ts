@@ -343,12 +343,12 @@ async function main() {
     const endsToday = await fillFlyer(F.EXP, minutesAgo(299), { expiresAt: today.toISOString() })
     const keptEnded = await fillFlyer(F.EXP, minutesAgo(298), { expiresAt: yesterday.toISOString(), keepUp: true })
     b = await board('K', F.EXP)
-    let ids = boardIds(b.data)
+    const ids = boardIds(b.data)
     assert.ok(!ids.has(endedYesterday), 'hidden the day after its date')
     assert.ok(ids.has(endsToday), 'still up on its last day')
     assert.ok(ids.has(keptEnded), 'kept-up flyer stays past its date')
     r = await takenDown('A', F.EXP)
-    let td = (await r.json()).data.pins
+    const td = (await r.json()).data.pins
     assert.deepStrictEqual(td.map((p: { id: string }) => p.id), [endedYesterday])
     assert.strictEqual(td[0].reason, 'event_over')
     ok('lazy expiry hides a flyer the day after expires_at, not a kept-up one (no cron needed)')

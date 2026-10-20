@@ -630,7 +630,7 @@ function PlacesPageContent() {
     setIsLocating(false)
   }
 
-  const useCurrentLocation = (target: 'new' | 'edit') => {
+  const fillCurrentLocation = (target: 'new' | 'edit') => {
     if (!navigator.geolocation) {
       toast.error('Your browser does not support location access')
       return
@@ -1209,7 +1209,7 @@ function PlacesPageContent() {
             setDraft={(fn) => setNewPlace((d) => fn(d))}
             isLocating={isLocating}
             onFind={() => geocodeAddress(newPlace.address, 'new')}
-            onUseCurrent={() => useCurrentLocation('new')}
+            onUseCurrent={() => fillCurrentLocation('new')}
             photo={{ file: newPhoto, onPick: setNewPhoto, onRemove: () => setNewPhoto(null) }}
             hasPremium={access.hasPremium}
             canManageGeofence={canManageGeofence}
@@ -1241,7 +1241,7 @@ function PlacesPageContent() {
             setDraft={(fn) => setEditPlace((d) => fn(d))}
             isLocating={isLocating}
             onFind={() => geocodeAddress(editPlace.address, 'edit')}
-            onUseCurrent={() => useCurrentLocation('edit')}
+            onUseCurrent={() => fillCurrentLocation('edit')}
             photo={{
               currentPath: editingPlace?.photoPath,
               file: editPhoto,

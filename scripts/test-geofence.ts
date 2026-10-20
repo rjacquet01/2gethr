@@ -90,7 +90,7 @@ assert.strictEqual(suggestedPingIntervalSec(500, 300), 30)
 
 // 8. Detection latency: walking 1.4 m/s toward a 100m fence, pings every 15s vs 300s.
 function latency(intervalSec: number) {
-  let inside = false
+  const inside = false
   for (let t = 0; t < 3600; t += 1) {
     if (t % intervalSec) continue
     const north = 1000 - 1.4 * t

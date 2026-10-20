@@ -63,7 +63,7 @@ async function main() {
     const old = await seed()
     const a = await rotateRefreshToken(old, USER, undefined, db)
     assert.ok(a, 'first rotation succeeds')
-    let rows = await active()
+    const rows = await active()
     assert.deepStrictEqual(rows.map((r) => r.token), [a!.refreshToken], 'only the new token is active')
     assert.strictEqual(rows[0].user_agent, 'Seed UA', 'device info carried forward')
 

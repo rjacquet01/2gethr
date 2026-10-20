@@ -190,7 +190,7 @@ function NewEventForm() {
       }
     })()
     return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   // Set default family when loaded
