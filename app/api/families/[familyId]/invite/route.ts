@@ -7,7 +7,14 @@ import { ensureInviteTables, generateInviteCode, canManageInvites, INVITE_ROLES 
 const INVITE_DAYS = 7
 const MAX_ACTIVE = 20
 
-const createSchema = z.object({ role: z.enum(INVITE_ROLES) })
+// Join codes are for adults only (parents and guests). A child is added by a
+// parent (Family > Add child, with consent), and a child's own login comes
+// from that child's account code (children/[memberId]/account-invite).
+const createSchema = z.object({
+  role: z.enum(INVITE_ROLES).refine((r) => r !== "CHILD", {
+    message: "Child codes are no longer used. Add children in Family > Add child.",
+  }),
+})
 
 async function guard(request: NextRequest, familyId: string) {
   const { user, error } = await getUserFromRequest(request)
