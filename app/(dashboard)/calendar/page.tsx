@@ -467,6 +467,16 @@ export default function CalendarPage() {
         </Card>
       </div>
 
+      {/* Open-Meteo attribution, only while weather is shown (never to guests). */}
+      {weatherStatus === 'ready' && (
+        <p className="text-center text-xs text-muted-foreground">
+          Weather data by{' '}
+          <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
+            Open-Meteo.com
+          </a>
+        </p>
+      )}
+
       {/* Mobile: Bottom Sheet for Selected Day Events */}
       <Sheet open={showEventSheet} onOpenChange={setShowEventSheet}>
         <SheetContent side="bottom" className="h-[70vh] rounded-t-2xl">
