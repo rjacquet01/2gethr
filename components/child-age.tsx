@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,30 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { authFetch } from '@/hooks/use-auth'
+import { CHILD_CONSENT_STATEMENT, CHILD_DATA_NOTICE } from '@/lib/consent-text'
+
+/**
+ * The parent's consent for a child profile or child account: the short
+ * "what we collect from your child" notice and a checkbox that starts
+ * unchecked. The server refuses the request without it and stores this text.
+ */
+export function ChildConsentBox({ id, checked, onCheckedChange }: { id: string; checked: boolean; onCheckedChange: (v: boolean) => void }) {
+  return (
+    <div className="space-y-2 rounded-lg border p-3 text-sm">
+      <p className="font-medium">What we collect from your child</p>
+      <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+        {CHILD_DATA_NOTICE.map((line) => <li key={line}>{line}</li>)}
+      </ul>
+      <label htmlFor={id} className="flex items-start gap-3 pt-1">
+        <Checkbox id={id} checked={checked} onCheckedChange={(v) => onCheckedChange(v === true)} className="mt-0.5" />
+        <span>{CHILD_CONSENT_STATEMENT}</span>
+      </label>
+      <p className="text-xs text-muted-foreground">
+        See our <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link> (section 6, children).
+      </p>
+    </div>
+  )
+}
 import { Cake, Check, Copy, KeyRound, Shield, UserCheck, Baby } from 'lucide-react'
 
 export interface AgeAwareChild {
@@ -241,10 +265,7 @@ export function ChildAccountDialog({
           </div>
         ) : (
           <div className="space-y-3">
-            <label className="flex items-start gap-3 rounded-lg border p-3 text-sm">
-              <Checkbox checked={consent} onCheckedChange={(v) => setConsent(v === true)} className="mt-0.5" />
-              <span>I am this child&apos;s parent or guardian and I consent to them having their own Togethr account</span>
-            </label>
+            <ChildConsentBox id="child-account-consent" checked={consent} onCheckedChange={setConsent} />
             {under13 && (
               <p className="text-xs text-muted-foreground">
                 Because {child?.displayName} is under 13, their account is created only with your consent, and we only use their information to run the family features.
@@ -258,6 +279,133 @@ export function ChildAccountDialog({
             <Button onClick={create} disabled={!consent || busy}>
               {busy ? <Spinner className="mr-2 h-4 w-4" /> : null}
               Create invite
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+interface ConsentRecord {
+  id: string
+  scope: 'CHILD_PROFILE' | 'CHILD_ACCOUNT'
+  version: string
+  text: string
+  grantedAt: string
+  withdrawnAt: string | null
+  grantedBy: string
+}
+
+/**
+ * A parent reviews the consent given for a child and can withdraw it.
+ * Withdrawing deletes the child's profile, login and location data.
+ */
+export function ChildConsentDialog({
+  familyId,
+  child,
+  onOpenChange,
+  onWithdrawn,
+}: {
+  familyId: string
+  child: { memberId: string; name: string } | null
+  onOpenChange: (open: boolean) => void
+  onWithdrawn: () => void
+}) {
+  const [records, setRecords] = useState<ConsentRecord[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    setRecords(null)
+    setLoadError(null)
+    setConfirming(false)
+    if (!child) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await authFetch(`/api/families/${familyId}/children/${child.memberId}/consent`)
+        const json = await res.json().catch(() => null)
+        if (cancelled) return
+        if (!res.ok || !json?.success) setLoadError(json?.error || "Couldn't load consent")
+        else setRecords(json.data.records as ConsentRecord[])
+      } catch {
+        if (!cancelled) setLoadError("Couldn't load consent")
+      }
+    })()
+    return () => { cancelled = true }
+  }, [familyId, child])
+
+  const withdraw = async () => {
+    if (!child) return
+    setBusy(true)
+    try {
+      const res = await authFetch(`/api/families/${familyId}/children/${child.memberId}/consent`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.success) {
+        toast.error(json?.error || "Couldn't withdraw consent")
+        return
+      }
+      toast.success(json.message || 'Consent withdrawn')
+      onWithdrawn()
+      onOpenChange(false)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const fmt = (d: string) => new Date(d).toLocaleString()
+  return (
+    <Dialog open={!!child} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Consent for {child?.name}</DialogTitle>
+          <DialogDescription>What you agreed to when {child?.name} was added, and when.</DialogDescription>
+        </DialogHeader>
+        {loadError ? (
+          <p className="text-sm text-destructive">{loadError}</p>
+        ) : records === null ? (
+          <div className="flex justify-center py-4"><Spinner className="h-5 w-5" /></div>
+        ) : records.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No consent is on record for {child?.name}. They were added before consent was recorded. You can withdraw below, or contact admin@mytogethr.com.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {records.map((r) => (
+              <li key={r.id} className="rounded-lg border p-3 text-sm">
+                <p className="font-medium">
+                  {r.scope === 'CHILD_ACCOUNT' ? 'Their own account' : 'Child profile'} · {r.grantedBy} · {fmt(r.grantedAt)}
+                </p>
+                {r.withdrawnAt && <p className="text-xs text-destructive">Withdrawn {fmt(r.withdrawnAt)}</p>}
+                <p className="mt-1 whitespace-pre-line text-xs text-muted-foreground">{r.text}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+        {confirming ? (
+          <div className="space-y-2 rounded-lg border border-destructive/50 p-3 text-sm">
+            <p>
+              Withdrawing consent permanently deletes {child?.name}&apos;s profile (name, birthdate, school, notes), their login if they have one, and their location data. Events and tasks your family created stay. This can&apos;t be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setConfirming(false)} disabled={busy}>Cancel</Button>
+              <Button variant="destructive" onClick={withdraw} disabled={busy}>
+                {busy ? <Spinner className="mr-2 h-4 w-4" /> : null}
+                Withdraw and delete
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+            <Button variant="destructive" onClick={() => setConfirming(true)} disabled={records === null && !loadError}>
+              Withdraw consent
             </Button>
           </DialogFooter>
         )}

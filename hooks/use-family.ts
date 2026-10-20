@@ -225,7 +225,7 @@ export function useFamily(familyId: string | null) {
     }
   }, [familyId, mutate])
   
-  const generateInviteCode = useCallback(async (role: 'PARENT' | 'CHILD' | 'GUEST' = 'CHILD') => {
+  const generateInviteCode = useCallback(async (role: 'PARENT' | 'GUEST' = 'GUEST') => {
     if (!familyId) return { success: false, error: 'No family selected' }
     
     try {
@@ -256,6 +256,8 @@ export function useFamily(familyId: string | null) {
     grade?: string
     permissions?: Partial<ChildProfile['permissions']>
     existingMemberId?: string // For assigning existing family members as children
+    /** The parent ticked the consent box (required by the server) */
+    consent?: boolean
   }) => {
     if (!familyId) return { success: false, error: 'No family selected' }
     

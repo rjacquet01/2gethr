@@ -6,6 +6,7 @@ import { z } from "zod"
 import { getTierDefinition } from "@/lib/subscription-tiers"
 import { ensureAgeColumns } from "@/lib/age-schema"
 import { ageFromDob, dobError, childAgeInfo, GUEST_AGE_INFO } from "@/lib/age"
+import { recordParentalConsent } from "@/lib/parental-consent"
 
 const addChildSchema = z.object({
   displayName: z.string().min(1, "Display name is required").max(100),
@@ -21,6 +22,9 @@ const addChildSchema = z.object({
   password: z.string().min(8).optional(),
   // If assigning an existing family member as a child
   existingMemberId: z.string().uuid().optional(),
+  // The parent ticked the consent box (unchecked by default) next to the
+  // "what we collect from your child" notice. Anything but true is refused.
+  consent: z.literal(true, { errorMap: () => ({ message: "Please confirm your consent as the child's parent or guardian" }) }),
 })
 
 // Get children in family
@@ -254,6 +258,7 @@ export async function POST(
       `
 
       await assignDefaultAppearance(memberId)
+      await recordParentalConsent({ familyId, parentUserId: user.id, childMemberId: memberId, childUserId: userId, scope: userId ? "CHILD_ACCOUNT" : "CHILD_PROFILE", request })
 
       // Create location settings if they don't exist
       const existingLocationSettings = await sql`
@@ -353,8 +358,9 @@ export async function POST(
     `
 
     await assignDefaultAppearance(memberId)
+    await recordParentalConsent({ familyId, parentUserId: user.id, childMemberId: memberId, childUserId: userId, scope: userId ? "CHILD_ACCOUNT" : "CHILD_PROFILE", request })
 
-    // Create location settings
+    // Create location settings (off until a parent turns it on)
     await sql`
       INSERT INTO location_settings (
         id, family_member_id, mode, share_with_family, 

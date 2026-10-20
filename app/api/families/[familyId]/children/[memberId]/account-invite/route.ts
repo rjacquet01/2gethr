@@ -6,6 +6,7 @@ import { canManageFamily } from "@/lib/permissions"
 import { ensureInviteTables, generateInviteCode } from "@/lib/family-invites"
 import { ensureAgeColumns } from "@/lib/age-schema"
 import { MIN_ACCOUNT_AGE, effectiveAge } from "@/lib/age"
+import { recordParentalConsent } from "@/lib/parental-consent"
 
 const INVITE_DAYS = 7
 
@@ -74,6 +75,7 @@ export async function POST(
       code = ""
     }
     if (!code) return NextResponse.json({ success: false, error: "Could not create a code, try again" }, { status: 500 })
+    await recordParentalConsent({ familyId, parentUserId: user.id, childMemberId: memberId, scope: "CHILD_ACCOUNT", request })
 
     await logAuditEvent(user.id, "CREATE", "child_account_invite", memberId, {
       newValue: { familyId, childMemberId: memberId, age, consent: true, consentBy: user.id, expiresAt },
