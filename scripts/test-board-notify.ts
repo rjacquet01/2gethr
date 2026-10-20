@@ -1,6 +1,6 @@
-// Usage: npx tsx --tsconfig tsconfig.json scripts/test-board-notify.ts
+// Usage: BOARD_TEST_DATABASE_URL=<disposable test db> npx tsx --tsconfig tsconfig.json scripts/test-board-notify.ts
 //
-// New-pin notifications against the real database, inside throwaway families
+// New-pin notifications against a disposable test database (BOARD_TEST_DATABASE_URL, see scripts/board-test-db.ts), inside throwaway families
 // and users. Push and email go through lib/social socialTransport, replaced
 // here by recorders, and Vercel Blob by an in-memory fake, so nothing real
 // is sent or stored. Everything created here is deleted in `finally`.
@@ -11,16 +11,9 @@
 // push and one email per person per 10 minutes per board; flyers notify only
 // after a successful upload; no notification for replies, restore, photo
 // replace, Keep up or roll-off; never SMS.
-import fs from 'fs'
-import path from 'path'
+import './board-test-db'
 import assert from 'node:assert'
 
-for (const f of ['.env.local', '.env', '.env.production.local']) {
-  try {
-    const m = fs.readFileSync(path.join(process.cwd(), f), 'utf8').match(/^DATABASE_URL\s*=\s*"?([^"\r\n]+)"?/m)
-    if (m && !process.env.DATABASE_URL) process.env.DATABASE_URL = m[1]
-  } catch {}
-}
 process.env.JWT_ACCESS_SECRET = 'board-notify-test-access-secret-not-real-0123456789'
 process.env.JWT_REFRESH_SECRET = 'board-notify-test-refresh-secret-not-real-0123456789'
 process.env.ADMIN_JWT_SECRET ||= 'board-notify-test-placeholder-not-used'

@@ -1,6 +1,6 @@
-// Usage: npx tsx --tsconfig tsconfig.json scripts/test-board-limits.ts
+// Usage: BOARD_TEST_DATABASE_URL=<disposable test db> npx tsx --tsconfig tsconfig.json scripts/test-board-limits.ts
 //
-// End-to-end test of the family board pin limits against the real database,
+// End-to-end test of the family board pin limits against a disposable test database (BOARD_TEST_DATABASE_URL, see scripts/board-test-db.ts),
 // inside throwaway families and users that exist only for the test. Vercel
 // Blob is replaced by an in-memory fake (lib/board-flyers flyerStore), so no
 // real storage is touched. Everything created here is deleted in `finally`.
@@ -14,16 +14,9 @@
 // "take this down after" date; purge of pins taken down 30+ days ago (files
 // first, legal hold, dry run); family delete, account closure and data export
 // covering taken-down pins.
-import fs from 'fs'
-import path from 'path'
+import './board-test-db'
 import assert from 'node:assert'
 
-for (const f of ['.env.local', '.env', '.env.production.local']) {
-  try {
-    const m = fs.readFileSync(path.join(process.cwd(), f), 'utf8').match(/^DATABASE_URL\s*=\s*"?([^"\r\n]+)"?/m)
-    if (m && !process.env.DATABASE_URL) process.env.DATABASE_URL = m[1]
-  } catch {}
-}
 // Test-only secrets: tokens are signed and checked inside this process only.
 process.env.JWT_ACCESS_SECRET = 'board-limits-test-access-secret-not-real-0123456789'
 process.env.JWT_REFRESH_SECRET = 'board-limits-test-refresh-secret-not-real-0123456789'

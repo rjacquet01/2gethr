@@ -1,6 +1,6 @@
-// Usage: npx tsx --tsconfig tsconfig.json scripts/test-board-flyers.ts
+// Usage: BOARD_TEST_DATABASE_URL=<disposable test db> npx tsx --tsconfig tsconfig.json scripts/test-board-flyers.ts
 //
-// End-to-end test of family board flyers against the real database, inside
+// End-to-end test of family board flyers against a disposable test database (BOARD_TEST_DATABASE_URL, see scripts/board-test-db.ts), inside
 // throwaway families and users that exist only for the test. Vercel Blob is
 // replaced by an in-memory fake (lib/board-flyers flyerStore), so no real
 // storage is ever touched. Everything created here is deleted in `finally`.
@@ -11,16 +11,9 @@
 // caching, /api/files refusing flyer paths, the 90-day purge deleting both
 // blobs first (dry run deletes nothing, legal hold skipped), and account
 // closure / family delete removing flyer files.
-import fs from 'fs'
-import path from 'path'
+import './board-test-db'
 import assert from 'node:assert'
 
-for (const f of ['.env.local', '.env', '.env.production.local']) {
-  try {
-    const m = fs.readFileSync(path.join(process.cwd(), f), 'utf8').match(/^DATABASE_URL\s*=\s*"?([^"\r\n]+)"?/m)
-    if (m && !process.env.DATABASE_URL) process.env.DATABASE_URL = m[1]
-  } catch {}
-}
 // Test-only secrets: tokens are signed and checked inside this process only.
 process.env.JWT_ACCESS_SECRET = 'board-flyer-test-access-secret-not-real-0123456789'
 process.env.JWT_REFRESH_SECRET = 'board-flyer-test-refresh-secret-not-real-0123456789'
