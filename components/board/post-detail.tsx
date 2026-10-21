@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { MemberAvatar } from '@/components/member-avatar'
 import { CommentThread, relativeTime } from '@/components/comment-thread'
 import { flyerAlt, type BoardPost } from './types'
+import { FlyerDownloadButton } from './flyer-download-button'
 
 // Full view of one pinned item: the flyer at full size (tap to zoom), the
 // text, who posted it and when, the replies and a reply box, plus actions.
@@ -98,8 +99,9 @@ export function PostDetail({
 
             {keepUp && <KeepUpRow post={post} {...keepUp} />}
 
-            {(canModerate || canDelete || canEditPhoto) && (
+            {(post.flyer?.downloadUrl || canModerate || canDelete || canEditPhoto) && (
               <div className="flex flex-wrap gap-2">
+                {post.flyer?.downloadUrl && <FlyerDownloadButton url={post.flyer.downloadUrl} />}
                 {canModerate && (
                   <Button size="sm" variant="outline" onClick={() => onPin(post, !post.pinned)}>
                     {post.pinned ? <PinOff className="mr-1.5 h-4 w-4" /> : <Pin className="mr-1.5 h-4 w-4" />}
