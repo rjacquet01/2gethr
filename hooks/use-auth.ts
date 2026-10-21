@@ -3,6 +3,7 @@
 import useSWR, { mutate as globalMutate } from 'swr'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
+import { releasePushForThisDevice } from '@/lib/push-release'
 
 // Token storage keys
 const ACCESS_TOKEN_KEY = 'safe_link_access_token'
@@ -300,6 +301,8 @@ export function useAuth(): AuthState & {
     // the httpOnly cookies, which would otherwise keep this device signed in.
     const accessToken = getAccessToken()
     const refreshToken = getRefreshToken()
+    // While still signed in: stop this device getting this account's pushes.
+    await releasePushForThisDevice(accessToken)
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',

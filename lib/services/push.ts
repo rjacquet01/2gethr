@@ -179,16 +179,19 @@ export async function sendPushToUsers(
 export async function registerPushToken(
   userId: string,
   token: string,
-  platform: 'web' | 'ios' | 'android'
+  platform: 'web' | 'ios' | 'android',
+  deviceInfo: Record<string, string> = {}
 ): Promise<boolean> {
   try {
-    // Upsert the token
+    // Upsert the token. One browser has one subscription whoever is signed
+    // in, so it moves to the account that turned push on most recently.
     await sql`
-      INSERT INTO push_tokens (user_id, token, platform, is_active, created_at, updated_at)
-      VALUES (${userId}, ${token}, ${platform}, true, NOW(), NOW())
+      INSERT INTO push_tokens (user_id, token, platform, device_info, is_active, created_at, updated_at)
+      VALUES (${userId}, ${token}, ${platform}, ${JSON.stringify(deviceInfo)}::jsonb, true, NOW(), NOW())
       ON CONFLICT (token)
       DO UPDATE SET
         user_id = ${userId},
+        device_info = ${JSON.stringify(deviceInfo)}::jsonb,
         is_active = true,
         updated_at = NOW()
     `
@@ -202,11 +205,21 @@ export async function registerPushToken(
 /**
  * Unregister a push token
  */
-export async function unregisterPushToken(token: string): Promise<boolean> {
+/** This device's subscription is on and belongs to this account. */
+export async function isPushTokenActiveFor(token: string, userId: string): Promise<boolean> {
+  const rows = await sql`
+    SELECT 1 FROM push_tokens WHERE token = ${token} AND user_id = ${userId} AND is_active = true LIMIT 1
+  `
+  return rows.length > 0
+}
+
+export async function unregisterPushToken(token: string, userId: string): Promise<boolean> {
   try {
+    // Only the caller's own device: a token value alone mustn't switch off
+    // someone else's notifications.
     await sql`
       UPDATE push_tokens SET is_active = false
-      WHERE token = ${token}
+      WHERE token = ${token} AND user_id = ${userId}
     `
     return true
   } catch (error) {

@@ -44,13 +44,15 @@ export function usePushNotifications() {
     try {
       const permission = Notification.permission
       
-      // Check if already subscribed
+      // Subscribed in this browser AND switched on for this account: the
+      // browser's subscription may belong to whoever turned push on before.
       const registration = await navigator.serviceWorker.ready
       const subscription = await registration.pushManager.getSubscription()
-      
+      const isSubscribed = subscription ? await isActiveForThisAccount(subscription) : false
+
       setState({
         isSupported: true,
-        isSubscribed: !!subscription,
+        isSubscribed,
         isLoading: false,
         permission,
         error: null
@@ -114,7 +116,7 @@ export function usePushNotifications() {
           token: JSON.stringify(subscription),
           platform: 'web',
           deviceInfo: {
-            userAgent: navigator.userAgent,
+            browser: browserLabel(navigator.userAgent),
             language: navigator.language
           }
         })
@@ -151,6 +153,8 @@ export function usePushNotifications() {
       const subscription = await registration.pushManager.getSubscription()
 
       if (subscription) {
+        // Read the token before unsubscribing invalidates the subscription.
+        const token = JSON.stringify(subscription)
         await subscription.unsubscribe()
 
         // Notify server to remove token
@@ -159,9 +163,7 @@ export function usePushNotifications() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            token: JSON.stringify(subscription)
-          })
+          body: JSON.stringify({ token })
         })
       }
 
@@ -189,6 +191,38 @@ export function usePushNotifications() {
     unsubscribe,
     refresh: checkSupport
   }
+}
+
+async function isActiveForThisAccount(subscription: PushSubscription): Promise<boolean> {
+  try {
+    const res = await authFetch('/api/notifications/push-token/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: JSON.stringify(subscription) }),
+    })
+    if (!res.ok) return false
+    return (await res.json()).registered === true
+  } catch {
+    return false
+  }
+}
+
+/** "Chrome on Windows" from a user agent, for the admin device list. */
+function browserLabel(ua: string): string {
+  const browser = /Edg\//.test(ua) ? 'Edge'
+    : /OPR\/|Opera/.test(ua) ? 'Opera'
+    : /Firefox\//.test(ua) ? 'Firefox'
+    : /Chrome\//.test(ua) ? 'Chrome'
+    : /Safari\//.test(ua) ? 'Safari'
+    : 'Browser'
+  const os = /Android/.test(ua) ? 'Android'
+    : /iPhone|iPad|iPod/.test(ua) ? 'iOS'
+    : /Windows/.test(ua) ? 'Windows'
+    : /CrOS/.test(ua) ? 'ChromeOS'
+    : /Mac OS X|Macintosh/.test(ua) ? 'Mac'
+    : /Linux/.test(ua) ? 'Linux'
+    : ''
+  return os ? `${browser} on ${os}` : browser
 }
 
 // Helper function to convert VAPID key
