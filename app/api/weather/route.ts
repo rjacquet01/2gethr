@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { getUserFromRequest } from "@/lib/auth"
 import { fetchForecast, redactKey } from "@/lib/weather"
 
-// Daily forecast proxy (Open-Meteo; lib/weather.ts picks the free or the
-// keyed commercial endpoint). Coordinates are rounded so nearby requests
-// share a cache entry and exact addresses are not forwarded.
+// Daily forecast proxy (Open-Meteo or the US National Weather Service;
+// lib/weather.ts fetchForecast picks the provider). Coordinates are rounded
+// so nearby requests share a cache entry and exact addresses are not
+// forwarded. `source` says which provider answered (for the attribution).
 export async function GET(request: NextRequest) {
   const { user } = await getUserFromRequest(request)
   if (!user) {
@@ -16,8 +17,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Invalid coordinates" }, { status: 400 })
   }
   try {
-    const days = await fetchForecast(lat, lng)
-    return NextResponse.json({ success: true, data: days })
+    const { days, source } = await fetchForecast(lat, lng)
+    return NextResponse.json({ success: true, data: days, source })
   } catch (e) {
     console.error("Weather fetch failed:", redactKey(String((e as Error)?.message ?? e)))
     return NextResponse.json({ success: false, error: "Weather unavailable" }, { status: 502 })
