@@ -4,7 +4,7 @@ import useSWR, { mutate as globalMutate } from 'swr'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { releasePushForThisDevice } from '@/lib/push-release'
-import { forgetLastFamily } from '@/lib/last-family'
+import { forgetLastFamily, readLastFamily, rememberLastFamily } from '@/lib/last-family'
 
 // Token storage keys
 const ACCESS_TOKEN_KEY = 'safe_link_access_token'
@@ -206,6 +206,15 @@ export function useAuth(): AuthState & {
       shouldRetryOnError: false,
     }
   )
+
+  // Right after signing in nothing is remembered yet (sign-out forgets it), so
+  // take the account's family from here: the dashboard that opens next can
+  // then start its data during the sign-in check (lib/last-family.ts).
+  const primaryFamilyId = data?.user?.primaryFamily?.id
+  const primaryFamilyRole = data?.user?.primaryFamilyRole ?? null
+  useEffect(() => {
+    if (primaryFamilyId && !readLastFamily()) rememberLastFamily(primaryFamilyId, primaryFamilyRole)
+  }, [primaryFamilyId, primaryFamilyRole])
   
   const login = useCallback(async (email: string, password: string) => {
     try {
