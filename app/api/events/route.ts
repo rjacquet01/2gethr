@@ -104,6 +104,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Neither depends on the events, so start them now and await them below:
+    // the guest check and (when the family is known) the plan's history window.
+    const guestFamilyIdsPromise = getGuestFamilyIds(user.id)
+    const familySubscriptionPromise = familyId ? checkFamilySubscription(familyId) : null
+    // Awaited later; a failure surfaces there, not as an unhandled rejection.
+    guestFamilyIdsPromise.catch(() => {})
+    familySubscriptionPromise?.catch(() => {})
+
     // Build query based on filters
     let events
     if (calendarId) {
@@ -239,7 +247,7 @@ export async function GET(request: NextRequest) {
 
     // Guests only see events they created or were invited to, and never a
     // saved place's address (family location data).
-    const guestFamilyIds = await getGuestFamilyIds(user.id)
+    const guestFamilyIds = await guestFamilyIdsPromise
     if (guestFamilyIds.length > 0) {
       let scopeFamilyId: string | null = familyId
       if (!scopeFamilyId && calendarId) {
@@ -258,7 +266,9 @@ export async function GET(request: NextRequest) {
     
     if (effectiveFamilyId) {
       try {
-        const subscription = await checkFamilySubscription(effectiveFamilyId)
+        const subscription = await (effectiveFamilyId === familyId && familySubscriptionPromise
+          ? familySubscriptionPromise
+          : checkFamilySubscription(effectiveFamilyId))
         historyDays = subscription.features.historyDays || 30
       } catch {
         // Default to 30 days if subscription check fails

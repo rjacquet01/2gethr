@@ -18,30 +18,28 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(request.nextUrl.searchParams.get("limit") || "50")
     const offset = parseInt(request.nextUrl.searchParams.get("offset") || "0")
 
-    let notifications
-    if (unreadOnly) {
-      notifications = await sql`
-        SELECT id, type, title, body, data, is_read, read_at, sent_at, created_at
-        FROM notifications
+    // The page and the unread count don't depend on each other: one round trip.
+    const [notifications, unreadCount] = await Promise.all([
+      unreadOnly
+        ? sql`
+            SELECT id, type, title, body, data, is_read, read_at, sent_at, created_at
+            FROM notifications
+            WHERE user_id = ${user.id} AND is_read = false
+            ORDER BY created_at DESC
+            LIMIT ${limit} OFFSET ${offset}
+          `
+        : sql`
+            SELECT id, type, title, body, data, is_read, read_at, sent_at, created_at
+            FROM notifications
+            WHERE user_id = ${user.id}
+            ORDER BY created_at DESC
+            LIMIT ${limit} OFFSET ${offset}
+          `,
+      sql`
+        SELECT COUNT(*) as count FROM notifications
         WHERE user_id = ${user.id} AND is_read = false
-        ORDER BY created_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `
-    } else {
-      notifications = await sql`
-        SELECT id, type, title, body, data, is_read, read_at, sent_at, created_at
-        FROM notifications
-        WHERE user_id = ${user.id}
-        ORDER BY created_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `
-    }
-
-    // Get unread count
-    const unreadCount = await sql`
-      SELECT COUNT(*) as count FROM notifications
-      WHERE user_id = ${user.id} AND is_read = false
-    `
+      `,
+    ])
 
     return NextResponse.json({
       success: true,

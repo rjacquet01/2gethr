@@ -86,56 +86,55 @@ export async function GET(request: NextRequest) {
     // grown-ups need approval (below). A child sees the grown-ups who share.
     const seesKids = isAdultMemberRole(userRole)
 
-    // Check subscription allows location sharing (Premium only)
-    const subscription = await checkFamilySubscription(familyId)
+    // Independent of each other once membership is known, so one round trip
+    // instead of four. The plan check still decides before anything is returned.
+    const [subscription, locations, snapshots, approvedOwners] = await Promise.all([
+      checkFamilySubscription(familyId),
+      // Members with their location settings and latest ping
+      sql`
+        SELECT 
+          fm.id as member_id, fm.user_id, fm.nickname, fm.role, fm.color, fm.emoji,
+          COALESCE(ls.mode, 'OFF') as location_mode, 
+          COALESCE(ls.share_with_family, false) as share_with_family,
+          lp.id as ping_id, lp.latitude, lp.longitude, lp.accuracy, lp.altitude,
+          lp.speed, lp.heading, lp.battery_level, lp.timestamp,
+          u.first_name, u.last_name, u.profile_photo_path,
+          cp.display_name as child_display_name
+        FROM family_members fm
+        LEFT JOIN location_settings ls ON fm.id = ls.family_member_id
+        LEFT JOIN LATERAL (
+          SELECT * FROM location_pings 
+          WHERE user_id = fm.user_id 
+          ORDER BY timestamp DESC 
+          LIMIT 1
+        ) lp ON true
+        LEFT JOIN users u ON fm.user_id = u.id
+        LEFT JOIN child_profiles cp ON fm.id = cp.family_member_id
+        WHERE fm.family_id = ${familyId}
+        AND fm.is_active = true
+      `,
+      ensureLocationRequestsTable().then(() => sql`
+        SELECT lr.id, lr.snapshot_lat, lr.snapshot_lng, lr.snapshot_accuracy, lr.snapshot_at,
+               fm.nickname, fm.role, u.first_name, u.last_name, cp.display_name AS child_display_name
+        FROM location_requests lr
+        JOIN family_members fm ON fm.user_id = lr.target_user_id AND fm.family_id = lr.family_id AND fm.is_active = true
+        LEFT JOIN users u ON u.id = lr.target_user_id
+        LEFT JOIN child_profiles cp ON cp.family_member_id = fm.id
+        WHERE lr.requester_user_id = ${user.id} AND lr.family_id = ${familyId}
+          AND lr.status = 'FULFILLED' AND lr.snapshot_lat IS NOT NULL
+          AND lr.snapshot_at > NOW() - INTERVAL '60 minutes'
+        ORDER BY lr.snapshot_at DESC
+        LIMIT 10
+      `),
+      // Grown-ups see another grown-up only with that person's approval.
+      isAdultMemberRole(userRole) ? approvedOwnerMemberIds(myMemberId) : Promise.resolve(new Set<string>()),
+    ])
     if (!subscription.features.locationSharing) {
       return NextResponse.json(
         { success: false, error: "Location sharing requires a Premium subscription", code: "SUBSCRIPTION_REQUIRED" },
         { status: 403 }
       )
     }
-
-    // Get members with their location settings and pings
-    const locations = await sql`
-      SELECT 
-        fm.id as member_id, fm.user_id, fm.nickname, fm.role, fm.color, fm.emoji,
-        COALESCE(ls.mode, 'OFF') as location_mode, 
-        COALESCE(ls.share_with_family, false) as share_with_family,
-        lp.id as ping_id, lp.latitude, lp.longitude, lp.accuracy, lp.altitude,
-        lp.speed, lp.heading, lp.battery_level, lp.timestamp,
-        u.first_name, u.last_name, u.profile_photo_path,
-        cp.display_name as child_display_name
-      FROM family_members fm
-      LEFT JOIN location_settings ls ON fm.id = ls.family_member_id
-      LEFT JOIN LATERAL (
-        SELECT * FROM location_pings 
-        WHERE user_id = fm.user_id 
-        ORDER BY timestamp DESC 
-        LIMIT 1
-      ) lp ON true
-      LEFT JOIN users u ON fm.user_id = u.id
-      LEFT JOIN child_profiles cp ON fm.id = cp.family_member_id
-      WHERE fm.family_id = ${familyId}
-      AND fm.is_active = true
-    `
-    
-    await ensureLocationRequestsTable()
-    const snapshots = await sql`
-      SELECT lr.id, lr.snapshot_lat, lr.snapshot_lng, lr.snapshot_accuracy, lr.snapshot_at,
-             fm.nickname, fm.role, u.first_name, u.last_name, cp.display_name AS child_display_name
-      FROM location_requests lr
-      JOIN family_members fm ON fm.user_id = lr.target_user_id AND fm.family_id = lr.family_id AND fm.is_active = true
-      LEFT JOIN users u ON u.id = lr.target_user_id
-      LEFT JOIN child_profiles cp ON cp.family_member_id = fm.id
-      WHERE lr.requester_user_id = ${user.id} AND lr.family_id = ${familyId}
-        AND lr.status = 'FULFILLED' AND lr.snapshot_lat IS NOT NULL
-        AND lr.snapshot_at > NOW() - INTERVAL '60 minutes'
-      ORDER BY lr.snapshot_at DESC
-      LIMIT 10
-    `
-
-    // Grown-ups see another grown-up only with that person's approval.
-    const approvedOwners = isAdultMemberRole(userRole) ? await approvedOwnerMemberIds(myMemberId) : new Set<string>()
 
     // Filter based on role:
     // - Grown-ups can see all family members who have share_with_family enabled

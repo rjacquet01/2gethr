@@ -46,37 +46,39 @@ export async function GET(request: NextRequest) {
     // Fetch members and children for each family to display on dashboard
     const familiesWithMembers = await Promise.all(
       families.map(async (f) => {
-        const members = await sql`
-          SELECT 
-            fm.id,
-            fm.user_id,
-            fm.role,
-            fm.nickname,
-            fm.is_active,
-            fm.joined_at,
-            u.first_name,
-            u.last_name,
-            u.profile_photo_url,
-            cp.display_name
-          FROM family_members fm
-          LEFT JOIN users u ON fm.user_id = u.id
-          LEFT JOIN child_profiles cp ON cp.family_member_id = fm.id
-          WHERE fm.family_id = ${f.id} AND fm.is_active = true
-            -- A guest sees only their own membership, never the family's structure.
-            AND (${f.user_role} <> 'GUEST' OR fm.user_id = ${user.id})
-          ORDER BY fm.joined_at ASC
-        `
-        
-        // Also fetch children for each family (none for a guest)
-        const children = f.user_role === 'GUEST' ? [] : await sql`
-          SELECT 
-            cp.id, cp.display_name, cp.age, cp.school, cp.grade,
-            cp.avatar_url, cp.created_at, fm.user_id AS member_user_id
-          FROM child_profiles cp
-          JOIN family_members fm ON cp.family_member_id = fm.id
-          WHERE fm.family_id = ${f.id} AND fm.role = 'CHILD' AND fm.is_active = true
-        `
-        
+        // Members and children don't depend on each other: fetched together.
+        const [members, children] = await Promise.all([
+          sql`
+            SELECT 
+              fm.id,
+              fm.user_id,
+              fm.role,
+              fm.nickname,
+              fm.is_active,
+              fm.joined_at,
+              u.first_name,
+              u.last_name,
+              u.profile_photo_url,
+              cp.display_name
+            FROM family_members fm
+            LEFT JOIN users u ON fm.user_id = u.id
+            LEFT JOIN child_profiles cp ON cp.family_member_id = fm.id
+            WHERE fm.family_id = ${f.id} AND fm.is_active = true
+              -- A guest sees only their own membership, never the family's structure.
+              AND (${f.user_role} <> 'GUEST' OR fm.user_id = ${user.id})
+            ORDER BY fm.joined_at ASC
+          `,
+          // Children for each family (none for a guest)
+          f.user_role === 'GUEST' ? Promise.resolve([]) : sql`
+            SELECT 
+              cp.id, cp.display_name, cp.age, cp.school, cp.grade,
+              cp.avatar_url, cp.created_at, fm.user_id AS member_user_id
+            FROM child_profiles cp
+            JOIN family_members fm ON cp.family_member_id = fm.id
+            WHERE fm.family_id = ${f.id} AND fm.role = 'CHILD' AND fm.is_active = true
+          `,
+        ])
+
         return {
           id: f.id,
           name: f.name,
