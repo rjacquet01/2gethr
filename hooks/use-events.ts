@@ -94,12 +94,19 @@ function buildQueryString(filters: EventFilters): string {
   return params.toString()
 }
 
-export function useEvents(filters: EventFilters = {}) {
+/** The SWR key useEvents uses (null until there is a familyId or calendarId). Shared with the dashboard preload. */
+export function eventsKey(filters: EventFilters = {}): string | null {
   const queryString = buildQueryString(filters)
   // Only fetch if we have at least a familyId or calendarId
   const shouldFetch = !!(filters.familyId || filters.calendarId)
-  const url = shouldFetch ? `/api/events${queryString ? `?${queryString}` : ''}` : null
-  
+  return shouldFetch ? `/api/events${queryString ? `?${queryString}` : ''}` : null
+}
+
+export { fetcher as eventsFetcher }
+
+export function useEvents(filters: EventFilters = {}) {
+  const url = eventsKey(filters)
+
   const { data, error, isLoading, mutate } = useSWR<{ events: Event[] }>(url, fetcher)
   
   const createEvent = useCallback(async (eventData: {

@@ -2,6 +2,8 @@
 
 import { useFamilies } from '@/hooks/use-family'
 import { useEvents } from '@/hooks/use-events'
+import { dashboardEventFilters, remindersFetcher, remindersKey } from '@/hooks/use-dashboard-prefetch'
+import useSWR from 'swr'
 
 import { useSubscription } from '@/hooks/use-subscription'
 import { usePurchaseUi } from '@/hooks/use-purchase-ui'
@@ -34,9 +36,9 @@ import {
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import { format, isToday, isTomorrow, parseISO, isPast } from 'date-fns'
-import { authFetch, useAuth } from '@/hooks/use-auth'
+import { useAuth } from '@/hooks/use-auth'
 import { useMyRole } from '@/hooks/use-my-role'
 import { Bell } from 'lucide-react'
 import { ComingUp, DashboardMiniMap, FloatingEmergencyButton } from '@/components/dashboard-extras'
@@ -55,19 +57,11 @@ export default function DashboardPage() {
   // Guests get calendar and tasks only: no family map, activity or SOS.
   const { isGuest, isSupervisor } = useMyRole()
   const { user } = useAuth()
-  // Only fetch events when we have a valid family ID
-  // Start from today and get next 7 days
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const sevenDaysLater = new Date(today)
-  sevenDaysLater.setDate(sevenDaysLater.getDate() + 7)
-  
+  // Today through the next 7 days, once the family is known. Same keys as
+  // the layout's preload (hooks/use-dashboard-prefetch.ts), so data started
+  // during the sign-in check is reused here.
   const { events, isLoading: eventsLoading } = useEvents(
-    primaryFamily?.id ? {
-      familyId: primaryFamily.id,
-      startDate: today.toISOString(),
-      endDate: sevenDaysLater.toISOString(),
-    } : {}
+    primaryFamily?.id ? dashboardEventFilters(primaryFamily.id) : {}
   )
 
 
@@ -78,34 +72,13 @@ export default function DashboardPage() {
 
   // Standalone reminders (not tied to a task or event) - shown as their own
   // card below Upcoming Tasks, same "pending items at a glance" pattern.
-  interface ReminderSummary {
-    id: string
-    title: string
-    remind_at: string
-    is_recurring: boolean
-  }
-  const [reminders, setReminders] = useState<ReminderSummary[]>([])
-  const [remindersLoading, setRemindersLoading] = useState(true)
-
   // Reminders for the family being viewed only (the switcher's choice).
-  const fetchReminders = useCallback(async () => {
-    if (!primaryFamily?.id) return
-    try {
-      const res = await authFetch(`/api/reminders?status=PENDING&familyId=${encodeURIComponent(primaryFamily.id)}`)
-      if (res.ok) {
-        const data = await res.json()
-        setReminders((data.data || []).slice(0, 5))
-      }
-    } catch (err) {
-      console.error('Failed to fetch reminders:', err)
-    } finally {
-      setRemindersLoading(false)
-    }
-  }, [primaryFamily?.id])
-
-  useEffect(() => {
-    fetchReminders()
-  }, [fetchReminders])
+  // Cached by SWR, so coming back to the dashboard doesn't reload them.
+  const { data: reminderRows, isLoading: remindersLoading } = useSWR(
+    primaryFamily?.id ? remindersKey(primaryFamily.id) : null,
+    remindersFetcher
+  )
+  const reminders = (reminderRows || []).slice(0, 5)
 
   // Helper to check if a task is past due
   // The tasks API returns rows as stored (due_date); there is no dueDate.

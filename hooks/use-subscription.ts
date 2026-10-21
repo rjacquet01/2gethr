@@ -156,12 +156,19 @@ const fetcher = async (url: string): Promise<{ subscription: Subscription | null
   }
 }
 
+/** The SWR key useSubscription uses. Shared with the dashboard preload. */
+export function subscriptionKey(familyId: string | null): string | null {
+  return familyId ? `/api/subscriptions?familyId=${familyId}` : null
+}
+
+export { fetcher as subscriptionFetcher }
+
 export function useSubscription(familyId: string | null) {
   const { data, error, isLoading, mutate } = useSWR<{
     subscription: Subscription | null
     access: PremiumAccess
   }>(
-    familyId ? `/api/subscriptions?familyId=${familyId}` : null,
+    subscriptionKey(familyId),
     fetcher
   )
   

@@ -3,7 +3,8 @@
 import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { useAuth } from '@/hooks/use-auth'
+import { getAccessToken, useAuth } from '@/hooks/use-auth'
+import { prefetchDashboard } from '@/hooks/use-dashboard-prefetch'
 import { useNotifications } from '@/hooks/use-notifications'
 import { useMyRole } from '@/hooks/use-my-role'
 import { markChildDevice } from '@/components/privacy-analytics'
@@ -91,6 +92,14 @@ export default function DashboardLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { isGuest, isChild, role } = useMyRole()
   const visibleNavItems = isGuest ? navItems.filter((item) => !GUEST_HIDDEN_HREFS.has(item.href)) : navItems
+
+  // Landing on the dashboard: start its data for the last family seen here
+  // while sign-in is still being checked, instead of after it (one wait
+  // instead of three). Only with a stored session; mount only.
+  useEffect(() => {
+    if (pathname === '/dashboard' && getAccessToken()) prefetchDashboard()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // No analytics from a child's device (components/privacy-analytics.tsx).
   useEffect(() => {
