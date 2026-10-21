@@ -1,14 +1,7 @@
 // Usage: npx tsx scripts/test-data-export.ts <email>
 // Read-only. Runs the account data export for one user and prints a summary.
-import fs from 'fs'
-import path from 'path'
-
-for (const f of ['.env.local', '.env', '.env.production.local']) {
-  try {
-    const m = fs.readFileSync(path.join(process.cwd(), f), 'utf8').match(/^DATABASE_URL\s*=\s*"?([^"\r\n]+)"?/m)
-    if (m && !process.env.DATABASE_URL) process.env.DATABASE_URL = m[1]
-  } catch {}
-}
+// Dev branch only (scripts/dev-db.ts).
+import './dev-db'
 
 async function main() {
   const email = process.argv[2]

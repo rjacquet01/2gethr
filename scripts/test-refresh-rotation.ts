@@ -3,17 +3,10 @@
 // that shadows refresh_tokens on a direct connection, so the real table is
 // never touched. Each
 // statement autocommits (no wrapping transaction) so NOW() differs between
-// them as it does in production.
-import fs from 'fs'
-import path from 'path'
+// them as it does in production. Dev branch only (scripts/dev-db.ts).
+import './dev-db'
 import assert from 'node:assert'
 
-for (const f of ['.env.local', '.env', '.env.production.local']) {
-  try {
-    const m = fs.readFileSync(path.join(process.cwd(), f), 'utf8').match(/^DATABASE_URL\s*=\s*"?([^"\r\n]+)"?/m)
-    if (m && !process.env.DATABASE_URL) process.env.DATABASE_URL = m[1]
-  } catch {}
-}
 // Tokens signed here are never checked by the app; test-only secrets.
 process.env.JWT_ACCESS_SECRET ||= 'test-access-secret-not-used-in-production'
 process.env.JWT_REFRESH_SECRET ||= 'test-refresh-secret-not-used-in-production'
