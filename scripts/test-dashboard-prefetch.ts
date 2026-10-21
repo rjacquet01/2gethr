@@ -99,7 +99,9 @@ async function main() {
     ]) assert.ok(fs.readFileSync(file, "utf8").includes(needle), `${file} uses the shared key`)
     const layout = fs.readFileSync("app/(dashboard)/layout.tsx", "utf8")
     assert.ok(/pathname === '\/dashboard' && getAccessToken\(\)\) prefetchDashboard\(\)/.test(layout), "layout starts it with a stored session only")
-    assert.ok(fs.readFileSync("hooks/use-auth.ts", "utf8").includes("forgetLastFamily()"), "sign-out forgets the family")
+    const auth = fs.readFileSync("hooks/use-auth.ts", "utf8")
+    assert.ok(auth.includes("forgetLastFamily()"), "sign-out forgets the family")
+    assert.ok(auth.includes("if (primaryFamilyId && !readLastFamily()) rememberLastFamily(primaryFamilyId, primaryFamilyRole)"), "signing in remembers the account's family when none is remembered")
     ok("page, widgets and hooks all build their keys with the shared functions; layout and sign-out wired")
   }
 
