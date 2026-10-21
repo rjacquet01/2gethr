@@ -95,6 +95,10 @@ async function main() {
       return []
     }],
     // GET: the viewer's membership, then everyone with their latest ping.
+    ["SELECT id, role FROM family_members", (v) => {
+      const m = memberOf(v[1])
+      return m ? [{ id: m.id, role: m.role }] : []
+    }],
     ["SELECT role FROM family_members", (v) => {
       const m = memberOf(v[1])
       return m ? [{ role: m.role }] : []
