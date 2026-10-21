@@ -159,8 +159,8 @@ async function main() {
     ok("a parent who isn't sharing still sees the sharing kid, and no other adult")
     assert.deepStrictEqual(await seen(DAD), ["m-dad", "m-kid"])
     ok("a sharing parent sees themselves and the kid, not the sharing adult")
-    assert.deepStrictEqual(await seen(AUNT), ["m-aunt"])
-    ok("an ADULT sees no sharing grown-up without approval (and no kids, as before)")
+    assert.deepStrictEqual(await seen(AUNT), ["m-aunt", "m-kid"])
+    ok("an ADULT sees the sharing kid, but no sharing grown-up without approval")
     assert.deepStrictEqual(await seen(KID), ["m-aunt", "m-dad"])
     ok("a child still sees the grown-ups who share")
 

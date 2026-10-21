@@ -81,9 +81,9 @@ export async function GET(request: NextRequest) {
     const userRole = membership[0].role
     const myMemberId = membership[0].id as string
     if (userRole === "GUEST") return guestForbidden()
-    // Supervisors see every sharing member (children included). ADULT is a
-    // peer: like a child viewer, they see the grown-ups who share.
-    const isParentOrGuardian = userRole === "PARENT" || userRole === "GUARDIAN"
+    // Grown-ups (PARENT / GUARDIAN / ADULT) see sharing children; other
+    // grown-ups need approval (below). A child sees the grown-ups who share.
+    const seesKids = isAdultMemberRole(userRole)
 
     // Check subscription allows location sharing (Premium only)
     const subscription = await checkFamilySubscription(familyId)
@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
     const approvedOwners = isAdultMemberRole(userRole) ? await approvedOwnerMemberIds(myMemberId) : new Set<string>()
 
     // Filter based on role:
-    // - Parents/guardians can see all family members who have share_with_family enabled
+    // - Grown-ups can see all family members who have share_with_family enabled
     // - Children can only see family members who share their location (parents sharing with them)
     // - Grown-ups see another grown-up only with an approved access grant
     const filteredLocations = locations.filter(l => {
@@ -153,8 +153,8 @@ export async function GET(request: NextRequest) {
       if ((l.share_with_family !== true || l.location_mode === 'OFF') && !sharedOnce) {
         return false
       }
-      // Children and adult members only see the grown-ups who are sharing
-      if (!isParentOrGuardian) {
+      // Children only see the grown-ups who are sharing
+      if (!seesKids) {
         return l.role === 'PARENT' || l.role === 'GUARDIAN' || l.role === 'ADULT'
       }
       return true
@@ -198,9 +198,9 @@ export async function GET(request: NextRequest) {
           emoji: l.emoji ?? null,
         })),
       // Kids with no login have no phone to share from or approve a ping, so
-      // they appear in neither list above. Parents/guardians get them here so
+      // they appear in neither list above. Grown-ups get them here so
       // the page can say "No account" instead of leaving them out silently.
-      noAccountChildren: isParentOrGuardian
+      noAccountChildren: seesKids
         ? locations
             .filter(l => l.role === 'CHILD' && !l.user_id)
             .map(l => ({
