@@ -3,6 +3,7 @@ import { logAuditEvent } from "./auth"
 import { ensureConsentSchema } from "./consent-schema"
 import { requestMeta } from "./parental-consent"
 import { TERMS_VERSION } from "./consent-text"
+import { memberName } from "./member-names"
 
 // One-time confirmations for people who signed up before the age rule and
 // parental consent existed (see docs/CHILDREN_DATA_POLICY.md):
@@ -68,7 +69,7 @@ export interface ChildWithoutConsent {
 export async function listChildrenWithoutConsent(userId: string): Promise<ChildWithoutConsent[]> {
   await ensureConsentSchema()
   const rows = await sql`
-    SELECT fm.id, fm.family_id, fm.user_id, f.name AS family_name, cp.display_name, u.first_name
+    SELECT fm.id, fm.family_id, fm.user_id, fm.nickname, f.name AS family_name, cp.display_name, u.first_name
     FROM family_members fm
     JOIN families f ON f.id = fm.family_id
     LEFT JOIN child_profiles cp ON cp.family_member_id = fm.id
@@ -88,7 +89,7 @@ export async function listChildrenWithoutConsent(userId: string): Promise<ChildW
     familyId: r.family_id as string,
     familyName: (r.family_name as string) || "Your family",
     memberId: r.id as string,
-    name: (r.display_name as string) || (r.first_name as string) || "Your child",
+    name: memberName({ role: "CHILD", childDisplayName: r.display_name as string, nickname: r.nickname as string, firstName: r.first_name as string }, { fallback: "Your child" }),
     hasLogin: Boolean(r.user_id),
   }))
 }

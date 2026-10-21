@@ -3,6 +3,7 @@ import { createNotification, type NotificationType } from "./notifications"
 import { sendPushToUser, isFirebaseConfigured } from "./services/push"
 import { sendEmail, isResendConfigured } from "./services/email"
 import { isQuietNow } from "./quiet-hours"
+import { memberName } from "./member-names"
 
 /**
  * Push and email for social notifications go through this object so tests
@@ -143,14 +144,15 @@ export async function authorInfo(familyId: string, userIds: string[]): Promise<M
   const ids = Array.from(new Set(userIds))
   if (ids.length === 0) return map
   const rows = await sql`
-    SELECT u.id, u.first_name, u.last_name, u.profile_photo_path, fm.nickname, fm.color, fm.emoji
+    SELECT u.id, u.first_name, u.last_name, u.profile_photo_path, fm.role, fm.nickname, fm.color, fm.emoji, cp.display_name
     FROM users u
     LEFT JOIN family_members fm ON fm.user_id = u.id AND fm.family_id = ${familyId}
+    LEFT JOIN child_profiles cp ON cp.family_member_id = fm.id
     WHERE u.id = ANY(${ids})
   `
   for (const r of rows) {
     map.set(r.id as string, {
-      authorName: `${r.first_name || ""} ${r.last_name || ""}`.trim() || (r.nickname as string) || "Family member",
+      authorName: memberName({ role: r.role, nickname: r.nickname, childDisplayName: r.display_name, firstName: r.first_name, lastName: r.last_name }, { withLastName: true }),
       avatarUrl: (r.profile_photo_path as string) || null,
       color: (r.color as string) || null,
       emoji: (r.emoji as string) || null,

@@ -6,6 +6,7 @@ import { getUserFromRequest } from '@/lib/auth'
 import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
 import { filterTasksForGuest } from '@/lib/guest-scope'
 import { notifyTaskAssigned, type NotificationChannel } from '@/lib/notifications'
+import { taskAssigneeName } from "@/lib/member-names"
 
 // GET - List tasks for the current user's families
 export async function GET(request: NextRequest) {
@@ -50,12 +51,15 @@ export async function GET(request: NextRequest) {
         SELECT t.*, 
                u_creator.first_name as creator_first_name, u_creator.last_name as creator_last_name,
                u_assignee.first_name as assignee_first_name, u_assignee.last_name as assignee_last_name,
+               fm_a.role as assignee_role, fm_a.nickname as assignee_nickname, cp_a.display_name as assignee_child_name,
                u_assignee.profile_photo_path as assignee_profile_photo_path,
                cp.display_name as child_display_name, cp.avatar_url as child_avatar_url,
                f.name as family_name
         FROM tasks t
         LEFT JOIN users u_creator ON t.created_by_id = u_creator.id
         LEFT JOIN users u_assignee ON t.assigned_to_id = u_assignee.id
+        LEFT JOIN family_members fm_a ON fm_a.user_id = t.assigned_to_id AND fm_a.family_id = t.family_id AND fm_a.is_active = true
+        LEFT JOIN child_profiles cp_a ON cp_a.family_member_id = fm_a.id
         LEFT JOIN child_profiles cp ON t.child_profile_id = cp.id
         LEFT JOIN families f ON t.family_id = f.id
         WHERE t.family_id = ANY(${familyIds})
@@ -68,12 +72,15 @@ export async function GET(request: NextRequest) {
         SELECT t.*, 
                u_creator.first_name as creator_first_name, u_creator.last_name as creator_last_name,
                u_assignee.first_name as assignee_first_name, u_assignee.last_name as assignee_last_name,
+               fm_a.role as assignee_role, fm_a.nickname as assignee_nickname, cp_a.display_name as assignee_child_name,
                u_assignee.profile_photo_path as assignee_profile_photo_path,
                cp.display_name as child_display_name, cp.avatar_url as child_avatar_url,
                f.name as family_name
         FROM tasks t
         LEFT JOIN users u_creator ON t.created_by_id = u_creator.id
         LEFT JOIN users u_assignee ON t.assigned_to_id = u_assignee.id
+        LEFT JOIN family_members fm_a ON fm_a.user_id = t.assigned_to_id AND fm_a.family_id = t.family_id AND fm_a.is_active = true
+        LEFT JOIN child_profiles cp_a ON cp_a.family_member_id = fm_a.id
         LEFT JOIN child_profiles cp ON t.child_profile_id = cp.id
         LEFT JOIN families f ON t.family_id = f.id
         WHERE t.family_id = ANY(${familyIds})
@@ -85,12 +92,15 @@ export async function GET(request: NextRequest) {
         SELECT t.*, 
                u_creator.first_name as creator_first_name, u_creator.last_name as creator_last_name,
                u_assignee.first_name as assignee_first_name, u_assignee.last_name as assignee_last_name,
+               fm_a.role as assignee_role, fm_a.nickname as assignee_nickname, cp_a.display_name as assignee_child_name,
                u_assignee.profile_photo_path as assignee_profile_photo_path,
                cp.display_name as child_display_name, cp.avatar_url as child_avatar_url,
                f.name as family_name
         FROM tasks t
         LEFT JOIN users u_creator ON t.created_by_id = u_creator.id
         LEFT JOIN users u_assignee ON t.assigned_to_id = u_assignee.id
+        LEFT JOIN family_members fm_a ON fm_a.user_id = t.assigned_to_id AND fm_a.family_id = t.family_id AND fm_a.is_active = true
+        LEFT JOIN child_profiles cp_a ON cp_a.family_member_id = fm_a.id
         LEFT JOIN child_profiles cp ON t.child_profile_id = cp.id
         LEFT JOIN families f ON t.family_id = f.id
         WHERE t.family_id = ANY(${familyIds})
@@ -102,12 +112,15 @@ export async function GET(request: NextRequest) {
         SELECT t.*, 
                u_creator.first_name as creator_first_name, u_creator.last_name as creator_last_name,
                u_assignee.first_name as assignee_first_name, u_assignee.last_name as assignee_last_name,
+               fm_a.role as assignee_role, fm_a.nickname as assignee_nickname, cp_a.display_name as assignee_child_name,
                u_assignee.profile_photo_path as assignee_profile_photo_path,
                cp.display_name as child_display_name, cp.avatar_url as child_avatar_url,
                f.name as family_name
         FROM tasks t
         LEFT JOIN users u_creator ON t.created_by_id = u_creator.id
         LEFT JOIN users u_assignee ON t.assigned_to_id = u_assignee.id
+        LEFT JOIN family_members fm_a ON fm_a.user_id = t.assigned_to_id AND fm_a.family_id = t.family_id AND fm_a.is_active = true
+        LEFT JOIN child_profiles cp_a ON cp_a.family_member_id = fm_a.id
         LEFT JOIN child_profiles cp ON t.child_profile_id = cp.id
         LEFT JOIN families f ON t.family_id = f.id
         WHERE t.family_id = ANY(${familyIds})
@@ -123,7 +136,7 @@ export async function GET(request: NextRequest) {
       tasks = await filterTasksForGuest(tasks, user.id, (t) => t.family_id, guestFamilyIds)
     }
 
-    return NextResponse.json({ data: tasks })
+    return NextResponse.json({ data: tasks.map((t) => ({ ...t, assignee_name: taskAssigneeName(t) })) })
   } catch (error) {
     console.error('Tasks GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 })

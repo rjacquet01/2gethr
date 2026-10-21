@@ -12,6 +12,8 @@ export interface FamilyMember {
   familyId: string
   role: FamilyRole
   displayName: string
+  /** Only on your own membership: your "Name shown to this family" ('' = account name). */
+  nickname?: string
   avatarUrl: string | null
   color?: string | null
   emoji?: string | null

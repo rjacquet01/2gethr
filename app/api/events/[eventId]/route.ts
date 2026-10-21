@@ -7,6 +7,7 @@ import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { planGateError } from "@/lib/tier-gates"
 import { guestCanSeeEvent, canSeeEventVisibility } from "@/lib/guest-scope"
+import { participantName } from "@/lib/member-names"
 
 const updateEventSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -92,10 +93,15 @@ export async function GET(
     const participants = await sql`
       SELECT 
         ep.id, ep.user_id, ep.child_profile_id, ep.status, ep.responded_at,
-        u.first_name, u.last_name, u.email, cp.display_name AS child_name
+        u.first_name, u.last_name, u.email, cp.display_name AS child_name,
+        fm.role, fm.nickname, cpm.display_name AS member_child_name
       FROM event_participants ep
       LEFT JOIN users u ON ep.user_id = u.id
       LEFT JOIN child_profiles cp ON ep.child_profile_id = cp.id
+      JOIN events e ON e.id = ep.event_id
+      JOIN calendars c ON c.id = e.calendar_id
+      LEFT JOIN family_members fm ON fm.user_id = ep.user_id AND fm.family_id = c.family_id AND fm.is_active = true
+      LEFT JOIN child_profiles cpm ON cpm.family_member_id = fm.id
       WHERE ep.event_id = ${eventId}
     `
 
@@ -178,8 +184,8 @@ export async function GET(
           childProfileId: p.child_profile_id,
           status: p.status,
           respondedAt: p.responded_at,
-          name: p.child_name || `${p.first_name || ''} ${p.last_name || ''}`.trim(),
-          displayName: p.child_name || `${p.first_name || ''} ${p.last_name || ''}`.trim(),
+          name: participantName(p),
+          displayName: participantName(p),
           email: p.email || null,
         })),
         eventRequest,

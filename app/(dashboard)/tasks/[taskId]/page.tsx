@@ -161,11 +161,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
     )
   }
 
-  const assigneeName = task.child_display_name 
-    ? task.child_display_name
-    : task.assignee_first_name 
-      ? `${task.assignee_first_name} ${task.assignee_last_name || ''}`.trim()
-      : 'Unassigned'
+  const assigneeName = task.assignee_name || 'Unassigned'
 
   const assignmentStatus = (task as unknown as { assignment_status?: string | null }).assignment_status || null
   // My role in THIS task's family (not the account's owned family).

@@ -5,6 +5,7 @@ import { notifyTaskCompleted, createNotification } from '@/lib/notifications'
 import { ensureAssignmentColumns, isSupervisorRole, assigneesInFamily } from '@/lib/assignment'
 import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
 import { taskInvolvesUser } from '@/lib/guest-scope'
+import { taskAssigneeName } from "@/lib/member-names"
 
 // Helper to sync task status updates across all related tables
 async function syncTaskStatusUpdate(
@@ -115,11 +116,14 @@ export async function GET(
       SELECT t.*, 
              u_creator.first_name as creator_first_name, u_creator.last_name as creator_last_name,
              u_assignee.first_name as assignee_first_name, u_assignee.last_name as assignee_last_name,
+               fm_a.role as assignee_role, fm_a.nickname as assignee_nickname, cp_a.display_name as assignee_child_name,
              cp.display_name as child_display_name,
              f.name as family_name
       FROM tasks t
       LEFT JOIN users u_creator ON t.created_by_id = u_creator.id
       LEFT JOIN users u_assignee ON t.assigned_to_id = u_assignee.id
+      LEFT JOIN family_members fm_a ON fm_a.user_id = t.assigned_to_id AND fm_a.family_id = t.family_id AND fm_a.is_active = true
+      LEFT JOIN child_profiles cp_a ON cp_a.family_member_id = fm_a.id
       LEFT JOIN child_profiles cp ON t.child_profile_id = cp.id
       LEFT JOIN families f ON t.family_id = f.id
       WHERE t.id = ${taskId}
@@ -164,6 +168,7 @@ export async function GET(
     return NextResponse.json({ 
       data: { 
         ...task[0], 
+        assignee_name: taskAssigneeName(task[0]),
         history, 
         comments 
       } 

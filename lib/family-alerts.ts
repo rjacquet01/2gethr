@@ -101,9 +101,10 @@ export async function alertFamilyAdults(familyId: string, aboutUserId: string, o
 export async function notifyChildStoppedSharing(memberId: string, how: string) {
   try {
     const rows = await sql`
-      SELECT fm.family_id, fm.user_id, fm.role, COALESCE(u.first_name, fm.nickname, 'Your child') AS name
+      SELECT fm.family_id, fm.user_id, fm.role, COALESCE(CASE WHEN fm.role = 'CHILD' THEN COALESCE(NULLIF(TRIM(cp.display_name), ''), NULLIF(TRIM(fm.nickname), ''), NULLIF(TRIM(u.first_name), '')) ELSE COALESCE(NULLIF(TRIM(fm.nickname), ''), NULLIF(TRIM(u.first_name), '')) END, 'Your child') AS name
       FROM family_members fm
       LEFT JOIN users u ON u.id = fm.user_id
+      LEFT JOIN child_profiles cp ON cp.family_member_id = fm.id
       WHERE fm.id = ${memberId} AND fm.is_active = true
       LIMIT 1
     `

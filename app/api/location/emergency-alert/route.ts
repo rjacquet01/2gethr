@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     // All kids, so the dialog can show "No account" for those who have no
     // login (nothing to alert) instead of a Send button that can't work.
     const kids = await sql`
-      SELECT fm.id, COALESCE(NULLIF(fm.nickname, ''), cp.display_name, u.first_name, 'Child') AS name,
+      SELECT fm.id, COALESCE(CASE WHEN fm.role = 'CHILD' THEN COALESCE(NULLIF(TRIM(cp.display_name), ''), NULLIF(TRIM(fm.nickname), ''), NULLIF(TRIM(u.first_name), '')) ELSE COALESCE(NULLIF(TRIM(fm.nickname), ''), NULLIF(TRIM(u.first_name), '')) END, 'Child') AS name,
              (u.id IS NOT NULL) AS has_account
       FROM family_members fm
       LEFT JOIN users u ON u.id = fm.user_id

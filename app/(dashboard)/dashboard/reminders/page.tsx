@@ -75,6 +75,7 @@ interface Reminder {
   owner_id?: string
   owner_first_name?: string
   owner_last_name?: string
+  owner_name?: string
   child_profile_id?: string | null
   child_name?: string | null
   created_by_id?: string | null
@@ -431,7 +432,7 @@ function RemindersPageContent() {
     isMine(r)
       ? ''
       : r.child_name ||
-        (r.user_id !== user?.id ? `${r.owner_first_name || ''} ${r.owner_last_name || ''}`.trim() : '')
+        (r.user_id !== user?.id ? r.owner_name || '' : '')
 
   const snoozeOptions = (): Array<{ label: string; to: Date }> => {
     const now = new Date()

@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     const rows = await sql`
       SELECT fm.id AS member_id, fm.family_id, fm.user_id, u.timezone,
-             COALESCE(cp.display_name, u.first_name, fm.nickname, 'Your child') AS name,
+             COALESCE(CASE WHEN fm.role = 'CHILD' THEN COALESCE(NULLIF(TRIM(cp.display_name), ''), NULLIF(TRIM(fm.nickname), ''), NULLIF(TRIM(u.first_name), '')) ELSE COALESCE(NULLIF(TRIM(fm.nickname), ''), NULLIF(TRIM(u.first_name), '')) END, 'Your child') AS name,
              (SELECT MAX(lp.timestamp) FROM location_pings lp WHERE lp.user_id = fm.user_id) AS last_ping
       FROM family_members fm
       JOIN location_settings ls ON ls.family_member_id = fm.id

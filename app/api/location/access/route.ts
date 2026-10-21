@@ -7,6 +7,7 @@ import { ensureLocationAccessTable } from "@/lib/location-access"
 import { insertNotification } from "@/lib/location-approval"
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
 import { hitRateLimit } from "@/lib/rate-limit"
+import { memberName } from "@/lib/member-names"
 
 // Grown-ups asking each other for ongoing location access (see
 // lib/location-access.ts). Children and guests take no part.
@@ -22,8 +23,9 @@ async function myGrownUpMembership(familyId: string, userId: string) {
   return rows[0] && isAdultMemberRole(rows[0].role as string) ? (rows[0].id as string) : null
 }
 
+// Adults only here (role is never CHILD).
 const displayName = (r: Record<string, unknown>) =>
-  (r.nickname as string) || `${r.first_name || ""} ${r.last_name || ""}`.trim() || "Family member"
+  memberName({ nickname: r.nickname as string, firstName: r.first_name as string, lastName: r.last_name as string }, { withLastName: true })
 
 // The other grown-ups in the family, with access both ways.
 export async function GET(request: NextRequest) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
+import { memberName } from "@/lib/member-names"
 
 // Get family members who don't have a child profile assigned yet
 // These are users who joined via invite code but haven't been set up as children
@@ -75,7 +76,7 @@ export async function GET(
         email: m.email,
         firstName: m.first_name,
         lastName: m.last_name,
-        displayName: m.nickname || `${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email,
+        displayName: memberName({ role: m.role, nickname: m.nickname, firstName: m.first_name, lastName: m.last_name }, { withLastName: true, fallback: m.email }),
         avatarUrl: m.profile_photo_url,
         joinedAt: m.joined_at,
       })),

@@ -80,6 +80,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { MemberAvatar, AppearanceButton } from '@/components/member-avatar'
 import { AccountStatusBadge } from '@/components/account-status-badge'
+import { FamilyNameButton } from '@/components/family-name-button'
 import { JoinFamilyButton } from '@/components/join-family-dialog'
 import { StartOwnFamilyButton, useCanStartOwnFamily } from '@/components/start-own-family'
 import { BirthdateInput, ChildAccountDialog, ChildConsentBox, ChildConsentDialog, RoleChoiceCard, Turns18Chip, type AgeAwareChild } from '@/components/child-age'
@@ -474,6 +475,15 @@ export default function FamilyPage() {
                   Guest
                 </Badge>
               </div>
+              {me && (
+                <FamilyNameButton
+                  familyId={family.id}
+                  familyName={family.name}
+                  nickname={me.nickname ?? ''}
+                  accountFirstName={user?.firstName || ''}
+                  onSaved={() => mutateFamily()}
+                />
+              )}
             </div>
             <p className="text-sm text-muted-foreground">
               You can see the calendar events and tasks you&apos;re part of, plus your own archive.
@@ -930,6 +940,15 @@ export default function FamilyPage() {
                       family.ownerId === user?.id ||
                       family.members?.some(m => m.userId === user?.id && m.role === 'PARENT')) && (
                       <AppearanceButton familyId={family.id} memberId={member.id} name={member.displayName} avatarUrl={member.avatarUrl} color={member.color} emoji={member.emoji} />
+                    )}
+                    {member.userId === user?.id && member.role !== 'CHILD' && (
+                      <FamilyNameButton
+                        familyId={family.id}
+                        familyName={family.name}
+                        nickname={member.nickname ?? ''}
+                        accountFirstName={user?.firstName || ''}
+                        onSaved={() => mutateFamily()}
+                      />
                     )}
                     {(() => {
                       const isSelf = member.userId === user?.id

@@ -13,6 +13,7 @@ import { distanceMeters, evaluateGeofence, confirmsDeparture, suggestedIntervalF
 import { shouldMergeWithPrevious, oneTimePingId, isOneTimePingId } from "@/lib/location-dedupe"
 import { fulfillLocationRequests } from "@/lib/location-schema"
 import { alertFamilyAdults } from "@/lib/family-alerts"
+import { memberName, nameInFamily } from "@/lib/member-names"
 import { approvedOwnerMemberIds, needsAccessGrant, locationAudienceUserIds } from "@/lib/location-access"
 import { ensureMemberAppearanceColumns } from "@/lib/member-appearance"
 import { guestForbidden, isAdultMemberRole, isGuestInFamily, isGuestOnly } from "@/lib/permissions"
@@ -121,7 +122,7 @@ export async function GET(request: NextRequest) {
     await ensureLocationRequestsTable()
     const snapshots = await sql`
       SELECT lr.id, lr.snapshot_lat, lr.snapshot_lng, lr.snapshot_accuracy, lr.snapshot_at,
-             fm.nickname, u.first_name, u.last_name, cp.display_name AS child_display_name
+             fm.nickname, fm.role, u.first_name, u.last_name, cp.display_name AS child_display_name
       FROM location_requests lr
       JOIN family_members fm ON fm.user_id = lr.target_user_id AND fm.family_id = lr.family_id AND fm.is_active = true
       LEFT JOIN users u ON u.id = lr.target_user_id
@@ -165,7 +166,7 @@ export async function GET(request: NextRequest) {
       data: filteredLocations.map(l => ({
         memberId: l.member_id,
         userId: l.user_id,
-        name: l.child_display_name || l.nickname || `${l.first_name} ${l.last_name}`,
+        name: memberName({ role: l.role, nickname: l.nickname, childDisplayName: l.child_display_name, firstName: l.first_name, lastName: l.last_name }, { withLastName: true }),
         role: l.role,
         hasAccount: !!l.user_id,
         color: l.color ?? null,
@@ -191,7 +192,7 @@ export async function GET(request: NextRequest) {
         .filter(l => l.user_id && l.user_id !== user.id && l.role !== 'GUEST')
         .map(l => ({
           memberId: l.member_id,
-          name: l.child_display_name || l.nickname || `${l.first_name || ''} ${l.last_name || ''}`.trim() || 'Family member',
+          name: memberName({ role: l.role, nickname: l.nickname, childDisplayName: l.child_display_name, firstName: l.first_name, lastName: l.last_name }, { withLastName: true }),
           role: l.role,
           hasAccount: true,
           color: l.color ?? null,
@@ -205,7 +206,7 @@ export async function GET(request: NextRequest) {
             .filter(l => l.role === 'CHILD' && !l.user_id)
             .map(l => ({
               memberId: l.member_id,
-              name: l.child_display_name || l.nickname || 'Child',
+              name: memberName({ role: l.role, nickname: l.nickname, childDisplayName: l.child_display_name }, { fallback: 'Child' }),
               hasAccount: false,
               color: l.color ?? null,
               emoji: l.emoji ?? null,
@@ -214,7 +215,7 @@ export async function GET(request: NextRequest) {
       // One-time locations people approved for me in the last hour.
       snapshots: snapshots.map(r => ({
         requestId: r.id,
-        name: r.child_display_name || r.nickname || `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Family member',
+        name: memberName({ role: r.role, nickname: r.nickname, childDisplayName: r.child_display_name, firstName: r.first_name, lastName: r.last_name }, { withLastName: true }),
         latitude: Number(r.snapshot_lat),
         longitude: Number(r.snapshot_lng),
         accuracy: r.snapshot_accuracy != null ? Number(r.snapshot_accuracy) : null,
@@ -511,11 +512,11 @@ export async function POST(request: NextRequest) {
     const battery = validatedData.batteryLevel
     if (battery != null && battery <= 15 && (prevBattery == null || prevBattery > 15)) {
       try {
-        const who = (await sql`SELECT first_name FROM users WHERE id = ${user.id}`)[0]?.first_name || "A family member"
         // Every family that can see this person's location hears about it
         // (not one they only shared with once: nothing there stops updating).
         const alertFamilies = [...(oneTime ? [] : [setting.family_id as string]), ...otherFamilies.map((o) => o.family_id as string)]
         for (const familyId of alertFamilies) {
+          const who = await nameInFamily(familyId, user.id, "A family member")
           await alertFamilyAdults(familyId, user.id, {
             title: `${who}'s battery is low`,
             body: `${who}'s phone is at ${battery}%. Their location may stop updating soon.`,
@@ -671,9 +672,8 @@ async function createGeofenceNotification(
   eventType: "ARRIVAL" | "DEPARTURE",
   notifyChannels: string[] | null
 ) {
-  // Get user's name
-  const users = await sql`SELECT first_name FROM users WHERE id = ${userId}`
-  const userName = users[0]?.first_name || "Family member"
+  // Their name in this family
+  const userName = await nameInFamily(familyId, userId)
 
   // The place's own notify_channels (set via the "Notify me via" picker on
   // the Places page) decides which channels are even eligible for this

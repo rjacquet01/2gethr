@@ -25,6 +25,8 @@ interface Task {
   creator_last_name: string
   assignee_first_name: string | null
   assignee_last_name: string | null
+  /** The assignee as this family names them (lib/member-names.ts). */
+  assignee_name?: string | null
   assignee_profile_photo_path: string | null
   child_display_name: string | null
   child_avatar_url: string | null

@@ -5,6 +5,7 @@ import { getUserFromRequest, getUserWithFamily } from "@/lib/auth"
 import { dispatchSos, ensureSosSchema } from "@/lib/sos"
 import { guestForbidden } from "@/lib/permissions"
 import { hitRateLimit } from "@/lib/rate-limit"
+import { nameInFamily } from "@/lib/member-names"
 import { z } from "zod"
 
 export const maxDuration = 30
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const who = (await sql`SELECT first_name FROM users WHERE id = ${userId}`)[0]?.first_name || "A family member"
+    const who = await nameInFamily(familyId, userId, "A family member")
 
     await ensureSosSchema()
     const eventId = `sos_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`

@@ -4,6 +4,7 @@ import { getUserFromRequest } from '@/lib/auth'
 import { createNotification, type NotificationChannel } from '@/lib/notifications'
 import { getHistoryDays } from '@/lib/history-limit'
 import { ensureReminderChildColumn } from '@/lib/reminder-schema'
+import { memberName } from "@/lib/member-names"
 
 const VALID_NOTIFY_CHANNELS: NotificationChannel[] = ['in_app', 'push', 'email', 'sms']
 
@@ -78,16 +79,19 @@ export async function GET(request: NextRequest) {
     // statusFilter is computed above in JS (never conditionally spliced
     // SQL), and r.status = ANY(...) against it needs no "IS NULL OR" at
     // all, so the same bug class doesn't apply there either.
-    const reminders = (await sql`
+    const reminderRows = (await sql`
       SELECT r.*,
              u_creator.first_name as creator_first_name, u_creator.last_name as creator_last_name,
              u_owner.first_name as owner_first_name, u_owner.last_name as owner_last_name,
              u_owner.id as owner_id,
+             fm_o.role as owner_role, fm_o.nickname as owner_nickname, cp_o.display_name as owner_child_name,
              f.name as family_name,
              cp.display_name as child_name
       FROM reminders r
       LEFT JOIN users u_creator ON r.created_by_id = u_creator.id
       LEFT JOIN users u_owner ON r.user_id = u_owner.id
+      LEFT JOIN family_members fm_o ON fm_o.user_id = r.user_id AND fm_o.family_id = r.family_id AND fm_o.is_active = true
+      LEFT JOIN child_profiles cp_o ON cp_o.family_member_id = fm_o.id
       LEFT JOIN families f ON r.family_id = f.id
       LEFT JOIN child_profiles cp ON r.child_profile_id = cp.id
       WHERE (r.user_id = ${user.id} OR r.created_by_id = ${user.id})
@@ -95,6 +99,11 @@ export async function GET(request: NextRequest) {
         AND (${familyId || null}::text IS NULL OR r.family_id = ${familyId || null})
       ORDER BY r.remind_at ASC
     `) as Row<{ family_id: string; updated_at: string }>[]
+    // The owner as this family names them (lib/member-names.ts).
+    const reminders = reminderRows.map((r) => ({
+      ...r,
+      owner_name: memberName({ role: r.owner_role as string, nickname: r.owner_nickname as string, childDisplayName: r.owner_child_name as string, firstName: r.owner_first_name as string, lastName: r.owner_last_name as string }, { withLastName: true, fallback: '' }),
+    }))
 
     // The archive view only reaches back as far as the family's plan allows
     // (hidden, not deleted).
