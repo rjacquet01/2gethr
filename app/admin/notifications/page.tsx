@@ -27,6 +27,11 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
 import { getAdminAccessToken } from '@/hooks/use-admin-auth'
 
@@ -48,6 +53,24 @@ interface NotificationServices {
   sms: ServiceStatus
   email: ServiceStatus
   push: ServiceStatus
+}
+
+// From GET /api/test-push: an account with push turned on (no tokens).
+interface PushAccount {
+  userId: string
+  email: string
+  name: string
+  deviceCount: number
+  platforms: string[]
+  lastRegisteredAt: string | null
+}
+
+interface PushResult {
+  email: string
+  device: string
+  registeredAt: string | null
+  status: 'sent' | 'failed'
+  error?: string
 }
 
 export default function AdminNotificationsPage() {
@@ -80,11 +103,57 @@ export default function AdminNotificationsPage() {
   const [testPhone, setTestPhone] = useState('')
   const [testEmail, setTestEmail] = useState('')
   const [sendingTargetedPush, setSendingTargetedPush] = useState(false)
-  const [targetedPushResults, setTargetedPushResults] = useState<{email: string, status: string, error?: string}[] | null>(null)
+  const [targetedPushResults, setTargetedPushResults] = useState<PushResult[] | null>(null)
+  // Test push: accounts with push turned on (super admins only).
+  const [pushAccounts, setPushAccounts] = useState<PushAccount[] | null>(null)
+  const [pushAccountsError, setPushAccountsError] = useState('')
+  const [pushTarget, setPushTarget] = useState('')
+  const [confirmPushAll, setConfirmPushAll] = useState(false)
+
+  const fetchPushAccounts = async () => {
+    try {
+      const res = await fetch('/api/test-push', { headers: { Authorization: `Bearer ${getAdminAccessToken()}` } })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.success) {
+        setPushAccountsError(res.status === 401 ? 'Only super admins can send test pushes.' : data.error || 'Could not load accounts')
+        return
+      }
+      setPushAccountsError('')
+      setPushAccounts(data.accounts)
+    } catch {
+      setPushAccountsError('Could not load accounts')
+    }
+  }
 
   useEffect(() => {
     fetchServiceStatus()
+    fetchPushAccounts()
   }, [])
+
+  const sendTestPush = async (target: { emails: string[] } | { all: true }) => {
+    setSendingTargetedPush(true)
+    setTargetedPushResults(null)
+    try {
+      const res = await fetch('/api/test-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAdminAccessToken()}` },
+        body: JSON.stringify(target),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (data.success) {
+        setTargetedPushResults(data.results)
+        const sent = data.results.filter((r: PushResult) => r.status === 'sent').length
+        toast.success(`Sent to ${sent} of ${data.results.length} device(s)`)
+      } else {
+        toast.error(data.error || 'Failed to send push notifications')
+      }
+    } catch {
+      toast.error('Failed to send push notifications')
+    } finally {
+      setSendingTargetedPush(false)
+      fetchPushAccounts()
+    }
+  }
 
   const fetchServiceStatus = async () => {
     try {
@@ -592,76 +661,65 @@ export default function AdminNotificationsPage() {
               <div className="border-t pt-4 mt-4">
                 <h4 className="font-medium mb-2">Test Push Notification</h4>
                 <p className="text-sm text-muted-foreground mb-2">
-                  Send test push notifications to specific user accounts.
+                  Send a test push to one account&apos;s devices.
                 </p>
                 <div className="space-y-4">
-                  <div className="flex gap-2 flex-wrap">
-                    <Button
-                      variant="outline"
-                      onClick={() => testService('push')}
-                      disabled={testing === 'push'}
-                    >
-                      {testing === 'push' ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
+                  {pushAccountsError ? (
+                    <p className="text-sm text-muted-foreground">{pushAccountsError}</p>
+                  ) : pushAccounts === null ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : pushAccounts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No accounts have push turned on yet. Turn it on in the app under Settings &gt; Notifications.
+                    </p>
+                  ) : (
+                    <div className="flex gap-2 flex-wrap items-center">
+                      <Select value={pushTarget} onValueChange={setPushTarget}>
+                        <SelectTrigger className="w-full sm:w-96" aria-label="Account to send the test push to">
+                          <SelectValue placeholder="Choose an account" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pushAccounts.map((a) => (
+                            <SelectItem key={a.userId} value={a.email}>
+                              {a.name} - {a.email} ({a.deviceCount} {a.deviceCount === 1 ? 'device' : 'devices'})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        onClick={() => sendTestPush({ emails: [pushTarget] })}
+                        disabled={!pushTarget || sendingTargetedPush}
+                      >
+                        {sendingTargetedPush ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Smartphone className="w-4 h-4 mr-2" />
+                        )}
+                        Send test push
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setConfirmPushAll(true)}
+                        disabled={sendingTargetedPush}
+                      >
                         <TestTube className="w-4 h-4 mr-2" />
-                      )}
-                      Send to All Devices
-                    </Button>
-
-                    <Button
-                      variant="default"
-                      onClick={async () => {
-                        setSendingTargetedPush(true)
-                        setTargetedPushResults(null)
-                        try {
-                          const token = getAdminAccessToken()
-                          const res = await fetch('/api/test-push', {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                              Authorization: `Bearer ${token}`
-                            },
-                            body: JSON.stringify({
-            emails: ['ray.jacquet@yahoo.com', 'maximjacquet11@gmail.com', 'admin@mytogethr.com'] })
-                          })
-                          const data = await res.json()
-                          if (data.success) {
-                            setTargetedPushResults(data.results)
-                            toast.success(`Push notifications sent to ${data.results.length} device(s)`)
-                          } else {
-                            toast.error(data.error || 'Failed to send push notifications')
-                          }
-                        } catch (error) {
-                          toast.error('Failed to send push notifications')
-                          console.error(error)
-                        } finally {
-                          setSendingTargetedPush(false)
-                        }
-                      }}
-                      disabled={sendingTargetedPush}
-                    >
-                      {sendingTargetedPush ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <Smartphone className="w-4 h-4 mr-2" />
-                      )}
-                      Send to Ray & Max
-                    </Button>
-                  </div>
+                        Send to All Devices
+                      </Button>
+                    </div>
+                  )}
 
                   {targetedPushResults && (
                     <div className="bg-muted p-3 rounded-lg text-sm">
-                      <p className="font-medium mb-2">Results:</p>
+                      <p className="font-medium mb-2">Results per device:</p>
                       <ul className="space-y-1">
                         {targetedPushResults.map((result, i) => (
-                          <li key={i} className="flex items-center gap-2">
+                          <li key={i} className="flex flex-wrap items-center gap-2">
                             {result.status === 'sent' ? (
                               <Check className="w-4 h-4 text-green-500" />
                             ) : (
                               <X className="w-4 h-4 text-red-500" />
                             )}
-                            <span>{result.email}: {result.status}</span>
+                            <span>{result.email} · {result.device}: {result.status}</span>
                             {result.error && <span className="text-red-500">({result.error})</span>}
                           </li>
                         ))}
@@ -669,6 +727,23 @@ export default function AdminNotificationsPage() {
                     </div>
                   )}
                 </div>
+
+                <AlertDialog open={confirmPushAll} onOpenChange={setConfirmPushAll}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Send a test push to everyone?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This notifies {pushAccounts?.length ?? 0} {pushAccounts?.length === 1 ? 'user' : 'users'} on{' '}
+                        {pushAccounts?.reduce((n, a) => n + a.deviceCount, 0) ?? 0} devices with a &quot;Togethr Test
+                        Notification&quot;.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => sendTestPush({ all: true })}>Send to all</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
 
               <div className="flex justify-end">

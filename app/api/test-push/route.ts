@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { getAdminFromToken } from '@/lib/admin-auth'
+import { getAdminFromToken, logAdminAction } from '@/lib/admin-auth'
 import { sendWebPush, isVapidConfigured } from '@/lib/services/web-push-vapid'
 
 // SECURITY FIX: this file previously contained a live Firebase service-account
@@ -20,6 +20,19 @@ import { sendWebPush, isVapidConfigured } from '@/lib/services/web-push-vapid'
 // Web Push protocol (VAPID + RFC 8291 encryption, see
 // lib/services/web-push-vapid.ts) — the same thing lib/services/push.ts
 // uses, and what the client and service worker were always built for.
+
+// "android", "web · Chrome on Windows" etc. device_info is whatever the
+// client sent when subscribing (a string or a small JSON object).
+function deviceLabel(platform: string | null, info: unknown): string {
+  let detail = ''
+  if (typeof info === 'string') detail = info
+  else if (info && typeof info === 'object') {
+    const o = info as Record<string, unknown>
+    detail = String(o.browser || o.userAgent || o.model || '')
+  }
+  detail = detail.slice(0, 60)
+  return [platform || 'web', detail].filter(Boolean).join(' · ')
+}
 
 async function requireAdmin(request: Request) {
   const authHeader = request.headers.get('authorization')
@@ -42,13 +55,18 @@ export async function GET(request: Request) {
       VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY ? '✓ Set' : '✗ Missing',
     }
 
-    // Check for registered push subscriptions
-    const subscriptions = await sql`
-      SELECT pt.*, u.email, u.first_name
+    // Every account with push turned on, one row each. Never the token
+    // (subscription endpoint and keys).
+    const accounts = await sql`
+      SELECT u.id AS user_id, u.email, u.first_name, u.last_name,
+             COUNT(*)::int AS device_count,
+             array_agg(DISTINCT COALESCE(pt.platform, 'web')) AS platforms,
+             MAX(COALESCE(pt.updated_at, pt.created_at)) AS last_registered_at
       FROM push_tokens pt
       JOIN users u ON pt.user_id = u.id
       WHERE pt.is_active = true
-      LIMIT 5
+      GROUP BY u.id, u.email, u.first_name, u.last_name
+      ORDER BY u.first_name, u.email
     `
 
     const webPushStatus = isVapidConfigured()
@@ -59,13 +77,15 @@ export async function GET(request: Request) {
       success: true,
       config: configStatus,
       webPushStatus,
-      registeredDevices: subscriptions.length,
-      devices: subscriptions.map(s => ({
-        userId: s.user_id,
-        email: s.email,
-        name: s.first_name,
-        platform: s.platform || 'web',
-        createdAt: s.created_at
+      totalAccounts: accounts.length,
+      registeredDevices: accounts.reduce((n, a) => n + Number(a.device_count), 0),
+      accounts: accounts.map(a => ({
+        userId: a.user_id,
+        email: a.email,
+        name: `${a.first_name || ''} ${a.last_name || ''}`.trim() || a.email,
+        deviceCount: Number(a.device_count),
+        platforms: a.platforms,
+        lastRegisteredAt: a.last_registered_at,
       }))
     })
   } catch (error) {
@@ -89,31 +109,31 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    // Parse request body for specific emails
-    let targetEmails: string[] = []
-    try {
-      const body = await request.json()
-      if (body.emails && Array.isArray(body.emails)) {
-        targetEmails = body.emails
-      }
-    } catch {
-      // No body or invalid JSON - send to all
+    // { emails: [...] } for chosen accounts, or { all: true } for everyone.
+    // Anything else (no body, empty list) is refused rather than treated as
+    // "everyone", so a bad request can't notify every user.
+    const body = await request.json().catch(() => null)
+    const targetEmails: string[] = Array.isArray(body?.emails)
+      ? body.emails.filter((e: unknown): e is string => typeof e === 'string' && e.trim() !== '')
+      : []
+    const sendToAll = body?.all === true && targetEmails.length === 0
+    if (!sendToAll && targetEmails.length === 0) {
+      return NextResponse.json({ success: false, error: 'Choose an account, or send { all: true } to notify every device.' }, { status: 400 })
     }
 
-    // Get active push subscriptions, optionally filtered by email
-    const subscriptions = targetEmails.length > 0
+    const subscriptions = sendToAll
       ? await sql`
           SELECT pt.*, u.email, u.first_name
           FROM push_tokens pt
           JOIN users u ON pt.user_id = u.id
           WHERE pt.is_active = true
-          AND u.email = ANY(${targetEmails}::text[])
         `
       : await sql`
           SELECT pt.*, u.email, u.first_name
           FROM push_tokens pt
           JOIN users u ON pt.user_id = u.id
           WHERE pt.is_active = true
+          AND u.email = ANY(${targetEmails}::text[])
         `
 
     if (subscriptions.length === 0) {
@@ -123,13 +143,20 @@ export async function POST(request: Request) {
       })
     }
 
-    const results = []
+    const results: { email: string; device: string; registeredAt: string | null; status: 'sent' | 'failed'; error?: string }[] = []
 
     for (const sub of subscriptions) {
+      // Which device this was, for the per-device result (never the token).
+      const at = (r: Omit<(typeof results)[number], 'email' | 'device' | 'registeredAt'>) =>
+        results.push({
+          email: sub.email, device: deviceLabel(sub.platform, sub.device_info), registeredAt: sub.created_at ?? null, ...r,
+          // A push service's error text can echo the endpoint URL.
+          ...(r.error ? { error: r.error.replace(/https?:\/\/\S+/g, '[endpoint]').slice(0, 300) } : {}),
+        })
       try {
         const subscription = JSON.parse(sub.token)
         if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
-          results.push({ email: sub.email, status: 'failed', error: 'Stored token is not a valid push subscription' })
+          at({ status: 'failed', error: 'Stored token is not a valid push subscription' })
           continue
         }
 
@@ -143,21 +170,24 @@ export async function POST(request: Request) {
         })
 
         if (result.success) {
-          results.push({ email: sub.email, status: 'sent' })
+          at({ status: 'sent' })
         } else {
-          results.push({ email: sub.email, status: 'failed', error: result.error })
+          at({ status: 'failed', error: result.error })
           if (result.gone) {
             await sql`UPDATE push_tokens SET is_active = false WHERE token = ${sub.token}`
           }
         }
       } catch (error) {
-        results.push({
-          email: sub.email,
-          status: 'failed',
-          error: error instanceof Error ? error.message : 'Unknown error'
-        })
+        at({ status: 'failed', error: error instanceof Error ? error.message : 'Unknown error' })
       }
     }
+
+    await logAdminAction(requestingAdmin.id, 'TEST_PUSH_SENT', 'push_test', null, {
+      target: sendToAll ? 'all' : targetEmails,
+      devices: results.length,
+      sent: results.filter((r) => r.status === 'sent').length,
+      failed: results.filter((r) => r.status === 'failed').length,
+    }, request.headers.get('x-forwarded-for') || undefined)
 
     return NextResponse.json({
       success: true,
