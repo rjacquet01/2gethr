@@ -335,28 +335,54 @@ export async function getUserById(userId: string): Promise<AuthUser | null> {
 }
 
 export async function getUserWithFamily(userId: string): Promise<UserWithFamily | null> {
-  const user = await getUserById(userId)
-  if (!user) return null
-
-  // Get primary family membership (owned family first, otherwise first active membership)
-  const memberships = await sql`
-    SELECT 
-      fm.id as member_id,
-      fm.role,
-      fm.can_create_events,
-      fm.requires_event_approval,
-      fm.can_override_conflicts,
-      fm.can_view_family_calendar,
-      fm.can_invite_members,
-      f.id as family_id,
-      f.name as family_name,
-      f.owner_id
-    FROM family_members fm
-    JOIN families f ON fm.family_id = f.id
-    WHERE fm.user_id = ${userId} AND fm.is_active = true
-    ORDER BY (f.owner_id = ${userId}) DESC, fm.joined_at ASC
-    LIMIT 1
+  // Every authenticated request runs this, so it is one round trip: the user
+  // and their primary family membership (owned family first, otherwise the
+  // first active membership) together.
+  const rows = await sql`
+    WITH u AS (
+      SELECT
+        id, email, first_name, last_name, phone,
+        profile_photo_url, profile_photo_path, timezone,
+        is_active, email_verified, created_at
+      FROM users WHERE id = ${userId} AND is_active = true
+    )
+    SELECT u.*, m.*
+    FROM u
+    LEFT JOIN LATERAL (
+      SELECT
+        fm.id as member_id,
+        fm.role,
+        fm.can_create_events,
+        fm.requires_event_approval,
+        fm.can_override_conflicts,
+        fm.can_view_family_calendar,
+        fm.can_invite_members,
+        f.id as family_id,
+        f.name as family_name,
+        f.owner_id
+      FROM family_members fm
+      JOIN families f ON fm.family_id = f.id
+      WHERE fm.user_id = u.id AND fm.is_active = true
+      ORDER BY (f.owner_id = u.id) DESC, fm.joined_at ASC
+      LIMIT 1
+    ) m ON true
   `
+  if (rows.length === 0) return null
+  const row = rows[0]
+  const user: AuthUser = {
+    id: row.id,
+    email: row.email,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    phone: row.phone,
+    profilePhotoUrl: row.profile_photo_url,
+    profilePhotoPath: row.profile_photo_path,
+    timezone: row.timezone,
+    isActive: row.is_active,
+    emailVerified: row.email_verified,
+    createdAt: row.created_at,
+  }
+  const memberships = row.family_id ? [row] : []
 
   if (memberships.length === 0) {
     return {

@@ -117,7 +117,7 @@ async function main() {
   const fake = (async (strings: TemplateStringsArray, ...v: unknown[]) => {
     const q = strings.join("?").replace(/\s+/g, " ").trim()
     log.push({ q, v })
-    if (q.includes("FROM users") && q.includes("WHERE id =") && q.startsWith("SELECT")) {
+    if (q.includes("FROM users") && q.includes("WHERE id =") && /^(SELECT|WITH)/.test(q)) {
       const u = users[v[0] as string]
       return u ? [u] : []
     }
