@@ -226,12 +226,16 @@ export async function collectUserExport(userId: Id, format = 'json'): Promise<Us
     `) as ExportRow[]
   )
 
+  // Legal requests are the company's records (often under a non-disclosure
+  // order), kept in the legal case log, so they are left out here.
   await run('Location Requests', 'Requests to check someone’s location, sent by or to you', async () =>
     (await sql`
       SELECT id, CASE WHEN requester_user_id = ${userId} THEN 'sent' ELSE 'received' END AS direction,
              status, created_at, fulfilled_at, expires_at
       FROM location_requests
-      WHERE requester_user_id = ${userId} OR target_user_id = ${userId} ORDER BY created_at DESC
+      WHERE (requester_user_id = ${userId} OR target_user_id = ${userId})
+        AND requester_user_id NOT LIKE 'legal:%'
+      ORDER BY created_at DESC
     `) as ExportRow[]
   )
 

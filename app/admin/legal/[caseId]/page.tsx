@@ -19,7 +19,12 @@ const api = (url: string, init: RequestInit = {}) =>
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAdminAccessToken()}`, ...(init.headers || {}) },
   })
 
-const SECTIONS = [['account', 'Account'], ['location', 'Location history'], ['geofence', 'Place alerts'], ['requests', 'Ping requests'], ['activity', 'Sign-in activity']]
+const SECTIONS = [
+  ['account', 'Account'], ['location', 'Location history'], ['geofence', 'Place alerts'], ['requests', 'Ping requests'],
+  ['activity', 'Activity log'], ['devices', 'Devices & IPs'], ['safety', 'SOS & emergencies'], ['places', 'Saved places'],
+  ['billing', 'Subscriber & billing'],
+]
+const PING_STATUS: Record<string, string> = { PENDING: 'Waiting for the phone', FULFILLED: 'Answered', NO_ANSWER: 'No answer (phone offline or not sharing)' }
 const fmt = (d?: string | null) => (d ? new Date(d).toLocaleString() : '-')
 
 export default function LegalCasePage() {
@@ -74,13 +79,25 @@ export default function LegalCasePage() {
     load()
   }
 
+  const [pingInfo, setPingInfo] = useState<{ people: any[]; pings: any[] } | null>(null)
+  const [pingUser, setPingUser] = useState('')
+  const canPing = c && c.accessActive && (c.includesLivePing || c.type === 'EMERGENCY')
+
+  const loadPings = useCallback(async () => {
+    const r = await api(`/api/admin/legal/${caseId}/ping`)
+    const d = await r.json().catch(() => ({}))
+    if (r.ok) setPingInfo(d.data)
+  }, [caseId])
+  useEffect(() => { if (canPing) loadPings() }, [canPing, loadPings])
+
   const ping = async () => {
     setBusy(true)
-    const r = await api(`/api/admin/legal/${caseId}/ping`, { method: 'POST', body: JSON.stringify({}) })
+    const r = await api(`/api/admin/legal/${caseId}/ping`, { method: 'POST', body: JSON.stringify({ userId: pingUser || pingInfo?.people[0]?.userId }) })
     const d = await r.json().catch(() => ({}))
     setBusy(false)
     if (!r.ok) toast.error(d.error || 'Ping failed'); else toast.success(d.message)
     load()
+    loadPings()
   }
 
   if (err) return <div className="p-8 text-sm">{err} <Link className="underline" href="/admin/legal">Back</Link></div>
@@ -184,7 +201,6 @@ export default function LegalCasePage() {
             <div className="flex flex-wrap gap-2">
               {SECTIONS.map(([k, l]) => <Button key={k} size="sm" variant={section === k && data ? 'default' : 'outline'} onClick={() => loadData(k)}>{l}</Button>)}
               <Button size="sm" variant="outline" disabled={busy} onClick={exportFile}><Download className="w-4 h-4 mr-1" />Export file</Button>
-              {(c.includesLivePing || c.type === 'EMERGENCY') && <Button size="sm" variant="outline" disabled={busy} onClick={ping}><Send className="w-4 h-4 mr-1" />Live ping</Button>}
             </div>
             {dataLoading && <Spinner className="w-4 h-4" />}
             {data && !dataLoading && (
@@ -194,6 +210,56 @@ export default function LegalCasePage() {
                 {data.rows.length >= 5000 && <Button size="sm" variant="outline" onClick={() => loadData(section, data.offset + 5000)}>Next page</Button>}
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {canPing && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Live pings</CardTitle>
+            <CardDescription>
+              Asks the person&apos;s phone for a fresh location through the app&apos;s normal request channel. It only works while their
+              location sharing is on; it never turns it on. At most one ping per person every 10 minutes. Everything here is logged.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={pingUser || pingInfo?.people[0]?.userId || ''}
+                onChange={(e) => setPingUser(e.target.value)}
+                aria-label="Person to ping"
+              >
+                {(pingInfo?.people || []).map((p) => (
+                  <option key={p.userId} value={p.userId}>{p.name}{p.sharing ? '' : ' (sharing off)'}</option>
+                ))}
+              </select>
+              <Button size="sm" disabled={busy || !pingInfo?.people.length} onClick={ping}><Send className="w-4 h-4 mr-1" />Send ping</Button>
+              <Button size="sm" variant="outline" onClick={loadPings}>Refresh results</Button>
+            </div>
+            {pingInfo && pingInfo.pings.length === 0 && <p className="text-muted-foreground">No pings sent under this case yet.</p>}
+            {pingInfo?.pings.map((p) => {
+              const who = pingInfo.people.find((x) => x.userId === p.userId)?.name || p.userId
+              return (
+                <div key={p.id} className="rounded-md border p-2 space-y-0.5">
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <b>{who}</b>
+                    <span className="text-muted-foreground">sent {fmt(p.sentAt)} · {PING_STATUS[p.status] || p.status}</span>
+                  </div>
+                  {p.fix ? (
+                    <div className="font-mono text-xs">
+                      {p.fix.latitude.toFixed(6)}, {p.fix.longitude.toFixed(6)}
+                      {p.fix.accuracy != null && <> · ±{Math.round(p.fix.accuracy)} m</>}
+                      {p.fix.batteryLevel != null && <> · battery {p.fix.batteryLevel}%</>}
+                      {' '}· fix taken {fmt(p.fix.at)}
+                    </div>
+                  ) : p.status === 'FULFILLED' ? (
+                    <div className="text-xs text-muted-foreground">Answered {fmt(p.answeredAt)}, but no stored fix matched (it may have been merged into an earlier point).</div>
+                  ) : null}
+                </div>
+              )
+            })}
           </CardContent>
         </Card>
       )}

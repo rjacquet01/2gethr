@@ -702,7 +702,7 @@ function LocationPageContent({ isChild }: { isChild: boolean }) {
         const r = await authFetch('/api/location/request')
         if (!r.ok) return
         const j = await r.json()
-        if (Array.isArray(j?.data) && j.data.length > 0) poll(true)
+        if (j?.freshFixWanted || (Array.isArray(j?.data) && j.data.length > 0)) poll(true)
       } catch {
         // ignore
       }
