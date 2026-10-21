@@ -7,7 +7,7 @@ import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { planGateError } from "@/lib/tier-gates"
 import { guestCanSeeEvent, canSeeEventVisibility } from "@/lib/guest-scope"
-import { participantName } from "@/lib/member-names"
+import { participantName, actorNameInFamily } from "@/lib/member-names"
 
 const updateEventSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -350,7 +350,7 @@ export async function PATCH(
 
       if (familyId && (addedUserIds.length > 0 || addedChildIds.length > 0)) {
         try {
-          const actorName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'A family member'
+          const actorName = await actorNameInFamily(familyId, user, 'A family member')
           await notifyParticipantsAdded({
             eventId,
             familyId,

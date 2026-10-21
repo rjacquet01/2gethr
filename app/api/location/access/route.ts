@@ -7,7 +7,7 @@ import { ensureLocationAccessTable } from "@/lib/location-access"
 import { insertNotification } from "@/lib/location-approval"
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
 import { hitRateLimit } from "@/lib/rate-limit"
-import { memberName } from "@/lib/member-names"
+import { memberName, actorNameInFamily } from "@/lib/member-names"
 
 // Grown-ups asking each other for ongoing location access (see
 // lib/location-access.ts). Children and guests take no part.
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Member not found" }, { status: 404 })
   }
   const otherUserId = other[0].user_id as string
-  const myName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "A family member"
+  const myName = await actorNameInFamily(familyId, user, "A family member")
 
   try {
     await ensureLocationAccessTable()

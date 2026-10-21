@@ -6,7 +6,7 @@ import { getUserFromRequest } from '@/lib/auth'
 import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
 import { filterTasksForGuest } from '@/lib/guest-scope'
 import { notifyTaskAssigned, type NotificationChannel } from '@/lib/notifications'
-import { taskAssigneeName } from "@/lib/member-names"
+import { taskAssigneeName, actorNameInFamily } from "@/lib/member-names"
 
 // GET - List tasks for the current user's families
 export async function GET(request: NextRequest) {
@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
     if (!(await assigneesInFamily(familyId, assignedToUserId, assignedToChildId))) {
       return NextResponse.json({ error: 'That person is not in this family' }, { status: 400 })
     }
-    const assignerName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Someone'
+    const assignerName = await actorNameInFamily(familyId, user, 'Someone')
 
     // Who is really being assigned? A child profile may have a login.
     let targetUserId: string | null = assignedToUserId || null

@@ -5,6 +5,7 @@ import { z } from "zod"
 import { ensureLocationRequestsTable, hasPendingLocationRequest } from "@/lib/location-schema"
 import { APPROVAL_WINDOW_MINUTES, PING_WINDOW_MINUTES, PING_LIMIT_ADULT, PING_LIMIT_CHILD, APPROVED_WINDOW_MINUTES, insertNotification, sendApprovalRequest } from "@/lib/location-approval"
 import { guestForbidden, isGuestOnly } from "@/lib/permissions"
+import { actorNameInFamily } from "@/lib/member-names"
 
 const requestLocationSchema = z.object({
   memberId: z.string().min(1, "Member ID is required"),
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
     // approval - the family can see that child's location anyway, so this just
     // asks their phone for a fresh fix right now (status PENDING is what the
     // device poll looks for). Every other ping needs the recipient's approval.
-    const requesterName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "A family member"
+    const requesterName = await actorNameInFamily(validatedData.familyId, user, "A family member")
     if (["PARENT", "GUARDIAN", "ADMIN"].includes(requesterRole) && membership[0].target_role === "CHILD") {
       const sharing = await sql`
         SELECT 1 FROM location_settings
@@ -239,14 +240,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       freshFixWanted,
-      data: requests.map(r => ({
+      data: await Promise.all(requests.map(async (r) => ({
         id: r.id,
         requesterId: r.requester_user_id,
-        requesterName: `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Family Member',
+        requesterName: await actorNameInFamily(r.family_id as string, { id: r.requester_user_id as string, firstName: r.first_name as string | null }, 'Family Member'),
         familyId: r.family_id,
         createdAt: r.created_at,
         expiresAt: r.expires_at,
-      }))
+      })))
     })
   } catch (error) {
     console.error("Get location requests error:", error)

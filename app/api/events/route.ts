@@ -9,7 +9,7 @@ import { z } from "zod"
 import { planGateError } from "@/lib/tier-gates"
 import { getGuestFamilyIds, filterEventsForGuest, filterEventsByVisibility } from "@/lib/guest-scope"
 import { generateOccurrences, isValidTimeZone, recurrenceFromPreset, type RecurrenceInput } from "@/lib/recurrence"
-import { participantName } from "@/lib/member-names"
+import { participantName, actorNameInFamily } from "@/lib/member-names"
 
 const createEventSchema = z.object({
   calendarId: z.string().uuid("Invalid calendar ID").optional(),
@@ -781,7 +781,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Notify family members about the new event
-    const creatorName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'A family member'
+    const creatorName = await actorNameInFamily(calendar.family_id as string, user, 'A family member')
     // Parent/guardian adds a child to an event: that child always gets push +
     // email + text + in-app.
     let childUserIds: string[] = []

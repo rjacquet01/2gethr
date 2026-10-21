@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { ensureLocationRequestsTable } from "@/lib/location-schema"
 import { notifyRequesterExpired } from "@/lib/location-approval"
+import { actorNameInFamily } from "@/lib/member-names"
 
 // Every 15 minutes (see vercel.json): a location ping nobody answered within
 // its 24-hour window is marked EXPIRED and the requester is told once.
@@ -22,12 +23,12 @@ export async function GET(request: NextRequest) {
       UPDATE location_requests
       SET status = 'EXPIRED', expiry_notified = true
       WHERE status = 'AWAITING_APPROVAL' AND expires_at <= NOW() AND expiry_notified = false
-      RETURNING id, requester_user_id, target_user_id
+      RETURNING id, requester_user_id, target_user_id, family_id
     `
     let notified = 0
     for (const r of expired) {
-      const names = await sql`SELECT first_name, last_name FROM users WHERE id = ${r.target_user_id} LIMIT 1`
-      const name = `${names[0]?.first_name || ""} ${names[0]?.last_name || ""}`.trim() || "They"
+      const names = await sql`SELECT first_name FROM users WHERE id = ${r.target_user_id} LIMIT 1`
+      const name = await actorNameInFamily(r.family_id as string, { id: r.target_user_id as string, firstName: names[0]?.first_name as string | null }, "They")
       await notifyRequesterExpired(r.requester_user_id as string, name)
       notified++
     }

@@ -5,6 +5,7 @@ import { z } from "zod"
 import { ensureLocationRequestsTable } from "@/lib/location-schema"
 import { APPROVED_WINDOW_MINUTES, notifyRequesterOutcome } from "@/lib/location-approval"
 import { guestForbidden, isGuestInFamily } from "@/lib/permissions"
+import { actorNameInFamily } from "@/lib/member-names"
 
 const schema = z.object({
   action: z.enum(["approve", "deny"]),
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: false, error: "This request has expired", code: "EXPIRED" }, { status: 410 })
     }
 
-    const targetName = user.firstName || "Your family member"
+    const targetName = await actorNameInFamily(r.family_id as string, user, "Your family member")
     if (action === "approve") {
       const hasFix = latitude !== undefined && longitude !== undefined
       // With a fix from the approving device: store the one-time snapshot now.

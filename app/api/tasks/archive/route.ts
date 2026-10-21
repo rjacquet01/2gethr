@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { getHistoryDays } from "@/lib/history-limit"
 import { defaultFamilyFor, membershipIn } from "@/lib/permissions"
+import { memberName } from "@/lib/member-names"
 
 // POST - Archive all completed/cancelled tasks for the family
 export async function POST(request: NextRequest) {
@@ -83,9 +84,12 @@ export async function GET(request: NextRequest) {
       SELECT
         t.id, t.title, t.description, t.status, t.priority, t.category,
         t.due_date, t.created_at, t.updated_at,
-        u.first_name as creator_first_name, u.last_name as creator_last_name
+        u.first_name as creator_first_name, u.last_name as creator_last_name,
+        fm_c.role as creator_role, fm_c.nickname as creator_nickname, cp_c.display_name as creator_child_name
       FROM tasks t
       LEFT JOIN users u ON t.created_by_id = u.id
+      LEFT JOIN family_members fm_c ON fm_c.user_id = t.created_by_id AND fm_c.family_id = t.family_id AND fm_c.is_active = true
+      LEFT JOIN child_profiles cp_c ON cp_c.family_member_id = fm_c.id
       WHERE t.family_id = ${familyId}
       AND t.status = 'ARCHIVED'
       AND t.updated_at >= NOW() - make_interval(days => ${historyDays})
@@ -105,7 +109,9 @@ export async function GET(request: NextRequest) {
       createdAt: t.created_at,
       updatedAt: t.updated_at,
       archivedAt: t.updated_at,
-      creatorName: t.creator_first_name ? `${t.creator_first_name} ${t.creator_last_name || ''}`.trim() : null,
+      creatorName: t.creator_first_name || t.creator_nickname
+        ? memberName({ role: t.creator_role, nickname: t.creator_nickname, childDisplayName: t.creator_child_name, firstName: t.creator_first_name, lastName: t.creator_last_name }, { withLastName: true })
+        : null,
     }))
 
     return NextResponse.json({ success: true, tasks, historyDays })

@@ -103,6 +103,20 @@ export async function nameInFamily(familyId: string, userId: string, fallback = 
   return (rows[0]?.name as string | null) || fallback
 }
 
+/**
+ * The person doing something ("Mia assigned you a task"), named as this
+ * family knows them. Not a member there (or no family): their account first
+ * name, then the sentence's own fallback ("Someone", "A parent").
+ */
+export async function actorNameInFamily(
+  familyId: string | null | undefined,
+  user: { id: string; firstName?: string | null },
+  fallback: string
+): Promise<string> {
+  const account = clean(user.firstName) || fallback
+  return familyId ? nameInFamily(familyId, user.id, account) : account
+}
+
 /** Give a child membership this name everywhere (profile, nickname, own login). */
 export async function setChildName(memberId: string, name: string): Promise<void> {
   const name_ = name.trim()

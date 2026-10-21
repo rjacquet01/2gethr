@@ -4,7 +4,7 @@ import { getUserFromRequest } from '@/lib/auth'
 import { createNotification, type NotificationChannel } from '@/lib/notifications'
 import { getHistoryDays } from '@/lib/history-limit'
 import { ensureReminderChildColumn } from '@/lib/reminder-schema'
-import { memberName } from "@/lib/member-names"
+import { memberName, actorNameInFamily } from "@/lib/member-names"
 
 const VALID_NOTIFY_CHANNELS: NotificationChannel[] = ['in_app', 'push', 'email', 'sms']
 
@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
         } catch {
           when = remindAtDate.toISOString()
         }
-        const byName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'A family member'
+        const byName = await actorNameInFamily(resolvedFamilyId, user, 'A family member')
         await createNotification({
           userId: ownerId,
           type: 'REMINDER',

@@ -10,6 +10,7 @@ import {
 } from "@/lib/emergency-alert"
 import { z } from "zod"
 import { guestForbidden } from "@/lib/permissions"
+import { actorNameInFamily } from "@/lib/member-names"
 
 export const maxDuration = 30
 
@@ -130,7 +131,7 @@ export async function POST(request: NextRequest) {
       INSERT INTO emergency_alerts (id, family_id, sender_user_id, child_member_id, child_user_id)
       VALUES (${alertId}, ${familyId}, ${user.id}, ${row.target_member_id}, ${row.target_user_id})
     `
-    const senderName = `${user.firstName || ""}`.trim() || "A parent"
+    const senderName = await actorNameInFamily(familyId, user, "A parent")
     const result = await dispatchEmergencyAlert({ alertId, senderName, childUserId: row.target_user_id, familyId })
     const reached = result.sms === "sent" || result.push === "sent"
     return NextResponse.json({ success: true, data: { alertId, reached, ...result } })

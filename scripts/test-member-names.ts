@@ -200,6 +200,40 @@ async function main() {
     ok("a child login can't change its own name")
   }
 
+  console.log("who did it (notifications)")
+  {
+    const familyNames: Record<string, string> = { "fam-1|u-mia": "Mom" }
+    __setSqlForTests((async (strings: TemplateStringsArray, ...v: unknown[]) => {
+      const q = strings.join("?").replace(/\s+/g, " ").trim()
+      if (q.startsWith("SELECT CASE WHEN fm.role = 'CHILD'")) {
+        const n = familyNames[`${v[0]}|${v[1]}`]
+        return n ? [{ name: n }] : []
+      }
+      return []
+    }) as unknown as Parameters<typeof __setSqlForTests>[0])
+    assert.strictEqual(await names.actorNameInFamily("fam-1", { id: "u-mia", firstName: "Mia" }, "Someone"), "Mom")
+    assert.strictEqual(await names.actorNameInFamily("fam-2", { id: "u-mia", firstName: "Mia" }, "Someone"), "Mia")
+    assert.strictEqual(await names.actorNameInFamily(null, { id: "u-mia", firstName: " Mia " }, "Someone"), "Mia")
+    assert.strictEqual(await names.actorNameInFamily("fam-2", { id: "u-x", firstName: "" }, "A parent"), "A parent")
+    __setSqlForTests(fake)
+    ok("the person acting is named as that family knows them; else account first name; else the fallback")
+
+    const offenders: string[] = []
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name)
+        if (e.isDirectory()) walk(p)
+        else if (/\.tsx?$/.test(e.name) && /firstName\} \$\{(opts\.)?user\.lastName/.test(fs.readFileSync(p, "utf8"))) offenders.push(p)
+      }
+    }
+    for (const d of ["app/api", "lib"]) walk(d)
+    // Joining a family: the person isn't a member yet, so their account name is
+    // right. Checkout: Stripe needs the billing name.
+    const allowed = [path.join("families", "join"), path.join("subscription", "checkout")]
+    assert.deepStrictEqual(offenders.filter((p) => !allowed.some((a) => p.includes(a))), [])
+    ok("no notification builds the actor's name from first + last name any more (except joining and checkout)")
+  }
+
   console.log("children's names")
   {
     log.length = 0
