@@ -55,9 +55,17 @@ async function main() {
   fresh()
   const admins: Record<string, string[]> = { "a-legal": ["legal.manage"], "a-support": ["users.read"] }
 
+  // Databases set up with scripts/create-location-requests-table.sql have a
+  // foreign key from requester_user_id to users, which a "legal:" requester breaks.
+  let requesterFk = true
   const fake = (async (strings: TemplateStringsArray, ...v: unknown[]) => {
     const q = strings.join("?").replace(/\s+/g, " ").trim()
     log.push({ q, v })
+    if (q.startsWith("SELECT 1 FROM pg_constraint WHERE conname = 'location_requests_requester_user_id_fkey'")) return requesterFk ? [{ x: 1 }] : []
+    if (q === "ALTER TABLE location_requests DROP CONSTRAINT IF EXISTS location_requests_requester_user_id_fkey") { requesterFk = false; return [] }
+    if (q.startsWith("INSERT INTO location_requests") && requesterFk && String(v[1]).startsWith("legal:")) {
+      throw new Error('insert or update on table "location_requests" violates foreign key constraint "location_requests_requester_user_id_fkey"')
+    }
     if (/^(CREATE|ALTER|DROP|INSERT INTO admin_|INSERT INTO legal_access_log|INSERT INTO admin_action_logs)/.test(q)) return []
     if (q.includes("FROM admin_users")) return admins[v[0] as string] ? [{ id: v[0], email: `${v[0]}@example.invalid`, first_name: "A", last_name: "Admin", status: "ACTIVE", mfa_enabled: true }] : []
     if (q.includes("FROM admin_roles r")) return []
@@ -96,6 +104,19 @@ async function main() {
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   const ctx = { params: Promise.resolve({ caseId: CASE }) }
+
+  // Runs first: ensureLocationRequestsTable() is memoized per process.
+  console.log("requester foreign key")
+  {
+    const r = await quiet(async () => pingRoute.POST(await adminReq("a-legal", "POST", { userId: KID }), ctx))
+    assert.strictEqual(r.status, 200, "ping saved despite the old foreign key")
+    assert.strictEqual(requesterFk, false)
+    const at = (needle: string) => log.findIndex((x) => x.q.startsWith(needle))
+    assert.ok(at("ALTER TABLE location_requests DROP CONSTRAINT IF EXISTS location_requests_requester_user_id_fkey") < at("INSERT INTO location_requests"))
+    const drops = log.filter((x) => /DROP CONSTRAINT/.test(x.q)).map((x) => x.q)
+    assert.deepStrictEqual(drops, ["ALTER TABLE location_requests DROP CONSTRAINT IF EXISTS location_requests_requester_user_id_fkey"])
+    ok("the requester foreign key is dropped before the ping is saved; no other constraint touched")
+  }
 
   console.log("ping results")
   {

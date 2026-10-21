@@ -1,7 +1,8 @@
 -- Create location_requests table for on-demand location pings
 CREATE TABLE IF NOT EXISTS location_requests (
   id TEXT PRIMARY KEY,
-  requester_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- No foreign key: legal requests use 'legal:<caseId>' (see fix-location-requests-fk.sql).
+  requester_user_id TEXT NOT NULL,
   target_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   family_id TEXT NOT NULL REFERENCES families(id) ON DELETE CASCADE,
   status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'FULFILLED', 'EXPIRED', 'DECLINED')),
