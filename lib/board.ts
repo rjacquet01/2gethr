@@ -4,6 +4,7 @@ import { getMemberAccess, guestForbidden } from "./permissions"
 import { authorInfo, notifySocial, type AuthorInfo } from "./social"
 import { EMAIL_TEMPLATES } from "./services/email"
 import { canPinFlyers, flyerImageUrl, isBoardAdult } from "./board-flyers"
+import { actorNameInFamily } from "./member-names"
 
 export interface BoardAccess {
   role: string
@@ -106,7 +107,7 @@ export async function notifyNewPost(opts: {
       AND role <> 'GUEST' AND user_id <> ${opts.user.id}
   `
   if (recipients.length === 0) return
-  const name = opts.user.firstName ? `${opts.user.firstName} ${opts.user.lastName || ""}`.trim() : "Someone"
+  const name = await actorNameInFamily(opts.familyId, opts.user, "Someone")
   const fam = await sql`SELECT name FROM families WHERE id = ${opts.familyId} LIMIT 1`
   const familyName = (fam[0]?.name as string | undefined) ?? null
   await notifySocial({

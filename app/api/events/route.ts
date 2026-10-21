@@ -9,6 +9,7 @@ import { z } from "zod"
 import { planGateError } from "@/lib/tier-gates"
 import { getGuestFamilyIds, filterEventsForGuest, filterEventsByVisibility } from "@/lib/guest-scope"
 import { generateOccurrences, isValidTimeZone, recurrenceFromPreset, type RecurrenceInput } from "@/lib/recurrence"
+import { participantName, actorNameInFamily } from "@/lib/member-names"
 
 const createEventSchema = z.object({
   calendarId: z.string().uuid("Invalid calendar ID").optional(),
@@ -277,17 +278,22 @@ export async function GET(request: NextRequest) {
 
     // Get participants for all events
     const eventIds = filteredEvents.map(e => e.id)
-    let participants: Array<{ event_id: string; user_id: string | null; child_profile_id: string | null; status: string; first_name: string | null; last_name: string | null; child_name: string | null }> = []
+    let participants: Array<{ event_id: string; user_id: string | null; child_profile_id: string | null; status: string; first_name: string | null; last_name: string | null; child_name: string | null; role: string | null; nickname: string | null; member_child_name: string | null }> = []
     
     if (eventIds.length > 0) {
       await ensureEventParticipantChildColumns()
       participants = (await sql`
         SELECT 
           ep.event_id, ep.user_id, ep.child_profile_id, ep.status,
-          u.first_name, u.last_name, cp.display_name AS child_name
+          u.first_name, u.last_name, cp.display_name AS child_name,
+          fm.role, fm.nickname, cpm.display_name AS member_child_name
         FROM event_participants ep
         LEFT JOIN users u ON ep.user_id = u.id
         LEFT JOIN child_profiles cp ON ep.child_profile_id = cp.id
+        JOIN events e ON e.id = ep.event_id
+        JOIN calendars c ON c.id = e.calendar_id
+        LEFT JOIN family_members fm ON fm.user_id = ep.user_id AND fm.family_id = c.family_id AND fm.is_active = true
+        LEFT JOIN child_profiles cpm ON cpm.family_member_id = fm.id
         WHERE ep.event_id = ANY(${eventIds})
       `) as typeof participants
     }
@@ -299,7 +305,7 @@ export async function GET(request: NextRequest) {
         userId: p.user_id,
         childProfileId: p.child_profile_id,
         status: p.status,
-        name: p.child_name || `${p.first_name || ''} ${p.last_name || ''}`.trim(),
+        name: participantName(p),
       })
       return acc
     }, {} as Record<string, Array<{ userId: string | null; childProfileId: string | null; status: string; name: string }>>)
@@ -775,7 +781,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Notify family members about the new event
-    const creatorName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'A family member'
+    const creatorName = await actorNameInFamily(calendar.family_id as string, user, 'A family member')
     // Parent/guardian adds a child to an event: that child always gets push +
     // email + text + in-app.
     let childUserIds: string[] = []

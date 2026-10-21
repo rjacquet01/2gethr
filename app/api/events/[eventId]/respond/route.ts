@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { createNotification } from "@/lib/notifications"
 import { z } from "zod"
+import { actorNameInFamily } from "@/lib/member-names"
 
 const schema = z.object({ action: z.enum(["ACCEPT", "DECLINE"]) })
 
@@ -34,7 +35,7 @@ export async function POST(
       JOIN calendars c ON e.calendar_id = c.id WHERE e.id = ${eventId}
     `
     if (ev[0] && ev[0].created_by_id !== user.id) {
-      const name = user.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Someone"
+      const name = await actorNameInFamily(ev[0].family_id as string, user, "Someone")
       await createNotification({
         userId: ev[0].created_by_id,
         type: "APPROVAL_RESPONSE",

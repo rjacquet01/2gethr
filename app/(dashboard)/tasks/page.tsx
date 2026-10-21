@@ -236,11 +236,7 @@ export default function TasksPage() {
 
   const renderRow = (task: TaskT) => {
     const status = norm(task.status)
-    const assigneeName = task.child_display_name
-      ? task.child_display_name
-      : task.assignee_first_name
-        ? `${task.assignee_first_name} ${task.assignee_last_name || ''}`.trim()
-        : 'Unassigned'
+    const assigneeName = task.assignee_name || 'Unassigned'
     const assigneeAvatarSrc = task.child_avatar_url
       ? task.child_avatar_url
       : task.assigned_to_id && task.assignee_profile_photo_path

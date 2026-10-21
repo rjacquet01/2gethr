@@ -82,7 +82,7 @@ async function main() {
     if (q.includes("FROM users WHERE id =")) return db.users.filter((u) => u.id === v[0])
     if (q.startsWith("SELECT 1 FROM family_members WHERE user_id = ? AND role = 'CHILD'")) return db.members.filter((m) => m.user_id === v[0] && m.role === "CHILD").slice(0, 1)
     if (q.startsWith("SELECT 1 FROM families f")) return manages(v[0], v[1]) ? [{ "?column?": 1 }] : []
-    if (q.startsWith("SELECT fm.id, fm.family_id, fm.user_id, f.name AS family_name")) {
+    if (q.startsWith("SELECT fm.id, fm.family_id, fm.user_id, fm.nickname, f.name AS family_name")) {
       return db.members
         .filter((m) => m.role === "CHILD" && manages(m.family_id, v[0]) && !hasRecord(m.id, m.family_id))
         .map((m) => ({

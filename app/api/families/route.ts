@@ -5,6 +5,7 @@ import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 // Note: users table uses profile_photo_url column, not avatar_url
 import { z } from "zod"
 import { TRIAL_DAYS } from "@/lib/subscription-tiers"
+import { memberName } from "@/lib/member-names"
 
 const createFamilySchema = z.object({
   name: z.string().min(1, "Family name is required").max(100),
@@ -55,9 +56,11 @@ export async function GET(request: NextRequest) {
             fm.joined_at,
             u.first_name,
             u.last_name,
-            u.profile_photo_url
+            u.profile_photo_url,
+            cp.display_name
           FROM family_members fm
           LEFT JOIN users u ON fm.user_id = u.id
+          LEFT JOIN child_profiles cp ON cp.family_member_id = fm.id
           WHERE fm.family_id = ${f.id} AND fm.is_active = true
             -- A guest sees only their own membership, never the family's structure.
             AND (${f.user_role} <> 'GUEST' OR fm.user_id = ${user.id})
@@ -91,7 +94,7 @@ export async function GET(request: NextRequest) {
             id: m.id,
             userId: m.user_id,
             role: m.role,
-            displayName: m.nickname || `${m.first_name || ''} ${m.last_name || ''}`.trim() || 'Unknown',
+            displayName: memberName({ role: m.role, nickname: m.nickname, childDisplayName: m.display_name, firstName: m.first_name, lastName: m.last_name }, { withLastName: true }),
             avatarUrl: m.profile_photo_url,
             // false for a child managed by a parent (no login, user_id NULL)
             hasAccount: !!m.user_id,

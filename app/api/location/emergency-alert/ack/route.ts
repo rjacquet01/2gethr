@@ -4,6 +4,7 @@ import { getUserFromRequest } from "@/lib/auth"
 import { ensureEmergencyAlertSchema, notifyParentAcked } from "@/lib/emergency-alert"
 import { z } from "zod"
 import { guestForbidden, isGuestInFamily, isGuestOnly } from "@/lib/permissions"
+import { actorNameInFamily } from "@/lib/member-names"
 
 const schema = z.object({ alertId: z.string().min(1) })
 
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
       // Not theirs, unknown, or already answered: nothing more to do.
       return NextResponse.json({ success: true, data: { alreadyAnswered: true } })
     }
-    await notifyParentAcked(updated[0].sender_user_id, `${user.firstName || ""}`.trim() || "Your child")
+    await notifyParentAcked(updated[0].sender_user_id, await actorNameInFamily(fam[0]?.family_id as string | undefined, user, "Your child"))
     return NextResponse.json({ success: true, data: { alreadyAnswered: false } })
   } catch (error) {
     if (error instanceof z.ZodError) {

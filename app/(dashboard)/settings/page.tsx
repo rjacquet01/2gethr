@@ -25,6 +25,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Bell, Lock, Shield, Globe, User, Camera, Trash2, Phone, Smartphone, Download, RotateCcw, Sun, Moon, RefreshCw, ChevronRight, Mail } from 'lucide-react'
 import { useTheme } from 'next-themes'
+import { useMyRole } from '@/hooks/use-my-role'
 import {
   Dialog,
   DialogContent,
@@ -57,6 +58,8 @@ export default function SettingsPage() {
   const { access, isLoading: tierLoading } = useSubscription(primaryFamily?.id || null)
   const { theme, setTheme, resolvedTheme } = useTheme()
   const pushNotifications = usePushNotifications()
+  // A child's name is set by a parent (the server refuses changes).
+  const { isChild } = useMyRole()
   const [mounted, setMounted] = useState(false)
   const [tab, setTab] = useState<'profile' | 'notifications' | 'security' | 'preferences' | 'account'>('profile')
   const [uploading, setUploading] = useState(false)
@@ -546,12 +549,17 @@ export default function SettingsPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="firstName">First name</Label>
-                <Input id="firstName" value={profile.firstName} onChange={(e) => setProfile((p) => ({ ...p, firstName: e.target.value }))} />
+                <Input id="firstName" value={profile.firstName} disabled={isChild} onChange={(e) => setProfile((p) => ({ ...p, firstName: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="lastName">Last name</Label>
-                <Input id="lastName" value={profile.lastName} onChange={(e) => setProfile((p) => ({ ...p, lastName: e.target.value }))} />
+                <Input id="lastName" value={profile.lastName} disabled={isChild} onChange={(e) => setProfile((p) => ({ ...p, lastName: e.target.value }))} />
               </div>
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                {isChild
+                  ? 'Your name is set by your parent. Ask them to change it on your profile.'
+                  : 'Your account name. Each family can show a different name: set "Name shown to this family" next to your name on the Family page.'}
+              </p>
               <div className="space-y-1.5 sm:col-span-2">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="phone">Phone</Label>

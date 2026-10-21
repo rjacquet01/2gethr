@@ -5,6 +5,7 @@ import { getUserFromRequest } from '@/lib/auth'
 import { guestForbidden } from '@/lib/permissions'
 import { ensureMemberAppearanceColumns } from '@/lib/member-appearance'
 import { ensureReminderChildColumn } from '@/lib/reminder-schema'
+import { memberName } from "@/lib/member-names"
 
 // GET - Get tasks and events for each family member
 export async function GET(
@@ -44,7 +45,7 @@ export async function GET(
         u.first_name,
         u.last_name,
         u.profile_photo_url as avatar_url,
-        COALESCE(u.first_name || ' ' || u.last_name, fm.nickname) as display_name
+        fm.nickname
       FROM family_members fm
       LEFT JOIN users u ON fm.user_id = u.id
       WHERE fm.family_id = ${familyId} AND fm.is_active = true
@@ -57,7 +58,7 @@ export async function GET(
           ELSE 5
         END,
         fm.created_at
-    `) as Row<{ member_id: string; user_id: string | null; role: string; color: string | null; emoji: string | null; first_name: string | null; last_name: string | null; avatar_url: string | null; display_name: string | null }>[]
+    `) as Row<{ member_id: string; user_id: string | null; role: string; color: string | null; emoji: string | null; first_name: string | null; last_name: string | null; avatar_url: string | null; nickname: string | null }>[]
 
     // Get child profiles
     const children = (await sql`
@@ -166,7 +167,7 @@ export async function GET(
         memberId: member.member_id,
         userId: member.user_id,
         hasAccount: !!member.user_id,
-        displayName: member.display_name || childProfile?.display_name || `${member.first_name} ${member.last_name}`,
+        displayName: memberName({ role: member.role, nickname: member.nickname, childDisplayName: childProfile?.display_name, firstName: member.first_name, lastName: member.last_name }, { withLastName: true }),
         avatarUrl: member.avatar_url || childProfile?.avatar_url || null,
         color: member.color || null,
         emoji: member.emoji || null,

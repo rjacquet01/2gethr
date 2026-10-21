@@ -7,6 +7,7 @@ import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { removeFamilyFlyers } from "@/lib/board-flyers"
 import { deleteFamilyChildren } from "@/lib/parental-consent"
+import { memberName } from "@/lib/member-names"
 
 const updateFamilySchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -122,7 +123,9 @@ export async function GET(
           userId: m.user_id,
           familyId: familyId,
           role: m.role,
-          displayName: m.nickname || [m.first_name, m.last_name].filter(Boolean).join(' ') || 'Unknown',
+          displayName: memberName({ role: m.role, nickname: m.nickname, childDisplayName: m.display_name, firstName: m.first_name, lastName: m.last_name }, { withLastName: true }),
+          // Your own "Name shown to this family" (blank: your account name).
+          ...(m.user_id === user.id ? { nickname: m.nickname || '' } : {}),
           avatarUrl: m.profile_photo_path,
           color: m.color || null,
           emoji: m.emoji || null,

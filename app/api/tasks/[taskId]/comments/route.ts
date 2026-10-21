@@ -4,6 +4,7 @@ import { getUserFromRequest } from '@/lib/auth'
 import { notifyTaskComment } from '@/lib/notifications'
 import { taskInvolvesUser } from '@/lib/guest-scope'
 import { PAGE_SIZE_COMMENTS, authorInfo, parseCursor } from '@/lib/social'
+import { actorNameInFamily } from "@/lib/member-names"
 
 // GET - latest 50 comments, oldest first, in the shared comment-thread shape.
 // ?before=<created_at> pages back; ?since=<created_at> returns only newer ones.
@@ -130,7 +131,7 @@ export async function POST(
       taskTitle: task[0].title,
       assignedToId: task[0].assigned_to_id,
       commenterId: user.id,
-      commenterName: `${user.firstName} ${user.lastName}`.trim(),
+      commenterName: await actorNameInFamily(task[0].family_id as string, user, 'Someone'),
       commentMessage: trimmedContent,
       action: 'added'
     })
@@ -219,7 +220,7 @@ export async function PATCH(
       taskTitle: task[0].title,
       assignedToId: task[0].assigned_to_id,
       commenterId: user.id,
-      commenterName: `${user.firstName} ${user.lastName}`.trim(),
+      commenterName: await actorNameInFamily(task[0].family_id as string, user, 'Someone'),
       commentMessage: trimmedContent,
       action: 'updated'
     })

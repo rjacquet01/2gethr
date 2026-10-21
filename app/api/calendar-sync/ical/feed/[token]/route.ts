@@ -4,6 +4,7 @@ import { ensureSyncSchema } from '@/lib/sync-schema'
 import { checkFamilySubscription } from '@/lib/auth'
 import { getTierDefinition } from '@/lib/subscription-tiers'
 import { guestScopeUserId, filterEventsByVisibility } from '@/lib/guest-scope'
+import { taskAssigneeName } from "@/lib/member-names"
 
 // Public, unauthenticated ICS feed. Security comes from the `token` being an
 // unguessable random value (calendar_sync_connections.ical_token) rather than
@@ -190,10 +191,13 @@ export async function GET(
     ? await sql`
         SELECT t.id, t.title, t.description, t.due_date, t.status, t.priority,
                t.updated_at, t.created_at,
-               u.first_name AS assignee_first_name, cp.display_name AS child_display_name
+               t.assigned_to_id, u.first_name AS assignee_first_name, cp.display_name AS child_display_name,
+               fm_a.role AS assignee_role, fm_a.nickname AS assignee_nickname, cp_a.display_name AS assignee_child_name
         FROM tasks t
         LEFT JOIN users u ON t.assigned_to_id = u.id
         LEFT JOIN child_profiles cp ON t.child_profile_id = cp.id
+        LEFT JOIN family_members fm_a ON fm_a.user_id = t.assigned_to_id AND fm_a.family_id = t.family_id AND fm_a.is_active = true
+        LEFT JOIN child_profiles cp_a ON cp_a.family_member_id = fm_a.id
         WHERE t.family_id = ${familyId}
           AND t.due_date IS NOT NULL
           AND t.status NOT IN ('ARCHIVED', 'CANCELLED')
@@ -259,7 +263,8 @@ export async function GET(
   for (const task of tasks) {
     const due = new Date(task.due_date)
     const done = task.status === 'COMPLETED'
-    const who = task.child_display_name || task.assignee_first_name || ''
+    // First names only here (no last name is selected).
+    const who = taskAssigneeName(task) || ''
     const title = `${done ? '✓' : '☐'} ${task.title}${who ? ` (${who})` : ''}`
     const descParts = [
       who ? `Assigned to: ${who}` : '',

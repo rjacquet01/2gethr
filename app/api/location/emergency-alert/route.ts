@@ -10,6 +10,7 @@ import {
 } from "@/lib/emergency-alert"
 import { z } from "zod"
 import { guestForbidden } from "@/lib/permissions"
+import { actorNameInFamily } from "@/lib/member-names"
 
 export const maxDuration = 30
 
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
     // All kids, so the dialog can show "No account" for those who have no
     // login (nothing to alert) instead of a Send button that can't work.
     const kids = await sql`
-      SELECT fm.id, COALESCE(NULLIF(fm.nickname, ''), cp.display_name, u.first_name, 'Child') AS name,
+      SELECT fm.id, COALESCE(CASE WHEN fm.role = 'CHILD' THEN COALESCE(NULLIF(TRIM(cp.display_name), ''), NULLIF(TRIM(fm.nickname), ''), NULLIF(TRIM(u.first_name), '')) ELSE COALESCE(NULLIF(TRIM(fm.nickname), ''), NULLIF(TRIM(u.first_name), '')) END, 'Child') AS name,
              (u.id IS NOT NULL) AS has_account
       FROM family_members fm
       LEFT JOIN users u ON u.id = fm.user_id
@@ -130,7 +131,7 @@ export async function POST(request: NextRequest) {
       INSERT INTO emergency_alerts (id, family_id, sender_user_id, child_member_id, child_user_id)
       VALUES (${alertId}, ${familyId}, ${user.id}, ${row.target_member_id}, ${row.target_user_id})
     `
-    const senderName = `${user.firstName || ""}`.trim() || "A parent"
+    const senderName = await actorNameInFamily(familyId, user, "A parent")
     const result = await dispatchEmergencyAlert({ alertId, senderName, childUserId: row.target_user_id, familyId })
     const reached = result.sms === "sent" || result.push === "sent"
     return NextResponse.json({ success: true, data: { alertId, reached, ...result } })

@@ -5,6 +5,7 @@ import { notifyTaskCompleted, createNotification } from '@/lib/notifications'
 import { ensureAssignmentColumns, isSupervisorRole, assigneesInFamily } from '@/lib/assignment'
 import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
 import { taskInvolvesUser } from '@/lib/guest-scope'
+import { taskAssigneeName, actorNameInFamily } from "@/lib/member-names"
 
 // Helper to sync task status updates across all related tables
 async function syncTaskStatusUpdate(
@@ -54,10 +55,9 @@ async function syncTaskStatusUpdate(
   // uncaught here, so EVERY task status change (complete/approve/reject/
   // start/hold/resume/pending/cancel/archive/unarchive) 500'd with
   // "Failed to update task" since this line was added.
-  const changedByUser = await sql`SELECT first_name, last_name FROM users WHERE id = ${userId}`
-  const changedByName = changedByUser[0]
-    ? `${changedByUser[0].first_name || ''} ${changedByUser[0].last_name || ''}`.trim() || 'Someone'
-    : 'Someone'
+  const changedByUser = await sql`SELECT first_name FROM users WHERE id = ${userId}`
+  // Named as the task's family knows them (lib/member-names.ts).
+  const changedByName = await actorNameInFamily(task.family_id as string, { id: userId, firstName: changedByUser[0]?.first_name as string | null }, 'Someone')
 
   for (const notifyUserId of notifyUsers) {
     await createNotification({
@@ -115,11 +115,14 @@ export async function GET(
       SELECT t.*, 
              u_creator.first_name as creator_first_name, u_creator.last_name as creator_last_name,
              u_assignee.first_name as assignee_first_name, u_assignee.last_name as assignee_last_name,
+               fm_a.role as assignee_role, fm_a.nickname as assignee_nickname, cp_a.display_name as assignee_child_name,
              cp.display_name as child_display_name,
              f.name as family_name
       FROM tasks t
       LEFT JOIN users u_creator ON t.created_by_id = u_creator.id
       LEFT JOIN users u_assignee ON t.assigned_to_id = u_assignee.id
+      LEFT JOIN family_members fm_a ON fm_a.user_id = t.assigned_to_id AND fm_a.family_id = t.family_id AND fm_a.is_active = true
+      LEFT JOIN child_profiles cp_a ON cp_a.family_member_id = fm_a.id
       LEFT JOIN child_profiles cp ON t.child_profile_id = cp.id
       LEFT JOIN families f ON t.family_id = f.id
       WHERE t.id = ${taskId}
@@ -164,6 +167,7 @@ export async function GET(
     return NextResponse.json({ 
       data: { 
         ...task[0], 
+        assignee_name: taskAssigneeName(task[0]),
         history, 
         comments 
       } 
@@ -260,7 +264,7 @@ export async function PATCH(
           VALUES (${taskId}, ${user.id}, ${accepted ? 'APPROVED' : 'REJECTED'}, ${JSON.stringify({ assignment: accepted ? 'accepted' : 'declined' })}::jsonb)
         `
       } catch (e) { console.error('assignment history failed (non-fatal)', e) }
-      const who = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Someone'
+      const who = await actorNameInFamily(task.family_id as string, user, 'Someone')
       if (task.created_by_id && task.created_by_id !== user.id) {
         await createNotification({
           userId: task.created_by_id, type: 'APPROVAL_RESPONSE',
@@ -304,7 +308,7 @@ export async function PATCH(
       await syncTaskStatusUpdate(taskId, newStatus, user.id, task, { completedAt: new Date().toISOString() })
       
       // Notify task creator and parents about completion
-      const completedByName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Someone'
+      const completedByName = await actorNameInFamily(task.family_id as string, user, 'Someone')
       
       // Notify task creator if different from completer
       if (task.created_by_id && task.created_by_id !== user.id) {

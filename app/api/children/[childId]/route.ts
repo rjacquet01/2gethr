@@ -5,6 +5,7 @@ import { getUserFromRequest, logAuditEvent } from '@/lib/auth'
 import { ensureMemberAppearanceColumns } from '@/lib/member-appearance'
 import { ensureAgeColumns } from '@/lib/age-schema'
 import { ageFromDob, dobError, childAgeInfo } from '@/lib/age'
+import { setChildName } from '@/lib/member-names'
 
 const updateChildSchema = z.object({
   displayName: z.string().min(1).max(100).optional(),
@@ -169,7 +170,7 @@ export async function PATCH(
     await ensureAgeColumns()
 
     const rows = await sql`
-      SELECT cp.id, fm.family_id
+      SELECT cp.id, fm.family_id, fm.id AS member_id
       FROM child_profiles cp JOIN family_members fm ON cp.family_member_id = fm.id
       WHERE cp.id = ${childId}
     `
@@ -210,6 +211,8 @@ export async function PATCH(
         updated_at = NOW()
       WHERE id = ${childId}
     `
+    // The new name everywhere: family list, alerts, their own login.
+    if (data.displayName) await setChildName(rows[0].member_id as string, data.displayName)
 
     await logAuditEvent(user.id, 'UPDATE', 'child_profile', childId, {
       newValue: { ...data, familyId },

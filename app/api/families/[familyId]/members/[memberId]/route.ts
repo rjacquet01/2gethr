@@ -8,7 +8,8 @@ import { deleteChildData } from "@/lib/parental-consent"
 
 const updateMemberSchema = z.object({
   role: z.enum(["PARENT", "GUARDIAN", "ADULT", "CHILD", "GUEST"]).optional(),
-  nickname: z.string().max(50).optional(),
+  // No nickname: names come from the account or the child's profile
+  // (lib/member-names.ts). A child is renamed on their profile.
   canCreateEvents: z.boolean().optional(),
   requiresEventApproval: z.boolean().optional(),
   canOverrideConflicts: z.boolean().optional(),
@@ -109,7 +110,6 @@ export async function PATCH(
       UPDATE family_members 
       SET 
         role = COALESCE(${validatedData.role}, role),
-        nickname = COALESCE(${validatedData.nickname}, nickname),
         can_create_events = COALESCE(${validatedData.canCreateEvents}, can_create_events),
         requires_event_approval = COALESCE(${validatedData.requiresEventApproval}, requires_event_approval),
         can_override_conflicts = COALESCE(${validatedData.canOverrideConflicts}, can_override_conflicts),
@@ -118,19 +118,6 @@ export async function PATCH(
         updated_at = NOW()
       WHERE id = ${memberId}
     `
-
-    // If role changed to CHILD, ensure child profile exists
-    if (validatedData.role === "CHILD") {
-      const existingProfile = await sql`
-        SELECT id FROM child_profiles WHERE family_member_id = ${memberId}
-      `
-      if (existingProfile.length === 0) {
-        await sql`
-          INSERT INTO child_profiles (id, family_member_id, display_name, created_at, updated_at)
-          VALUES (${crypto.randomUUID()}, ${memberId}, ${validatedData.nickname || 'Child'}, NOW(), NOW())
-        `
-      }
-    }
 
     // Audit log
     await logAuditEvent(user.id, "UPDATE", "family_member", memberId, {

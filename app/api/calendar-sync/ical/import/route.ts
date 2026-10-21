@@ -5,6 +5,7 @@ import { splitIcsComponents, parseIcsField, parseIcsDateValue } from '@/lib/serv
 import { createNotification } from '@/lib/notifications'
 import { ensureEventParticipantChildColumns, resolveLoginlessChildIds, isAdultRole } from '@/lib/assignment'
 import { defaultFamilyFor, membershipIn } from '@/lib/permissions'
+import { actorNameInFamily } from "@/lib/member-names"
 
 // POST - One-off import of a .ics file (uploaded) or a remote .ics/webcal
 // URL, into the caller's family. This is the generic "import from any
@@ -282,7 +283,7 @@ export async function POST(request: NextRequest) {
       eventsAssigned = importedEventIds.length
 
       // One summary notification per person (not one per event).
-      const importerName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'A parent'
+      const importerName = await actorNameInFamily(familyId, user, 'A parent')
       const kids = assignUserIds.length === 0 ? [] : await sql`
         SELECT user_id FROM family_members
         WHERE family_id = ${familyId} AND role = 'CHILD' AND user_id = ANY(${assignUserIds}::text[])

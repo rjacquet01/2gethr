@@ -2,6 +2,7 @@ import { sql } from "./db"
 import { ensureAgeColumns } from "./age-schema"
 import { MIN_ACCOUNT_AGE, effectiveAge } from "./age"
 import { ensureConsentSchema } from "./consent-schema"
+import { syncChildNameFromProfile } from "./member-names"
 
 // Invite codes are single-use and bound to a role (PARENT, CHILD or GUEST) on
 // the server. The role is never taken from the person joining. Parent joins
@@ -273,6 +274,8 @@ export async function linkChildLogin(invite: ChildAccountInvite, userId: string)
     RETURNING id
   `
   if (linked.length === 0) return false
+  // The child's name is the one the parent gave, on their login too.
+  await syncChildNameFromProfile(invite.childMemberId)
   const ls = await sql`
     UPDATE location_settings SET mode = 'OFF', share_with_family = false, updated_at = NOW()
     WHERE family_member_id = ${invite.childMemberId} RETURNING id

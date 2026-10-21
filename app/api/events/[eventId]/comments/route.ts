@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { actorNameInFamily } from "@/lib/member-names"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { eventCommentAccess } from "@/lib/event-comment-access"
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         AND (fm.user_id = ${access.createdById}
              OR EXISTS (SELECT 1 FROM event_participants ep WHERE ep.event_id = ${eventId} AND ep.user_id = fm.user_id))
     `
-    const name = user.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Someone"
+    const name = await actorNameInFamily(access.familyId, user, "Someone")
     await notifySocial({
       recipientIds: recipients.map((r) => r.user_id as string),
       type: "EVENT_UPDATE",

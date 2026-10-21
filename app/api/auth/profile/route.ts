@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { isValidTimeZone } from "@/lib/recurrence"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
+import { isChildLogin, syncAdultNicknames } from "@/lib/member-names"
 import { z } from "zod"
 
 const updateProfileSchema = z.object({
@@ -88,6 +89,19 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json()
     const validatedData = updateProfileSchema.parse(body)
 
+    // A child's name is the one their parent gave (lib/member-names.ts); a
+    // parent changes it on the child's profile. Saving other settings with the
+    // same name still works.
+    const changesName =
+      (validatedData.firstName !== undefined && validatedData.firstName !== (user.firstName ?? "")) ||
+      (validatedData.lastName !== undefined && validatedData.lastName !== (user.lastName ?? ""))
+    if (changesName && (await isChildLogin(user.id))) {
+      return NextResponse.json(
+        { success: false, error: "Your name is set by your parent. Ask them to change it on your profile." },
+        { status: 403 }
+      )
+    }
+
     // Build update query dynamically
     const updates: string[] = []
     const values: unknown[] = []
@@ -133,6 +147,8 @@ export async function PATCH(request: NextRequest) {
         updated_at = NOW()
       WHERE id = ${user.id}
     `
+    // A family nickname that was just the old name follows the new one.
+    if (changesName) await syncAdultNicknames(user.id, { firstName: user.firstName, lastName: user.lastName })
 
     // Audit log
     await logAuditEvent(user.id, "UPDATE", "user", user.id, {
