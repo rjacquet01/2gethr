@@ -53,14 +53,22 @@ const fetcher = async (url: string) => {
   return res.json()
 }
 
-export function useTasks(familyId?: string, status?: string) {
+/**
+ * The SWR key useTasks uses. Tasks are per family (the switcher's choice);
+ * without a familyId the API returns every family's tasks mixed together, so
+ * it is null until the family is known. Shared with the dashboard preload.
+ */
+export function tasksKey(familyId?: string, status?: string): string | null {
   const params = new URLSearchParams()
   if (familyId) params.set('familyId', familyId)
   if (status) params.set('status', status)
-  
-  // Tasks are per family (the switcher's choice). Without a familyId the API
-  // returns every family's tasks mixed together, so wait until it is known.
-  const url = familyId ? `/api/tasks?${params.toString()}` : null
+  return familyId ? `/api/tasks?${params.toString()}` : null
+}
+
+export { fetcher as tasksFetcher }
+
+export function useTasks(familyId?: string, status?: string) {
+  const url = tasksKey(familyId, status)
   
   const { data, error, isLoading, mutate } = useSWR<{ data: Task[] }>(
     url,

@@ -44,7 +44,11 @@ interface ActivityResponse {
   events: ActivityEvent[]
 }
 
-const activityFetcher = async (url: string): Promise<ActivityResponse> => {
+/** SWR keys/fetchers shared with the dashboard preload. */
+export const activityKey = (familyId: string) => `/api/places/activity?familyId=${familyId}`
+export const presenceKey = (familyId: string) => `/api/families/${familyId}/presence`
+
+export const activityFetcher = async (url: string): Promise<ActivityResponse> => {
   const res = await authFetch(url, { credentials: 'include' })
   if (!res.ok) throw new Error('Failed to fetch')
   const json = await res.json()
@@ -53,7 +57,7 @@ const activityFetcher = async (url: string): Promise<ActivityResponse> => {
 
 function useGeofenceActivity(familyId: string | undefined) {
   return useSWR<ActivityResponse>(
-    familyId ? `/api/places/activity?familyId=${familyId}` : null,
+    familyId ? activityKey(familyId) : null,
     activityFetcher,
     { refreshInterval: 60_000 }
   )
@@ -69,7 +73,7 @@ interface PresenceRow {
   lastActiveAt: string | null
 }
 
-const presenceFetcher = async (url: string): Promise<PresenceRow[]> => {
+export const presenceFetcher = async (url: string): Promise<PresenceRow[]> => {
   const res = await authFetch(url)
   if (!res.ok) throw new Error('Failed to fetch')
   const json = await res.json()
@@ -79,7 +83,7 @@ const presenceFetcher = async (url: string): Promise<PresenceRow[]> => {
 // Refreshes every minute while the tab is visible (SWR pauses when hidden).
 function usePresence(familyId: string | undefined) {
   return useSWR<PresenceRow[]>(
-    familyId ? `/api/families/${familyId}/presence` : null,
+    familyId ? presenceKey(familyId) : null,
     presenceFetcher,
     { refreshInterval: 60_000, revalidateOnFocus: true }
   )

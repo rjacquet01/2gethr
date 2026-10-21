@@ -1,8 +1,9 @@
 'use client'
 
 import useSWR from 'swr'
-import { useCallback, useMemo, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
 import { authFetch } from './use-auth'
+import { rememberLastFamily } from '@/lib/last-family'
 
 export type FamilyRole = 'PARENT' | 'GUARDIAN' | 'ADULT' | 'CHILD' | 'GUEST'
 
@@ -128,6 +129,13 @@ export function useFamilies() {
     if (idx <= 0) return list
     return [list[idx], ...list.slice(0, idx), ...list.slice(idx + 1)]
   }, [data, storedFamilyId])
+
+  // Lets the next visit start this family's dashboard data early (lib/last-family.ts).
+  const shown = families[0]
+  const shownRole = shown?.currentUserRole || shown?.userRole || null
+  useEffect(() => {
+    if (shown?.id) rememberLastFamily(shown.id, shownRole)
+  }, [shown?.id, shownRole])
 
   const selectFamily = useCallback((familyId: string) => setSelectedFamilyId(familyId), [])
   

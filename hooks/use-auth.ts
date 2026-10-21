@@ -4,6 +4,7 @@ import useSWR, { mutate as globalMutate } from 'swr'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { releasePushForThisDevice } from '@/lib/push-release'
+import { forgetLastFamily } from '@/lib/last-family'
 
 // Token storage keys
 const ACCESS_TOKEN_KEY = 'safe_link_access_token'
@@ -316,6 +317,7 @@ export function useAuth(): AuthState & {
       // Offline: local sign-out still happens; the token expires on its own.
     }
     clearTokens()
+    forgetLastFamily()
     await mutate(null, false)
     // Drop every cached response so the next person to sign in on this
     // device never sees the previous account's families or tasks.

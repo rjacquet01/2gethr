@@ -29,9 +29,13 @@ const fetcher = async (url: string) => {
   return json.data as any[]
 }
 
+/** The family map's SWR key. Shared with the dashboard preload. */
+export const locationKey = (familyId: string) => `/api/location?familyId=${encodeURIComponent(familyId)}`
+export { fetcher as locationFetcher }
+
 export function DashboardMiniMap({ familyId }: { familyId: string }) {
   const { data, error, isLoading } = useSWR(
-    familyId ? `/api/location?familyId=${encodeURIComponent(familyId)}` : null,
+    familyId ? locationKey(familyId) : null,
     fetcher,
     { refreshInterval: 60000, revalidateOnFocus: true }
   )
