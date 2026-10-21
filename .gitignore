@@ -16,3 +16,9 @@ node_modules/
 
 # Temporary git worktrees made by Claude Code
 .claude/worktrees/
+.claude/settings.local.json
+
+# Playwright output
+/test-results/
+/playwright-report/
+/blob-report/
