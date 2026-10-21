@@ -14,6 +14,8 @@ interface AlertOptions {
   urgent?: boolean
   /** Quiet heads-up: in-app + push only (no text or email). */
   soft?: boolean
+  /** Only these users (e.g. grown-ups the person approved to see them). */
+  onlyUserIds?: string[] | null
 }
 
 /**
@@ -34,6 +36,7 @@ export async function alertFamilyAdults(familyId: string, aboutUserId: string, o
   `
   let delivered = 0
   for (const r of recipients) {
+    if (opts.onlyUserIds && !opts.onlyUserIds.includes(r.user_id)) continue
     try {
       await sql`
         INSERT INTO notifications (id, user_id, type, title, body, data, created_at)

@@ -103,6 +103,16 @@ interface LocationSnapshot {
   at: string
 }
 
+// Another grown-up in the family and the approval each way.
+interface AdultAccess {
+  memberId: string
+  name: string
+  color?: string | null
+  emoji?: string | null
+  iCanSee: 'NONE' | 'PENDING' | 'APPROVED'
+  theyCanSee: 'NONE' | 'PENDING' | 'APPROVED'
+}
+
 interface LocationSettings {
   id: string
   memberId: string
@@ -160,6 +170,60 @@ function LocationPageContent({ isChild }: { isChild: boolean }) {
   // Location pings other parents sent me that I still need to approve or deny.
   const [approvals, setApprovals] = useState<{ id: string; requesterName: string; expiresAt: string }[]>([])
   const [answeringApproval, setAnsweringApproval] = useState<string | null>(null)
+  // Other grown-ups: who I may see and who may see me (both need approval).
+  const [adultAccess, setAdultAccess] = useState<AdultAccess[]>([])
+  const [changingAccess, setChangingAccess] = useState<string | null>(null)
+
+  const loadAdultAccess = useCallback(async () => {
+    if (isChild || !selectedFamily?.id) return
+    try {
+      const r = await authFetch(`/api/location/access?familyId=${selectedFamily.id}`)
+      if (!r.ok) return
+      const j = await r.json()
+      if (Array.isArray(j?.data?.people)) setAdultAccess(j.data.people)
+    } catch {
+      // ignore
+    }
+  }, [isChild, selectedFamily?.id])
+
+  useEffect(() => {
+    loadAdultAccess()
+    const t = setInterval(() => {
+      if (!document.hidden) loadAdultAccess()
+    }, 15_000)
+    return () => clearInterval(t)
+  }, [loadAdultAccess])
+
+  const changeAccess = async (memberId: string, action: 'request' | 'cancel' | 'approve' | 'deny' | 'revoke') => {
+    if (!selectedFamily?.id) return
+    setChangingAccess(memberId)
+    try {
+      const res = await authFetch('/api/location/access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ familyId: selectedFamily.id, memberId, action }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(data.error || 'Could not update location access')
+        return
+      }
+      const done: Record<typeof action, string> = {
+        request: 'Request sent',
+        cancel: 'Request cancelled',
+        approve: 'Approved - they can see you when you share',
+        deny: 'Request declined',
+        revoke: 'Access removed',
+      }
+      toast.success(done[action])
+    } catch {
+      toast.error('Could not update location access')
+    } finally {
+      setChangingAccess(null)
+      await loadAdultAccess()
+      loadLocations()
+    }
+  }
 
   const loadApprovals = useCallback(async () => {
     try {
@@ -927,7 +991,13 @@ function LocationPageContent({ isChild }: { isChild: boolean }) {
   }
   const sharingMembers = locations.filter((l) => l.location)
   const staleCount = locations.filter((l) => getMemberLocationStatus(l).label.includes('Stale')).length
-  const notSharing = pingable.filter((p) => !locations.some((l) => l.memberId === p.memberId))
+  // Grown-ups I haven't been approved to see aren't "not sharing": I just can't see them.
+  const hiddenAdults = adultAccess.filter((a) => a.iCanSee !== 'APPROVED')
+  const incomingAccess = adultAccess.filter((a) => a.theyCanSee === 'PENDING')
+  const canSeeMe = adultAccess.filter((a) => a.theyCanSee === 'APPROVED')
+  const notSharing = pingable.filter(
+    (p) => !locations.some((l) => l.memberId === p.memberId) && !hiddenAdults.some((a) => a.memberId === p.memberId)
+  )
   const iAmSharing = mySettings?.mode === 'ACTIVE' && !!mySettings.shareWithFamily
   const focusName = locations.find((l) => l.memberId === mapFocusId)?.name
 
@@ -975,6 +1045,26 @@ function LocationPageContent({ isChild }: { isChild: boolean }) {
         </Card>
       ))}
 
+      {/* Grown-ups asking to see my location */}
+      {incomingAccess.map((a) => (
+        <Card key={a.memberId} className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+          <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-medium">{a.name} wants to see your location</p>
+              <p className="text-sm text-muted-foreground">They&apos;ll see you whenever you share. You can remove access any time in Settings.</p>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" disabled={changingAccess === a.memberId} onClick={() => changeAccess(a.memberId, 'approve')}>
+                Approve
+              </Button>
+              <Button size="sm" variant="outline" disabled={changingAccess === a.memberId} onClick={() => changeAccess(a.memberId, 'deny')}>
+                Deny
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+
       {/* My sharing status */}
       <Card>
         <CardContent className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
@@ -990,7 +1080,9 @@ function LocationPageContent({ isChild }: { isChild: boolean }) {
               </p>
               <p className="text-xs text-muted-foreground">
                 {iAmSharing
-                  ? 'Family can see where you are.'
+                  ? isChild
+                    ? 'Family can see where you are.'
+                    : 'Your kids and adults you approved can see where you are.'
                   : isChild
                     // A child can't share once while off (server refuses it).
                     ? 'Turn it on so family can see you.'
@@ -1222,6 +1314,41 @@ function LocationPageContent({ isChild }: { isChild: boolean }) {
             </div>
           )}
 
+          {/* Other grown-ups: seeing them needs their approval */}
+          {hiddenAdults.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold">
+                Other adults <span className="font-normal text-muted-foreground">{hiddenAdults.length}</span>
+              </h2>
+              {hiddenAdults.map((a) => (
+                <div key={a.memberId} className="flex items-center gap-3 rounded-lg border bg-card p-3">
+                  <MemberAvatar name={a.name} color={a.color} emoji={a.emoji} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{a.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {a.iCanSee === 'PENDING' ? 'Waiting for them to approve' : 'Ask to see their location. They have to approve.'}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 shrink-0 text-xs"
+                    disabled={changingAccess === a.memberId}
+                    onClick={() => changeAccess(a.memberId, a.iCanSee === 'PENDING' ? 'cancel' : 'request')}
+                  >
+                    {changingAccess === a.memberId ? (
+                      <Spinner className="h-3 w-3" />
+                    ) : a.iCanSee === 'PENDING' ? (
+                      'Cancel'
+                    ) : (
+                      'Ask to see'
+                    )}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Kids with no login (parents/guardians only): no phone to share from */}
           {noAccountKids.length > 0 && (
             <div className="space-y-2">
@@ -1251,6 +1378,7 @@ function LocationPageContent({ isChild }: { isChild: boolean }) {
         </summary>
         <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
           <li>Location sharing is only visible to family members with permission</li>
+          <li>Adults only see each other after the other person approves</li>
           <li>You can pause or disable sharing at any time from settings</li>
           <li>Use the &quot;Share now&quot; button to manually send your current location</li>
         </ul>
@@ -1347,6 +1475,32 @@ function LocationPageContent({ isChild }: { isChild: boolean }) {
                 disabled={updatingSettings}
               />
             </div>
+
+            {!isChild && (
+              <div className="space-y-2">
+                <Label>Adults who can see you</Label>
+                {canSeeMe.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No other adults. They can ask, and only see you if you approve.
+                  </p>
+                ) : (
+                  canSeeMe.map((a) => (
+                    <div key={a.memberId} className="flex items-center justify-between gap-3">
+                      <span className="truncate text-sm">{a.name}</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 shrink-0 text-xs"
+                        disabled={changingAccess === a.memberId}
+                        onClick={() => changeAccess(a.memberId, 'revoke')}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
 
             <div className="space-y-3">
               <Label>Sharing Mode</Label>
