@@ -1,5 +1,6 @@
 import type { NeonQueryPromise } from "@neondatabase/serverless"
 import { sql } from "./db"
+import { ddl } from "./schema-snapshot"
 import { BOARD_LIMITS } from "./constants"
 import { ensureBoardFlyerColumns, flyerImageUrl } from "./board-flyers"
 import { getParts, isValidTimeZone, zonedToUtc } from "./recurrence"
@@ -27,11 +28,11 @@ export function ensureBoardLimitColumns(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
       await ensureBoardFlyerColumns()
-      await sql`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS taken_down_at TIMESTAMPTZ`
-      await sql`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS taken_down_reason TEXT`
-      await sql`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS keep_up BOOLEAN NOT NULL DEFAULT false`
-      await sql`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`
-      await sql`CREATE INDEX IF NOT EXISTS idx_family_posts_taken_down ON family_posts(family_id, taken_down_at)`
+      await ddl`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS taken_down_at TIMESTAMPTZ`
+      await ddl`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS taken_down_reason TEXT`
+      await ddl`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS keep_up BOOLEAN NOT NULL DEFAULT false`
+      await ddl`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`
+      await ddl`CREATE INDEX IF NOT EXISTS idx_family_posts_taken_down ON family_posts(family_id, taken_down_at)`
     })().catch((err) => {
       ensured = null
       throw err

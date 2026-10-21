@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import { createHash } from "crypto"
 import { sql, type Row } from "./db"
+import { ddl } from "./schema-snapshot"
 import { getAdminFromRequest, logAdminAction, type AdminUser } from "./admin-auth"
 
 // Legal requests (subpoena / warrant / court order / emergency).
@@ -22,7 +23,7 @@ let ensured: Promise<void> | null = null
 export function ensureLegalTables(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
-      await sql`
+      await ddl`
         CREATE TABLE IF NOT EXISTS legal_cases (
           id TEXT PRIMARY KEY,
           case_number TEXT UNIQUE NOT NULL,
@@ -59,7 +60,7 @@ export function ensureLegalTables(): Promise<void> {
           denied_reason TEXT
         )
       `
-      await sql`
+      await ddl`
         CREATE TABLE IF NOT EXISTS legal_access_log (
           id TEXT PRIMARY KEY,
           case_id TEXT NOT NULL,
@@ -70,8 +71,8 @@ export function ensureLegalTables(): Promise<void> {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `
-      await sql`CREATE INDEX IF NOT EXISTS idx_legal_access_log_case ON legal_access_log(case_id, created_at)`
-      await sql`
+      await ddl`CREATE INDEX IF NOT EXISTS idx_legal_access_log_case ON legal_access_log(case_id, created_at)`
+      await ddl`
         CREATE TABLE IF NOT EXISTS legal_exports (
           id TEXT PRIMARY KEY,
           case_id TEXT NOT NULL,

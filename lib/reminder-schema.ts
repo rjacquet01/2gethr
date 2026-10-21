@@ -1,4 +1,4 @@
-import { sql } from "./db"
+import { ddl } from "./schema-snapshot"
 
 // Reminders can now be set for a child's profile (kids often have no login of
 // their own). This adds reminders.child_profile_id idempotently the first time
@@ -8,7 +8,7 @@ let ensured: Promise<void> | null = null
 export function ensureReminderChildColumn(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
-      await sql`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS child_profile_id TEXT`
+      await ddl`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS child_profile_id TEXT`
     })().catch((err) => {
       ensured = null
       throw err

@@ -1,4 +1,5 @@
 import { sql } from "./db"
+import { ddl } from "./schema-snapshot"
 import { ensureAgeColumns } from "./age-schema"
 import { MIN_ACCOUNT_AGE, effectiveAge } from "./age"
 import { ensureConsentSchema } from "./consent-schema"
@@ -15,7 +16,7 @@ export type MemberRole = "PARENT" | "GUARDIAN" | "ADULT" | "CHILD" | "GUEST"
 let ensured = false
 export async function ensureInviteTables() {
   if (ensured) return
-  await sql`
+  await ddl`
     CREATE TABLE IF NOT EXISTS family_invites (
       id TEXT PRIMARY KEY,
       family_id TEXT NOT NULL,
@@ -29,13 +30,13 @@ export async function ensureInviteTables() {
       revoked_at TIMESTAMPTZ
     )
   `
-  await sql`CREATE INDEX IF NOT EXISTS idx_family_invites_family ON family_invites(family_id)`
+  await ddl`CREATE INDEX IF NOT EXISTS idx_family_invites_family ON family_invites(family_id)`
   // An account invite for an existing accountless child profile carries the
   // child's member id and the parent's recorded consent.
-  await sql`ALTER TABLE family_invites ADD COLUMN IF NOT EXISTS child_member_id TEXT`
-  await sql`ALTER TABLE family_invites ADD COLUMN IF NOT EXISTS consent_by TEXT`
-  await sql`ALTER TABLE family_invites ADD COLUMN IF NOT EXISTS consent_at TIMESTAMPTZ`
-  await sql`
+  await ddl`ALTER TABLE family_invites ADD COLUMN IF NOT EXISTS child_member_id TEXT`
+  await ddl`ALTER TABLE family_invites ADD COLUMN IF NOT EXISTS consent_by TEXT`
+  await ddl`ALTER TABLE family_invites ADD COLUMN IF NOT EXISTS consent_at TIMESTAMPTZ`
+  await ddl`
     CREATE TABLE IF NOT EXISTS family_join_requests (
       id TEXT PRIMARY KEY,
       family_id TEXT NOT NULL,
@@ -49,7 +50,7 @@ export async function ensureInviteTables() {
       decided_by TEXT
     )
   `
-  await sql`CREATE INDEX IF NOT EXISTS idx_family_join_requests_family ON family_join_requests(family_id, status)`
+  await ddl`CREATE INDEX IF NOT EXISTS idx_family_join_requests_family ON family_join_requests(family_id, status)`
   ensured = true
 }
 

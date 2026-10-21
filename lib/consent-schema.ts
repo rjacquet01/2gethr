@@ -1,4 +1,4 @@
-import { sql } from "./db"
+import { ddl } from "./schema-snapshot"
 
 // Additive schema for age confirmation, terms acceptance and parental consent
 // (scripts/add-coppa-consent.sql does the same up front). Only needs the
@@ -9,12 +9,12 @@ let ensured: Promise<void> | null = null
 export function ensureConsentSchema(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
-      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS age_confirmed_at TIMESTAMPTZ`
-      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ`
-      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version TEXT`
+      await ddl`ALTER TABLE users ADD COLUMN IF NOT EXISTS age_confirmed_at TIMESTAMPTZ`
+      await ddl`ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ`
+      await ddl`ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version TEXT`
       // No foreign keys: the record of consent (and of its withdrawal) is kept
       // after the child's data is deleted.
-      await sql`
+      await ddl`
         CREATE TABLE IF NOT EXISTS parental_consents (
           id TEXT PRIMARY KEY,
           family_id TEXT NOT NULL,
@@ -31,8 +31,8 @@ export function ensureConsentSchema(): Promise<void> {
           withdrawn_by TEXT
         )
       `
-      await sql`CREATE INDEX IF NOT EXISTS idx_parental_consents_child ON parental_consents(child_member_id)`
-      await sql`CREATE INDEX IF NOT EXISTS idx_parental_consents_parent ON parental_consents(parent_user_id)`
+      await ddl`CREATE INDEX IF NOT EXISTS idx_parental_consents_child ON parental_consents(child_member_id)`
+      await ddl`CREATE INDEX IF NOT EXISTS idx_parental_consents_parent ON parental_consents(parent_user_id)`
     })().catch((err) => {
       ensured = null
       throw err

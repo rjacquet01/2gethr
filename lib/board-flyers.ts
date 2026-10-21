@@ -1,6 +1,7 @@
 import { put, del, get } from "@vercel/blob"
 import sharp from "sharp"
 import { sql } from "./db"
+import { ddl } from "./schema-snapshot"
 import { BOARD_FLYER } from "./constants"
 import { ensureSocialTables } from "./social"
 
@@ -16,14 +17,14 @@ export function ensureBoardFlyerColumns(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
       await ensureSocialTables()
-      await sql`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS flyer_full_path TEXT`
-      await sql`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS flyer_full_url TEXT`
-      await sql`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS flyer_thumb_path TEXT`
-      await sql`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS flyer_thumb_url TEXT`
-      await sql`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS flyer_width INTEGER`
-      await sql`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS flyer_height INTEGER`
-      await sql`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS flyer_uploaded_at TIMESTAMPTZ`
-      await sql`
+      await ddl`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS flyer_full_path TEXT`
+      await ddl`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS flyer_full_url TEXT`
+      await ddl`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS flyer_thumb_path TEXT`
+      await ddl`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS flyer_thumb_url TEXT`
+      await ddl`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS flyer_width INTEGER`
+      await ddl`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS flyer_height INTEGER`
+      await ddl`ALTER TABLE family_posts ADD COLUMN IF NOT EXISTS flyer_uploaded_at TIMESTAMPTZ`
+      await ddl`
         CREATE INDEX IF NOT EXISTS idx_family_posts_flyers ON family_posts(family_id)
         WHERE flyer_full_path IS NOT NULL AND deleted_at IS NULL
       `

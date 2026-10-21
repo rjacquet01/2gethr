@@ -1,4 +1,5 @@
 import { sql } from "@/lib/db"
+import { ddl } from "./schema-snapshot"
 
 // Small database-backed rate limiter (serverless instances share nothing in
 // memory). Each call records one hit for `key` and says whether the caller is
@@ -9,13 +10,13 @@ let tableReady = false
 
 async function ensureTable() {
   if (tableReady) return
-  await sql`
+  await ddl`
     CREATE TABLE IF NOT EXISTS rate_limit_hits (
       key TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `
-  await sql`CREATE INDEX IF NOT EXISTS idx_rate_limit_hits_key ON rate_limit_hits(key, created_at)`
+  await ddl`CREATE INDEX IF NOT EXISTS idx_rate_limit_hits_key ON rate_limit_hits(key, created_at)`
   tableReady = true
 }
 

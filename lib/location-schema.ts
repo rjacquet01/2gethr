@@ -1,4 +1,5 @@
 import { sql } from "./db"
+import { ddl } from "./schema-snapshot"
 
 // scripts/create-location-requests-table.sql was never run on production, so
 // "Request location now" could not even store its request. Create it lazily.
@@ -7,7 +8,7 @@ let ensured: Promise<void> | null = null
 export function ensureLocationRequestsTable(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
-      await sql`
+      await ddl`
         CREATE TABLE IF NOT EXISTS location_requests (
           id TEXT PRIMARY KEY,
           requester_user_id TEXT NOT NULL,
@@ -51,14 +52,14 @@ export function ensureLocationRequestsTable(): Promise<void> {
       if (requesterFk.length > 0) {
         await sql`ALTER TABLE location_requests DROP CONSTRAINT IF EXISTS location_requests_requester_user_id_fkey`
       }
-      await sql`CREATE INDEX IF NOT EXISTS idx_location_requests_target_user ON location_requests(target_user_id, status)`
+      await ddl`CREATE INDEX IF NOT EXISTS idx_location_requests_target_user ON location_requests(target_user_id, status)`
       // One-time snapshot taken when the target approves, plus a flag so the
       // requester is told about an unanswered request only once.
-      await sql`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS snapshot_lat DOUBLE PRECISION`
-      await sql`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS snapshot_lng DOUBLE PRECISION`
-      await sql`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS snapshot_accuracy DOUBLE PRECISION`
-      await sql`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS snapshot_at TIMESTAMPTZ`
-      await sql`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS expiry_notified BOOLEAN NOT NULL DEFAULT false`
+      await ddl`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS snapshot_lat DOUBLE PRECISION`
+      await ddl`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS snapshot_lng DOUBLE PRECISION`
+      await ddl`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS snapshot_accuracy DOUBLE PRECISION`
+      await ddl`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS snapshot_at TIMESTAMPTZ`
+      await ddl`ALTER TABLE location_requests ADD COLUMN IF NOT EXISTS expiry_notified BOOLEAN NOT NULL DEFAULT false`
     })().catch((err) => {
       ensured = null
       throw err

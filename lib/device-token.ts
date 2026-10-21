@@ -1,5 +1,6 @@
 import crypto from "crypto"
 import { sql } from "./db"
+import { ddl } from "./schema-snapshot"
 
 // Long-lived, revocable credentials that let the native Android app report
 // location from a background service (where the web session cookies are not
@@ -9,7 +10,7 @@ import { sql } from "./db"
 let ensured = false
 async function ensureTable() {
   if (ensured) return
-  await sql`
+  await ddl`
     CREATE TABLE IF NOT EXISTS location_device_tokens (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -21,7 +22,7 @@ async function ensureTable() {
       revoked_at TIMESTAMPTZ
     )
   `
-  await sql`CREATE INDEX IF NOT EXISTS idx_location_device_tokens_user ON location_device_tokens(user_id, family_member_id)`
+  await ddl`CREATE INDEX IF NOT EXISTS idx_location_device_tokens_user ON location_device_tokens(user_id, family_member_id)`
   ensured = true
 }
 
