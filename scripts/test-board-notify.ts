@@ -130,7 +130,8 @@ async function main() {
     assert.deepStrictEqual(sorted(pushes.map((p) => keyOf(p.userId))), sorted(['A', 'K', 'X', 'S']))
     for (const p of pushes) {
       assert.ok(!p.body.includes('Jamie') && !p.title.includes('Jamie'), 'push never shows the note text')
-      assert.match(p.title, /Pat <b> Test posted on the family board/)
+      // The poster as the family knows them: first name, no last name (lib/member-names.ts).
+      assert.match(p.title, /^Pat <b> posted on the family board/)
     }
     ok('push for every new pin; push off and quiet hours respected; lock screen shows no note text')
 
@@ -138,7 +139,7 @@ async function main() {
     assert.deepStrictEqual(sorted(emails.map((e) => e.to)), sorted([emailOf('A'), emailOf('K'), emailOf('Q')]))
     for (const e of emails) {
       assert.ok(!e.html.includes('Jamie') && !(e.text || '').includes('Jamie') && !e.subject.includes('Jamie'), 'email never has the note text')
-      assert.ok(e.html.includes('Pat &lt;b&gt; Test') && !e.html.includes('Pat <b>'), 'names are HTML-escaped')
+      assert.ok(e.html.includes('Pat &lt;b&gt;') && !e.html.includes('Pat <b>') && !e.html.includes('Pat &lt;b&gt; Test'), 'names are HTML-escaped (family name, no last name)')
       assert.ok(e.html.includes('Manage notification preferences') && e.html.includes('/settings'), 'opt-out footer like other emails')
       assert.ok(e.subject.includes('pinned a note'))
     }

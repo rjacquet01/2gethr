@@ -169,6 +169,24 @@ export function flyerImageUrl(familyId: string, postId: string, size: "thumb" | 
   return `/api/families/${familyId}/board/${postId}/flyer?size=${size}&v=${v}`
 }
 
+/** Same-origin download link (our authenticated route; attachment, no-store). */
+export function flyerDownloadUrl(familyId: string, postId: string): string {
+  return `/api/families/${familyId}/board/${postId}/flyer/download`
+}
+
+const DOWNLOAD_EXT: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }
+
+/**
+ * "togethr-flyer-2026-10-21.jpg": the upload date (UTC) and an extension from
+ * the stored content type. Never built from anything a user typed.
+ */
+export function flyerDownloadFilename(uploadedAt: unknown, contentType: string): string {
+  const d = uploadedAt ? new Date(uploadedAt as string) : new Date()
+  const day = (Number.isNaN(d.getTime()) ? new Date() : d).toISOString().slice(0, 10)
+  const ext = DOWNLOAD_EXT[contentType.split(";")[0].trim().toLowerCase()] || "jpg"
+  return `togethr-flyer-${day}.${ext}`
+}
+
 /**
  * Validate an uploaded flyer from multipart form data: allowed type, size,
  * and that the bytes really are a JPEG/PNG/WebP image (not just the label).

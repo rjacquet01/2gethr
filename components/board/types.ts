@@ -3,6 +3,8 @@ import type { ThreadComment } from '@/components/comment-thread'
 export interface BoardFlyer {
   thumbUrl: string
   fullUrl: string
+  /** Full-size image as an attachment (our family-checked route). */
+  downloadUrl?: string
   width: number | null
   height: number | null
 }

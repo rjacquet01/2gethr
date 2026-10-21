@@ -3,7 +3,7 @@ import { sql } from "./db"
 import { getMemberAccess, guestForbidden } from "./permissions"
 import { authorInfo, notifySocial, type AuthorInfo } from "./social"
 import { EMAIL_TEMPLATES } from "./services/email"
-import { canPinFlyers, flyerImageUrl, isBoardAdult } from "./board-flyers"
+import { canPinFlyers, flyerDownloadUrl, flyerImageUrl, isBoardAdult } from "./board-flyers"
 import { actorNameInFamily } from "./member-names"
 
 export interface BoardAccess {
@@ -76,6 +76,7 @@ export async function shapePosts(familyId: string, posts: Record<string, unknown
       ? {
           thumbUrl: flyerImageUrl(familyId, p.id as string, "thumb", p.flyer_uploaded_at),
           fullUrl: flyerImageUrl(familyId, p.id as string, "full", p.flyer_uploaded_at),
+          downloadUrl: flyerDownloadUrl(familyId, p.id as string),
           width: (p.flyer_width as number | null) ?? null,
           height: (p.flyer_height as number | null) ?? null,
         }
