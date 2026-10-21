@@ -13,6 +13,7 @@ import { distanceMeters, evaluateGeofence, confirmsDeparture, suggestedIntervalF
 import { shouldMergeWithPrevious, oneTimePingId, isOneTimePingId } from "@/lib/location-dedupe"
 import { fulfillLocationRequests } from "@/lib/location-schema"
 import { alertFamilyAdults } from "@/lib/family-alerts"
+import { approvedOwnerMemberIds, needsAccessGrant, locationAudienceUserIds } from "@/lib/location-access"
 import { ensureMemberAppearanceColumns } from "@/lib/member-appearance"
 import { guestForbidden, isAdultMemberRole, isGuestInFamily, isGuestOnly } from "@/lib/permissions"
 
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
 
     // Verify user is a PARENT or GUARDIAN in this family
     const membership = await sql`
-      SELECT role FROM family_members 
+      SELECT id, role FROM family_members
       WHERE family_id = ${familyId} AND user_id = ${user.id} AND is_active = true
     `
 
@@ -78,6 +79,7 @@ export async function GET(request: NextRequest) {
     }
 
     const userRole = membership[0].role
+    const myMemberId = membership[0].id as string
     if (userRole === "GUEST") return guestForbidden()
     // Supervisors see every sharing member (children included). ADULT is a
     // peer: like a child viewer, they see the grown-ups who share.
@@ -131,12 +133,18 @@ export async function GET(request: NextRequest) {
       LIMIT 10
     `
 
+    // Grown-ups see another grown-up only with that person's approval.
+    const approvedOwners = isAdultMemberRole(userRole) ? await approvedOwnerMemberIds(myMemberId) : new Set<string>()
+
     // Filter based on role:
     // - Parents/guardians can see all family members who have share_with_family enabled
     // - Children can only see family members who share their location (parents sharing with them)
+    // - Grown-ups see another grown-up only with an approved access grant
     const filteredLocations = locations.filter(l => {
       // Guests never take part in family location.
       if (l.role === 'GUEST') return false
+      // Not even a "Share now": that reaches the kids and approved grown-ups only.
+      if (needsAccessGrant(userRole, myMemberId, l.role, l.member_id) && !approvedOwners.has(l.member_id)) return false
       // Must have share_with_family enabled and not be OFF - except a
       // grown-up's "Share now" here (their newest fix is a one-time share
       // from this membership), shown for an hour like approved snapshots.
@@ -512,6 +520,8 @@ export async function POST(request: NextRequest) {
             title: `${who}'s battery is low`,
             body: `${who}'s phone is at ${battery}%. Their location may stop updating soon.`,
             data: { userId: user.id, subType: "LOW_BATTERY", batteryLevel: battery },
+            // A grown-up's: only those they approved to see them.
+            onlyUserIds: await locationAudienceUserIds(familyId, user.id),
           })
         }
       } catch (err) {
@@ -700,6 +710,9 @@ async function createGeofenceNotification(
       AND fm.is_active = true
       AND fm.user_id != ${userId}
   `
+  // A grown-up's arrivals only reach the grown-ups they approved to see them.
+  const audience = await locationAudienceUserIds(familyId, userId)
+  const allowedRecipients = audience ? recipients.filter((r) => audience.includes(r.user_id)) : recipients
 
   const actionVerb = eventType === "ARRIVAL" ? "arrived" : "left"
   const title = eventType === "ARRIVAL" ? `${userName} arrived` : `${userName} left`
@@ -709,7 +722,7 @@ async function createGeofenceNotification(
       : `${userName} has left ${placeName}`
   const timeStr = new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
 
-  for (const recipient of recipients) {
+  for (const recipient of allowedRecipients) {
     if (wantsInApp) {
       const notifId = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
       await sql`
