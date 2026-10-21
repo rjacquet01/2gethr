@@ -44,7 +44,13 @@ export async function POST(request: Request) {
       )
     }
 
-    const success = await registerPushToken(payload.userId, token, platform)
+    // A short label for the admin test-push list, e.g. "Chrome on Windows".
+    const info = body.deviceInfo && typeof body.deviceInfo === 'object' ? body.deviceInfo : {}
+    const deviceInfo: Record<string, string> = {}
+    if (typeof info.browser === 'string') deviceInfo.browser = info.browser.slice(0, 60)
+    if (typeof info.language === 'string') deviceInfo.language = info.language.slice(0, 20)
+
+    const success = await registerPushToken(payload.userId, token, platform, deviceInfo)
 
     if (!success) {
       return NextResponse.json(
@@ -98,7 +104,7 @@ export async function DELETE(request: Request) {
       )
     }
 
-    const success = await unregisterPushToken(token)
+    const success = await unregisterPushToken(token, payload.userId)
 
     return NextResponse.json({ success })
   } catch (error) {
