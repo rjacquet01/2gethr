@@ -8,6 +8,7 @@
  */
 
 import { sql } from '@/lib/db'
+import { ddl } from '../schema-snapshot'
 import { getTierDefinition, TRIAL_SMS_QUOTA } from '@/lib/subscription-tiers'
 
 interface SMSPayload {
@@ -107,7 +108,7 @@ let smsUsageEnsured: Promise<void> | null = null
 function ensureSmsUsageTable(): Promise<void> {
   if (!smsUsageEnsured) {
     smsUsageEnsured = (async () => {
-      await sql`
+      await ddl`
         CREATE TABLE IF NOT EXISTS sms_usage (
           family_id TEXT NOT NULL,
           period TEXT NOT NULL,

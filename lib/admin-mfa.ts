@@ -1,4 +1,5 @@
 import { sql } from '@/lib/db'
+import { ddl } from './schema-snapshot'
 import { encrypt, decrypt } from '@/lib/encryption'
 import { generateTotpSecret, buildOtpAuthUrl, verifyTotp, generateBackupCodes, hashBackupCode } from '@/lib/totp'
 
@@ -12,8 +13,8 @@ let ensured: Promise<void> | null = null
 function ensureColumns(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
-      await sql`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS mfa_secret_enc TEXT`
-      await sql`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS mfa_pending_secret_enc TEXT`
+      await ddl`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS mfa_secret_enc TEXT`
+      await ddl`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS mfa_pending_secret_enc TEXT`
     })().catch((err) => {
       ensured = null
       throw err

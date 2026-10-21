@@ -1,4 +1,5 @@
 import { sql } from "./db"
+import { ddl } from "./schema-snapshot"
 import { sendPushToUser, isFirebaseConfigured } from "./services/push"
 import { sendSMSMetered, isTwilioConfigured } from "./services/sms"
 import { sendEmail, isResendConfigured } from "./services/email"
@@ -8,7 +9,7 @@ let ensured: Promise<void> | null = null
 export function ensureSosSchema(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
-      await sql`
+      await ddl`
         CREATE TABLE IF NOT EXISTS sos_events (
           id TEXT PRIMARY KEY,
           user_id TEXT NOT NULL,
@@ -20,7 +21,7 @@ export function ensureSosSchema(): Promise<void> {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `
-      await sql`
+      await ddl`
         CREATE TABLE IF NOT EXISTS sos_deliveries (
           id SERIAL PRIMARY KEY,
           event_id TEXT NOT NULL,

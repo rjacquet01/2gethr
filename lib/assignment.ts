@@ -1,4 +1,5 @@
 import { sql } from "./db"
+import { ddl } from "./schema-snapshot"
 import { isAdultMemberRole, isSupervisorRole } from "./permissions"
 import { createNotification, notifyFamilyAboutEvent } from "./notifications"
 import type { NotificationChannel } from "./notifications"
@@ -12,7 +13,7 @@ let ensured: Promise<void> | null = null
 export function ensureAssignmentColumns(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
-      await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignment_status TEXT`
+      await ddl`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignment_status TEXT`
     })().catch((err) => {
       ensured = null
       throw err
@@ -137,8 +138,8 @@ export function ensureEventParticipantChildColumns(): Promise<void> {
   if (!ensuredParticipants) {
     ensuredParticipants = (async () => {
       await sql`ALTER TABLE event_participants ALTER COLUMN user_id DROP NOT NULL`
-      await sql`ALTER TABLE event_participants ADD COLUMN IF NOT EXISTS child_profile_id TEXT`
-      await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_event_participants_child ON event_participants(event_id, child_profile_id) WHERE child_profile_id IS NOT NULL`
+      await ddl`ALTER TABLE event_participants ADD COLUMN IF NOT EXISTS child_profile_id TEXT`
+      await ddl`CREATE UNIQUE INDEX IF NOT EXISTS idx_event_participants_child ON event_participants(event_id, child_profile_id) WHERE child_profile_id IS NOT NULL`
     })().catch((err) => {
       ensuredParticipants = null
       throw err

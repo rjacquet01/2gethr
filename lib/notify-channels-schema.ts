@@ -1,4 +1,5 @@
 import { sql } from "./db"
+import { ddl } from "./schema-snapshot"
 
 // tasks.notify_channels / events.notify_channels were added by
 // scripts/add-notify-channels-to-tasks-and-events.sql, which was never run on
@@ -9,8 +10,8 @@ let ensured: Promise<void> | null = null
 export function ensureTaskEventNotifyChannelsColumns(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
-      await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS notify_channels TEXT[]`
-      await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS notify_channels TEXT[]`
+      await ddl`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS notify_channels TEXT[]`
+      await ddl`ALTER TABLE events ADD COLUMN IF NOT EXISTS notify_channels TEXT[]`
     })().catch((err) => {
       ensured = null
       throw err

@@ -1,4 +1,5 @@
 import { sql } from "./db"
+import { ddl } from "./schema-snapshot"
 import { sendPushToUser, isFirebaseConfigured } from "./services/push"
 import { sendSMSMetered, isTwilioConfigured } from "./services/sms"
 
@@ -8,7 +9,7 @@ let ensured: Promise<void> | null = null
 export function ensureEmergencyAlertSchema(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
-      await sql`
+      await ddl`
         CREATE TABLE IF NOT EXISTS emergency_alerts (
           id TEXT PRIMARY KEY,
           family_id TEXT NOT NULL,
@@ -19,7 +20,7 @@ export function ensureEmergencyAlertSchema(): Promise<void> {
           acked_at TIMESTAMPTZ
         )
       `
-      await sql`
+      await ddl`
         CREATE TABLE IF NOT EXISTS emergency_alert_deliveries (
           id SERIAL PRIMARY KEY,
           alert_id TEXT NOT NULL,

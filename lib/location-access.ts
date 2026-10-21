@@ -1,4 +1,5 @@
 import { sql } from "./db"
+import { ddl } from "./schema-snapshot"
 import { isAdultMemberRole } from "./permissions"
 
 // Grown-ups (PARENT / GUARDIAN / ADULT) don't see each other's location by
@@ -11,7 +12,7 @@ let ensured: Promise<void> | null = null
 export function ensureLocationAccessTable(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
-      await sql`
+      await ddl`
         CREATE TABLE IF NOT EXISTS location_access_grants (
           id TEXT PRIMARY KEY,
           family_id TEXT NOT NULL REFERENCES families(id) ON DELETE CASCADE,
@@ -23,7 +24,7 @@ export function ensureLocationAccessTable(): Promise<void> {
           UNIQUE (owner_member_id, viewer_member_id)
         )
       `
-      await sql`CREATE INDEX IF NOT EXISTS idx_location_access_viewer ON location_access_grants(viewer_member_id, status)`
+      await ddl`CREATE INDEX IF NOT EXISTS idx_location_access_viewer ON location_access_grants(viewer_member_id, status)`
     })().catch((err) => {
       ensured = null
       throw err

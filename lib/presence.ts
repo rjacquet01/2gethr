@@ -1,4 +1,5 @@
 import { sql } from "./db"
+import { ddl } from "./schema-snapshot"
 
 // "Online" = the app was open and visible recently. The client sends a
 // heartbeat every couple of minutes while visible; we store at most one write
@@ -10,7 +11,7 @@ let ensured: Promise<void> | null = null
 export function ensurePresenceColumn(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
-      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ`
+      await ddl`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ`
     })().catch((err) => {
       ensured = null
       throw err

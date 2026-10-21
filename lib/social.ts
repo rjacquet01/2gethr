@@ -1,4 +1,5 @@
 import { sql } from "./db"
+import { ddl } from "./schema-snapshot"
 import { createNotification, type NotificationType } from "./notifications"
 import { sendPushToUser, isFirebaseConfigured } from "./services/push"
 import { sendEmail, isResendConfigured } from "./services/email"
@@ -39,7 +40,7 @@ let ensured: Promise<void> | null = null
 export function ensureSocialTables(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
-      await sql`
+      await ddl`
         CREATE TABLE IF NOT EXISTS event_comments (
           id TEXT PRIMARY KEY,
           event_id TEXT NOT NULL,
@@ -51,9 +52,9 @@ export function ensureSocialTables(): Promise<void> {
           deleted_at TIMESTAMPTZ
         )
       `
-      await sql`CREATE INDEX IF NOT EXISTS idx_event_comments_event ON event_comments(event_id, created_at)`
-      await sql`CREATE INDEX IF NOT EXISTS idx_event_comments_user ON event_comments(user_id, created_at)`
-      await sql`
+      await ddl`CREATE INDEX IF NOT EXISTS idx_event_comments_event ON event_comments(event_id, created_at)`
+      await ddl`CREATE INDEX IF NOT EXISTS idx_event_comments_user ON event_comments(user_id, created_at)`
+      await ddl`
         CREATE TABLE IF NOT EXISTS family_posts (
           id TEXT PRIMARY KEY,
           family_id TEXT NOT NULL,
@@ -64,9 +65,9 @@ export function ensureSocialTables(): Promise<void> {
           deleted_at TIMESTAMPTZ
         )
       `
-      await sql`CREATE INDEX IF NOT EXISTS idx_family_posts_family ON family_posts(family_id, created_at DESC)`
-      await sql`CREATE INDEX IF NOT EXISTS idx_family_posts_user ON family_posts(user_id, created_at)`
-      await sql`
+      await ddl`CREATE INDEX IF NOT EXISTS idx_family_posts_family ON family_posts(family_id, created_at DESC)`
+      await ddl`CREATE INDEX IF NOT EXISTS idx_family_posts_user ON family_posts(user_id, created_at)`
+      await ddl`
         CREATE TABLE IF NOT EXISTS family_post_comments (
           id TEXT PRIMARY KEY,
           post_id TEXT NOT NULL,
@@ -77,10 +78,10 @@ export function ensureSocialTables(): Promise<void> {
           deleted_at TIMESTAMPTZ
         )
       `
-      await sql`CREATE INDEX IF NOT EXISTS idx_family_post_comments_post ON family_post_comments(post_id, created_at)`
-      await sql`CREATE INDEX IF NOT EXISTS idx_family_post_comments_user ON family_post_comments(user_id, created_at)`
+      await ddl`CREATE INDEX IF NOT EXISTS idx_family_post_comments_post ON family_post_comments(post_id, created_at)`
+      await ddl`CREATE INDEX IF NOT EXISTS idx_family_post_comments_user ON family_post_comments(user_id, created_at)`
       // One row per (recipient, thread): when they last got a push for it.
-      await sql`
+      await ddl`
         CREATE TABLE IF NOT EXISTS social_push_log (
           user_id TEXT NOT NULL,
           scope TEXT NOT NULL,
@@ -88,8 +89,8 @@ export function ensureSocialTables(): Promise<void> {
           PRIMARY KEY (user_id, scope)
         )
       `
-      await sql`CREATE INDEX IF NOT EXISTS idx_social_push_log_time ON social_push_log(last_push_at)`
-      await sql`ALTER TABLE family_members ADD COLUMN IF NOT EXISTS board_last_seen_at TIMESTAMPTZ`
+      await ddl`CREATE INDEX IF NOT EXISTS idx_social_push_log_time ON social_push_log(last_push_at)`
+      await ddl`ALTER TABLE family_members ADD COLUMN IF NOT EXISTS board_last_seen_at TIMESTAMPTZ`
     })().catch((err) => {
       ensured = null
       throw err
