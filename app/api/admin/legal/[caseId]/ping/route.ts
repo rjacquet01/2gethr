@@ -6,6 +6,78 @@ import { requireLegalAdmin, PERM_MANAGE, getCase, accessActive, legalLog, scopeU
 const PING_MINUTES = 15
 const MIN_GAP_MINUTES = 10
 
+// The people a ping can go to, and every ping sent under this case with the
+// fix that answered it. Answers usually fall after the case's date range, so
+// they are shown here rather than only under Data > Location (which is
+// limited to that range). Viewing is logged like any other data view.
+export async function GET(request: NextRequest, { params }: { params: Promise<{ caseId: string }> }) {
+  try {
+    const g = await requireLegalAdmin(request, PERM_MANAGE)
+    if ("error" in g) return NextResponse.json({ success: false, error: g.error }, { status: g.status })
+    const { caseId } = await params
+    const c = await getCase(caseId)
+    if (!c) return NextResponse.json({ success: false, error: "Case not found" }, { status: 404 })
+    if (!accessActive(c)) return NextResponse.json({ success: false, error: "No active approval for this case" }, { status: 403 })
+
+    const ids = await scopeUserIds(c)
+    const people = ids.length
+      ? await sql`
+          SELECT u.id AS user_id, u.first_name, u.last_name,
+                 BOOL_OR(ls.mode = 'ACTIVE' AND ls.share_with_family = true) AS sharing
+          FROM users u
+          LEFT JOIN family_members fm ON fm.user_id = u.id AND fm.is_active = true
+          LEFT JOIN location_settings ls ON ls.family_member_id = fm.id
+          WHERE u.id = ANY(${ids}::text[])
+          GROUP BY u.id, u.first_name, u.last_name
+          ORDER BY u.first_name
+        `
+      : []
+
+    await ensureLocationRequestsTable()
+    const pings = await sql`
+      SELECT lr.id, lr.target_user_id, lr.status, lr.created_at, lr.fulfilled_at, lr.expires_at,
+             fix.latitude, fix.longitude, fix.accuracy, fix.battery_level, fix.timestamp AS fix_at
+      FROM location_requests lr
+      LEFT JOIN LATERAL (
+        SELECT lp.latitude, lp.longitude, lp.accuracy, lp.battery_level, lp.timestamp
+        FROM location_pings lp
+        WHERE lr.status = 'FULFILLED' AND lp.user_id = lr.target_user_id
+          AND lp.timestamp BETWEEN lr.created_at - INTERVAL '10 minutes' AND lr.fulfilled_at + INTERVAL '2 minutes'
+        ORDER BY ABS(EXTRACT(EPOCH FROM (lp.timestamp - lr.fulfilled_at)))
+        LIMIT 1
+      ) fix ON true
+      WHERE lr.requester_user_id = ${"legal:" + caseId}
+      ORDER BY lr.created_at DESC
+      LIMIT 100
+    `
+    await legalLog(caseId, g.admin.id, "PING_RESULTS_VIEWED", { returned: pings.length }, request)
+    return NextResponse.json({
+      success: true,
+      data: {
+        people: people.map((p) => ({
+          userId: p.user_id,
+          name: `${p.first_name || ""} ${p.last_name || ""}`.trim() || p.user_id,
+          sharing: p.sharing === true,
+        })),
+        pings: pings.map((p) => ({
+          id: p.id,
+          userId: p.target_user_id,
+          // PENDING past its window means the phone never answered.
+          status: p.status === "PENDING" && new Date(p.expires_at).getTime() < Date.now() ? "NO_ANSWER" : p.status,
+          sentAt: p.created_at,
+          answeredAt: p.fulfilled_at,
+          fix: p.latitude != null
+            ? { latitude: Number(p.latitude), longitude: Number(p.longitude), accuracy: p.accuracy != null ? Number(p.accuracy) : null, batteryLevel: p.battery_level, at: p.fix_at }
+            : null,
+        })),
+      },
+    })
+  } catch (e) {
+    console.error("legal ping results error:", e)
+    return NextResponse.json({ success: false, error: "Failed to load pings" }, { status: 500 })
+  }
+}
+
 // Ask a covered person's phone for a fresh location. Highest bar in the system:
 // the case must be active AND explicitly include live pings (emergency cases can).
 // This uses the app's normal request channel, so it only works while the person's
@@ -52,7 +124,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       VALUES (${id}, ${"legal:" + caseId}, ${userId}, ${fam[0].family_id}, 'PENDING', NOW(), NOW() + make_interval(mins => ${PING_MINUTES}::int))
     `
     await legalLog(caseId, g.admin.id, "PING_SENT", { userId, requestId: id }, request)
-    return NextResponse.json({ success: true, message: `Ping sent. If their phone is online it should report within a few minutes. Check Data > Location.` })
+    return NextResponse.json({ success: true, message: `Ping sent. If their phone is online it should report within a few minutes. The answer appears under Live pings.` })
   } catch (e) {
     console.error("legal ping error:", e)
     return NextResponse.json({ success: false, error: "Ping failed" }, { status: 500 })

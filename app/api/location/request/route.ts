@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription } from "@/lib/auth"
 import { z } from "zod"
-import { ensureLocationRequestsTable } from "@/lib/location-schema"
+import { ensureLocationRequestsTable, hasPendingLocationRequest } from "@/lib/location-schema"
 import { APPROVAL_WINDOW_MINUTES, PING_WINDOW_MINUTES, PING_LIMIT_ADULT, PING_LIMIT_CHILD, APPROVED_WINDOW_MINUTES, insertNotification, sendApprovalRequest } from "@/lib/location-approval"
 import { guestForbidden, isGuestOnly } from "@/lib/permissions"
 
@@ -231,8 +231,14 @@ export async function GET(request: NextRequest) {
       LIMIT 10
     `
 
+    // Any open request wants a fresh fix, including ones with no user behind
+    // them (a legal request): those stay out of `data`, so nothing about who
+    // asked reaches the device, but the app still answers.
+    const freshFixWanted = status === "PENDING" && (requests.length > 0 || (await hasPendingLocationRequest(user.id)))
+
     return NextResponse.json({
       success: true,
+      freshFixWanted,
       data: requests.map(r => ({
         id: r.id,
         requesterId: r.requester_user_id,
