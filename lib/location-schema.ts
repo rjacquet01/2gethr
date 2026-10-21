@@ -40,6 +40,17 @@ export function ensureLocationRequestsTable(): Promise<void> {
           if (!/already exists/i.test(String((err as Error)?.message))) throw err
         }
       }
+      // scripts/create-location-requests-table.sql made requester_user_id a
+      // foreign key to users, but a legal request's requester is
+      // "legal:<caseId>", so admin live pings failed on it. Drop only that FK
+      // (target_user_id and family_id keep theirs), and only when present so
+      // a cold start doesn't take a table lock for nothing.
+      const requesterFk = await sql`
+        SELECT 1 FROM pg_constraint WHERE conname = 'location_requests_requester_user_id_fkey'
+      `
+      if (requesterFk.length > 0) {
+        await sql`ALTER TABLE location_requests DROP CONSTRAINT IF EXISTS location_requests_requester_user_id_fkey`
+      }
       await sql`CREATE INDEX IF NOT EXISTS idx_location_requests_target_user ON location_requests(target_user_id, status)`
       // One-time snapshot taken when the target approves, plus a flag so the
       // requester is told about an unanswered request only once.
