@@ -53,8 +53,10 @@ import {
 } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { WeatherSetupPrompt } from '@/components/weather-setup-prompt'
+import { PLACE_MANAGER_ROLES } from '@/lib/weather-prompt'
 import {
   useCalendarWeatherState,
+  WeatherPlaceLine,
   CellWeather,
   DayWeatherLine,
   ParticipantDots,
@@ -97,7 +99,7 @@ export default function CalendarPage() {
   
   const { families, isLoading: familiesLoading } = useFamilies()
   const primaryFamily = families[0]
-  const { weather, weatherStatus, role } = useCalendarWeatherState(primaryFamily?.id)
+  const { weather, weatherStatus, role, placeLabel, isHomePlace, source: weatherSource } = useCalendarWeatherState(primaryFamily?.id)
   const [personFilter, setPersonFilter] = useState('ALL')
   
   const monthStart = startOfMonth(currentDate)
@@ -289,6 +291,14 @@ export default function CalendarPage() {
         </div>
 
         <WeatherSetupPrompt status={weatherStatus} role={role} familyId={primaryFamily?.id} />
+        {weatherStatus === 'ready' && (
+          <WeatherPlaceLine
+            label={placeLabel}
+            isHomePlace={isHomePlace}
+            source={weatherSource}
+            canManagePlaces={!!role && PLACE_MANAGER_ROLES.includes(role)}
+          />
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -467,13 +477,19 @@ export default function CalendarPage() {
         </Card>
       </div>
 
-      {/* Open-Meteo attribution, only while weather is shown (never to guests). */}
+      {/* Attribution for whichever provider answered, only while weather is shown (never to guests). */}
       {weatherStatus === 'ready' && (
         <p className="text-center text-xs text-muted-foreground">
           Weather data by{' '}
-          <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
-            Open-Meteo.com
-          </a>
+          {weatherSource === 'nws' ? (
+            <a href="https://www.weather.gov" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
+              the National Weather Service
+            </a>
+          ) : (
+            <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
+              Open-Meteo.com
+            </a>
+          )}
         </p>
       )}
 

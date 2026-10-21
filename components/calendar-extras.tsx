@@ -7,7 +7,7 @@ import { Umbrella } from 'lucide-react'
 import { authFetch } from '@/hooks/use-auth'
 import { useMyRole } from '@/hooks/use-my-role'
 import { cn } from '@/lib/utils'
-import { weatherStatusFor, type WeatherStatus } from '@/lib/weather-prompt'
+import { chooseWeatherPlace, weatherPlaceLabel, weatherStatusFor, type WeatherStatus } from '@/lib/weather-prompt'
 
 /* ------------------------------- Weather ------------------------------- */
 
@@ -26,7 +26,8 @@ const jsonFetcher = async (url: string) => {
   return j.data
 }
 
-// Uses the family's "Home" saved place, else the first saved place. Guests
+// Uses the family's "Home" saved place, else the first saved place
+// (lib/weather-prompt chooseWeatherPlace), and says which one. Guests
 // can't read saved places (that would reveal the family's home), so they get
 // no weather. weatherStatus tells a family with no saved place apart from
 // loading / error / guest, so the calendar can explain the missing weather.
@@ -34,21 +35,28 @@ export function useCalendarWeatherState(familyId: string | undefined): {
   weather: Record<string, DayWeather>
   weatherStatus: WeatherStatus
   role: string | null
+  /** "Weather for Home · Andover, MA" (null for guests or with no place). */
+  placeLabel: string | null
+  /** False when the weather fell back to a place not named Home/House. */
+  isHomePlace: boolean
+  /** Which provider answered ("open-meteo" | "nws"), for the attribution. */
+  source: string | null
 } {
   const { isGuest, role, isLoading: roleLoading } = useMyRole()
   const { data: places, error: placesError } = useSWR<any[]>(
     familyId && !isGuest ? `/api/places?familyId=${encodeURIComponent(familyId)}` : null,
     jsonFetcher
   )
-  const list = (places || []).filter((p) => p.latitude != null && p.longitude != null)
-  const spot = list.find((p) => /\b(home|house)\b/i.test(p.name || '')) || list[0]
+  const chosen = chooseWeatherPlace(places, { isGuest })
+  const spot = chosen?.place
   const lat = spot ? Number(spot.latitude) : null
   const lng = spot ? Number(spot.longitude) : null
-  const { data, error: weatherError } = useSWR<Record<string, DayWeather>>(
+  const { data: forecast, error: weatherError } = useSWR<{ days: Record<string, DayWeather>; source: string | null }>(
     lat != null && lng != null ? `/api/weather?lat=${lat.toFixed(2)}&lng=${lng.toFixed(2)}` : null,
-    jsonFetcher,
+    weatherFetcher,
     { refreshInterval: 30 * 60 * 1000, revalidateOnFocus: false }
   )
+  const data = forecast?.days
   const weatherStatus = weatherStatusFor({
     familyId,
     roleLoading,
@@ -59,7 +67,52 @@ export function useCalendarWeatherState(familyId: string | undefined): {
     weatherLoaded: data !== undefined,
     weatherError: !!weatherError,
   })
-  return { weather: data || {}, weatherStatus, role }
+  return {
+    weather: data || {},
+    weatherStatus,
+    role,
+    placeLabel: weatherPlaceLabel(chosen),
+    isHomePlace: !!chosen?.isHome,
+    source: forecast?.source ?? null,
+  }
+}
+
+const weatherFetcher = async (url: string) => {
+  const res = await authFetch(url)
+  const j = await res.json().catch(() => null)
+  if (!res.ok || !j?.success) throw new Error(j?.error || 'failed')
+  return { days: j.data as Record<string, DayWeather>, source: (j.source as string | undefined) ?? null }
+}
+
+/** "Weather for Home · Andover, MA", plus a hint when it fell back to another place. */
+export function WeatherPlaceLine({
+  label,
+  isHomePlace,
+  source,
+  canManagePlaces,
+}: {
+  label: string | null
+  isHomePlace: boolean
+  source: string | null
+  canManagePlaces: boolean
+}) {
+  if (!label) return null
+  return (
+    <p className="text-xs text-muted-foreground" title={source ? `Forecast: ${source === 'nws' ? 'NWS' : 'Open-Meteo'}` : undefined}>
+      {label}
+      {!isHomePlace && (
+        <>
+          {' · '}
+          {canManagePlaces ? (
+            <Link href="/places" className="underline underline-offset-2 hover:text-foreground">Name a place &quot;Home&quot;</Link>
+          ) : (
+            'Name a place "Home"'
+          )}{' '}
+          to use it for weather
+        </>
+      )}
+    </p>
+  )
 }
 
 /** The forecast by yyyy-MM-dd ({} until there is one); unchanged for existing callers. */

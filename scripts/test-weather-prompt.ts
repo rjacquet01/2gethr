@@ -4,8 +4,12 @@
 import assert from "node:assert"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { weatherStatusFor, weatherPromptFor, isWeatherPromptDismissed, dismissWeatherPrompt } from "../lib/weather-prompt"
+import {
+  weatherStatusFor, weatherPromptFor, isWeatherPromptDismissed, dismissWeatherPrompt,
+  chooseWeatherPlace, localityFromAddress, weatherPlaceLabel,
+} from "../lib/weather-prompt"
 import { WeatherSetupPrompt } from "../components/weather-setup-prompt"
+import { WeatherPlaceLine } from "../components/calendar-extras"
 
 let passed = 0
 function check(name: string, fn: () => void) {
@@ -109,6 +113,64 @@ check("storage that throws (or is missing) doesn't crash; banner just shows", ()
   }
   assert.strictEqual(isWeatherPromptDismissed(FAMILY, null), false)
   assert.match(render("no-place", "CHILD"), /Ask a parent/)
+})
+
+/* ---------------- which place the weather is for, and its label ---------------- */
+const placeLine = (props: { label: string | null; isHomePlace: boolean; source: string | null; canManagePlaces: boolean }) =>
+  renderToStaticMarkup(createElement(WeatherPlaceLine, props))
+
+const school = { name: "School", address: "1 School Rd, North Andover, MA 01845, USA", latitude: 42.7, longitude: -71.1 }
+const home = { name: "Home", address: "12 Elm St, Andover, MA 01810, USA", latitude: 42.65, longitude: -71.13 }
+const house = { name: "Lake House", address: "5 Shore Dr, Wolfeboro, NH", latitude: 43.6, longitude: -71.2 }
+const noCoords = { name: "Home", address: "Somewhere", latitude: null, longitude: null }
+
+check("Home is chosen over the first place; label shows name and city/state only", () => {
+  const c = chooseWeatherPlace([school, home])!
+  assert.strictEqual(c.place, home)
+  assert.strictEqual(c.isHome, true)
+  const label = weatherPlaceLabel(c)!
+  assert.strictEqual(label, "Weather for Home · Andover, MA")
+  assert.ok(!label.includes("Elm") && !label.includes("12") && !label.includes("01810") && !label.includes("42.65"))
+  assert.strictEqual(chooseWeatherPlace([school, house])!.place, house, '"House" counts as home')
+  const html = placeLine({ label, isHomePlace: true, source: "nws", canManagePlaces: true })
+  assert.match(html, /Weather for Home · Andover, MA/)
+  assert.match(html, /title="Forecast: NWS"/)
+  assert.ok(!/Name a place/.test(html))
+})
+
+check("no Home: the first place with coordinates, labelled, with a hint to name one Home", () => {
+  const c = chooseWeatherPlace([noCoords, school])!
+  assert.strictEqual(c.place, school, "places without coordinates are skipped (even one called Home)")
+  assert.strictEqual(c.isHome, false)
+  const label = weatherPlaceLabel(c)!
+  assert.strictEqual(label, "Weather for School · North Andover, MA")
+  const manager = placeLine({ label, isHomePlace: false, source: "open-meteo", canManagePlaces: true })
+  assert.match(manager, /Weather for School/)
+  assert.match(manager, /href="\/places"[^>]*>Name a place &quot;Home&quot;<\/a> to use it for weather/)
+  assert.match(manager, /title="Forecast: Open-Meteo"/)
+  const child = placeLine({ label, isHomePlace: false, source: null, canManagePlaces: false })
+  assert.match(child, /Name a place &quot;Home&quot; to use it for weather/)
+  assert.ok(!/href=/.test(child), "no link for someone who can't manage places")
+})
+
+check("no place, or a guest: no place and no label", () => {
+  assert.strictEqual(chooseWeatherPlace([]), null)
+  assert.strictEqual(chooseWeatherPlace(undefined), null)
+  assert.strictEqual(chooseWeatherPlace([noCoords]), null)
+  assert.strictEqual(chooseWeatherPlace([home, school], { isGuest: true }), null, "guests never get a place")
+  assert.strictEqual(weatherPlaceLabel(null), null)
+  assert.strictEqual(placeLine({ label: null, isHomePlace: false, source: "nws", canManagePlaces: true }), "")
+})
+
+check("city/state only when the address clearly ends with City, ST [ZIP] [USA]", () => {
+  assert.strictEqual(localityFromAddress("12 Elm St, Andover, MA 01810, USA"), "Andover, MA")
+  assert.strictEqual(localityFromAddress("12 Elm St, Andover, MA"), "Andover, MA")
+  assert.strictEqual(localityFromAddress("Andover, MA 01810-1234"), "Andover, MA")
+  for (const a of ["12 Elm St", "Andover", "12 Elm St, 01810", "12 Elm St, Unit 4, Andover", "Paris, France", "", null, "12 Elm St, 4B, MA"]) {
+    assert.strictEqual(localityFromAddress(a), null, String(a))
+  }
+  assert.strictEqual(weatherPlaceLabel({ place: { name: "Grandma's", address: "9 Oak Ave" }, isHome: false }), "Weather for Grandma's")
+  assert.strictEqual(weatherPlaceLabel({ place: { name: "Andover, MA", address: "Andover, MA" }, isHome: false }), "Weather for Andover, MA", "no repeat")
 })
 
 console.log(`\n${passed} checks passed`)

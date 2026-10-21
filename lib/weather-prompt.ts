@@ -61,3 +61,58 @@ export function dismissWeatherPrompt(familyId: string, store: KeyStore | null = 
     // Private mode / blocked storage: the banner just comes back next visit.
   }
 }
+
+/* ------------------------------ Weather place ------------------------------ */
+
+export interface WeatherPlaceInput {
+  name?: string | null
+  address?: string | null
+  latitude?: number | string | null
+  longitude?: number | string | null
+}
+
+export interface WeatherPlace<P extends WeatherPlaceInput = WeatherPlaceInput> {
+  place: P
+  /** The family's "Home"/"House" place, not a fallback. */
+  isHome: boolean
+}
+
+const HOME = /\b(home|house)\b/i
+
+/**
+ * The place the calendar weather is for: "Home"/"House", else the first with
+ * coordinates. Never for a guest (that would reveal where the family lives).
+ */
+export function chooseWeatherPlace<P extends WeatherPlaceInput>(
+  places: P[] | null | undefined,
+  opts: { isGuest?: boolean } = {}
+): WeatherPlace<P> | null {
+  if (opts.isGuest) return null
+  const list = (places || []).filter((p) => p.latitude != null && p.longitude != null)
+  const home = list.find((p) => HOME.test(p.name || ''))
+  if (home) return { place: home, isHome: true }
+  return list[0] ? { place: list[0], isHome: false } : null
+}
+
+/**
+ * "Andover, MA" from a free-text address, only when it clearly ends with
+ * "City, ST" or "City, ST 01810" (optionally then the country). Anything
+ * else gives null, so a street or partial address is never shown.
+ */
+export function localityFromAddress(address: string | null | undefined): string | null {
+  const parts = String(address || '').split(',').map((s) => s.trim()).filter(Boolean)
+  if (parts.length > 0 && /^(usa|us|united states( of america)?)$/i.test(parts[parts.length - 1])) parts.pop()
+  if (parts.length < 2) return null
+  const m = /^([A-Z]{2})(?:\s+\d{5}(?:-\d{4})?)?$/.exec(parts[parts.length - 1])
+  const city = parts[parts.length - 2]
+  if (!m || !city || /\d/.test(city) || city.length > 40) return null
+  return `${city}, ${m[1]}`
+}
+
+/** "Weather for Home · Andover, MA": the place name and, when clear, its city/state. Never the street or coordinates. */
+export function weatherPlaceLabel(chosen: WeatherPlace | null): string | null {
+  if (!chosen) return null
+  const name = String(chosen.place.name || '').trim() || 'your saved place'
+  const locality = localityFromAddress(chosen.place.address)
+  return `Weather for ${name}${locality && locality.toLowerCase() !== name.toLowerCase() ? ` · ${locality}` : ''}`
+}
