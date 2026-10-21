@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-shell.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Checking command against repo safety rules"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-changed.mjs\"",
+            "timeout": 60,
+            "statusMessage": "Type-checking the changed file"
+          }
+        ]
+      }
+    ]
+  }
+}

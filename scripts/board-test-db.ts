@@ -10,6 +10,15 @@ const host = (url: string) => {
   try { return new URL(url).hostname } catch { return '' }
 }
 
+// Not set in the environment: take it from .env.test.local (git-ignored), so
+// the tests run with a plain `npx tsx scripts/test-board-*.ts` and nobody has
+// to read env files in the shell.
+if (!process.env.BOARD_TEST_DATABASE_URL) {
+  try {
+    const m = fs.readFileSync(path.join(process.cwd(), '.env.test.local'), 'utf8').match(/^BOARD_TEST_DATABASE_URL\s*=\s*"?([^"\r\n]+)"?/m)
+    if (m) process.env.BOARD_TEST_DATABASE_URL = m[1].trim()
+  } catch {}
+}
 const testUrl = process.env.BOARD_TEST_DATABASE_URL
 if (!testUrl) {
   console.error('Set BOARD_TEST_DATABASE_URL to a disposable test database (e.g. a Neon branch). These tests never use DATABASE_URL.')
