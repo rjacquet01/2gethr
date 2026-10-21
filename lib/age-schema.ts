@@ -1,4 +1,3 @@
-import { sql } from "./db"
 import { ddl } from "./schema-snapshot"
 
 // Lazy idempotent schema for child birthdates and the 18th-birthday prompt

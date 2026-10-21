@@ -1,4 +1,3 @@
-import { sql } from "./db"
 import { ddl } from "./schema-snapshot"
 
 // Events historically had no category column, so the category chosen on the

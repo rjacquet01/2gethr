@@ -1,4 +1,3 @@
-import { sql } from "./db"
 import { ddl } from "./schema-snapshot"
 
 // Additive schema for age confirmation, terms acceptance and parental consent

@@ -1,4 +1,3 @@
-import { sql } from "./db"
 import { ddl } from "./schema-snapshot"
 
 // tasks.notify_channels / events.notify_channels were added by
