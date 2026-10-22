@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql, type Row } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
+import { ensureTaskApprovalColumn } from '@/lib/task-approval-schema'
 import { filterTasksForGuest } from '@/lib/guest-scope'
 import { notifyTaskAssigned, type NotificationChannel } from '@/lib/notifications'
 import { taskAssigneeName, actorNameInFamily } from "@/lib/member-names"
@@ -198,6 +199,7 @@ export async function POST(request: NextRequest) {
     
     await ensureTaskEventNotifyChannelsColumns()
     await ensureAssignmentColumns()
+    await ensureTaskApprovalColumn()
 
     const creatorRole = membership[0].role as string
     // A guest doesn't pick other family members: their tasks are for themselves.
@@ -242,14 +244,14 @@ export async function POST(request: NextRequest) {
         family_id, title, description, created_by_id,
         assigned_to_id, child_profile_id, due_date,
         priority, category, status, is_recurring, recurrence_rule,
-        notify_channels, assignment_status
+        notify_channels, assignment_status, requires_approval
       ) VALUES (
         ${familyId}, ${title}, ${description || null}, ${user.id},
         ${assignedToUserId || null}, ${assignedToChildId || null},
         ${dueDate || null},
         ${priority.toUpperCase()}, ${category || 'CHORE'}, 'PENDING',
         ${isRecurring}, ${isRecurring ? recurrenceRule : null},
-        ${normalizedNotifyChannels}, ${assignmentStatus}
+        ${normalizedNotifyChannels}, ${assignmentStatus}, ${requiresApproval === true}
       )
       RETURNING *
     `

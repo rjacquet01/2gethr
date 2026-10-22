@@ -44,7 +44,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
   const { families } = useFamilies()
   const [processing, setProcessing] = useState(false)
   // Parents (the owner is always a parent) can delete anyone's comment.
-  const { isParent } = useMyRole()
+  const { isParent, isSupervisor } = useMyRole()
 
   const handleAction = async (action: 'start' | 'complete' | 'approve' | 'reject' | 'pending' | 'hold' | 'cancel') => {
     setProcessing(true)
@@ -291,7 +291,15 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
             )}
           </div>
 
-          {task.completed_at && (
+          {task.completed_at && task.status?.toLowerCase() === 'pending_approval' && (
+            <div className="p-3 rounded-lg bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900">
+              <p className="text-sm text-orange-700 dark:text-orange-400">
+                <CheckCircle2 className="w-4 h-4 inline mr-1" />
+                Marked done on {format(parseISO(task.completed_at), 'PPP p')}, waiting for a parent to approve
+              </p>
+            </div>
+          )}
+          {task.completed_at && task.status?.toLowerCase() !== 'pending_approval' && (
             <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900">
               <p className="text-sm text-green-700 dark:text-green-400">
                 <CheckCircle2 className="w-4 h-4 inline mr-1" />
@@ -366,8 +374,9 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
             </div>
           </div>
 
-          {/* Approval Actions */}
-          {task.status?.toLowerCase() === 'pending_approval' && (
+          {/* Approval Actions: a parent, or the creator if someone else did it (as the server allows) */}
+          {task.status?.toLowerCase() === 'pending_approval' &&
+            (isSupervisor || (task.created_by_id === currentUser?.id && task.completed_by_id !== currentUser?.id)) && (
             <div className="flex flex-wrap gap-3 pt-2 border-t">
               <Button onClick={() => handleAction('approve')} disabled={processing} className="bg-green-600 hover:bg-green-700">
                 {processing ? <Spinner className="w-4 h-4 mr-2" /> : <Check className="w-4 h-4 mr-2" />}
