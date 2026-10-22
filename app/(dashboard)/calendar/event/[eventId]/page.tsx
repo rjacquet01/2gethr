@@ -131,11 +131,13 @@ export default function EventDetailPage() {
   return (
     <div className="space-y-6 pb-20 lg:pb-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <Button variant="ghost" asChild>
           <Link href="/calendar">
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Calendar
+            {/* Short on narrow phones so Edit and Delete stay on screen. */}
+            <span className="max-[399px]:hidden">Back to Calendar</span>
+            <span className="min-[400px]:hidden">Back</span>
           </Link>
         </Button>
 
