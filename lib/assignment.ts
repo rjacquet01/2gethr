@@ -194,11 +194,10 @@ export async function addEventParticipants(
 }
 
 // Someone was added to an event that already exists (edit page, or a calendar
-// import). Same rules as creating an event:
-//  - a child adding a parent/guardian or a child with no login -> the event
-//    goes back to PENDING and the parents are asked to approve;
-//  - otherwise each newly invited person is notified. A child invited by a
-//    parent/guardian gets push + email + text + in-app.
+// import). Each newly invited person is notified; a child invited by a
+// parent/guardian gets push + email + text + in-app. Kids don't need a
+// parent's approval to invite people (they ask for it with "Ask a parent"
+// when they create something), so this never sends an event back to PENDING.
 export async function notifyParticipantsAdded(args: {
   eventId: string
   familyId: string
@@ -219,22 +218,6 @@ export async function notifyParticipantsAdded(args: {
     WHERE family_id = ${familyId} AND is_active = true AND user_id = ANY(${others}::text[])
   `
   const roleOf = new Map<string, string>(roles.map((r) => [r.user_id as string, r.role as string]))
-
-  if (actorRole === "CHILD") {
-    const needsApproval = addedChildIds.length > 0 || others.some((id) => needsParentToApprove(roleOf.get(id)))
-    if (needsApproval) {
-      await sql`UPDATE events SET status = 'PENDING', updated_at = NOW() WHERE id = ${eventId}`
-      await sql`
-        INSERT INTO event_requests (id, event_id, requestor_id, status, requested_at)
-        VALUES (${crypto.randomUUID()}, ${eventId}, ${actorUserId}, 'PENDING', NOW())
-      `
-      await notifyEventAssignment({
-        familyId, eventId, title, creatorUserId: actorUserId, creatorName: actorName,
-        status: "PENDING", participantUserIds: others, channels,
-      })
-      return { pending: true }
-    }
-  }
 
   for (const uid of others) {
     const isKid = roleOf.get(uid) === "CHILD"

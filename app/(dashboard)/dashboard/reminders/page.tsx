@@ -47,6 +47,7 @@ import {
   ChevronDown,
   ChevronRight,
   BellRing,
+  UserCheck,
 } from 'lucide-react'
 import { addDays, addMinutes, format, parseISO, set } from 'date-fns'
 import { toast } from 'sonner'
@@ -80,6 +81,8 @@ interface Reminder {
   child_name?: string | null
   created_by_id?: string | null
   notify_channels?: NotifyChannel[] | null
+  /** A kid's "Ask a parent" reminder: PENDING_APPROVAL until a parent decides. */
+  approval_status?: 'PENDING_APPROVAL' | 'APPROVED' | 'DECLINED' | null
 }
 
 // Mirrors NotificationChannel in lib/notifications.ts. The API validates and
@@ -141,7 +144,7 @@ export default function RemindersPage() {
 
 function RemindersPageContent() {
   const { user } = useAuth()
-  const { isSupervisor } = useMyRole()
+  const { isSupervisor, isChild } = useMyRole()
   const router = useRouter()
   const searchParams = useSearchParams()
   const [reminders, setReminders] = useState<Reminder[]>([])
@@ -272,7 +275,8 @@ function RemindersPageContent() {
       )
     })
 
-  const handleSave = async () => {
+  // askParent: a child's "Ask a parent" (the reminder waits for approval).
+  const handleSave = async (askParent = false) => {
     if (!title.trim() || !remindAt) return
     setIsSaving(true)
     try {
@@ -291,6 +295,7 @@ function RemindersPageContent() {
           // New reminders belong to the family being viewed, not the account's owned family.
           familyId: !editingId ? activeFamily?.id : undefined,
           notifyChannels,
+          askParent: !editingId && askParent ? true : undefined,
         }),
       })
       if (res.ok) {
@@ -301,7 +306,7 @@ function RemindersPageContent() {
           // joined owner name comes back with it.
           await fetchReminders(true)
         }
-        toast.success(editingId ? 'Reminder updated' : 'Reminder created')
+        toast.success(editingId ? 'Reminder updated' : askParent ? 'Sent to a parent to approve' : 'Reminder created')
         resetForm()
         setDialogOpen(false)
       } else {
@@ -313,6 +318,27 @@ function RemindersPageContent() {
       toast.error('Could not save reminder')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  // A parent answers a kid's "Ask a parent" reminder.
+  const decide = async (id: string, action: 'approve' | 'decline') => {
+    setProcessingId(id)
+    try {
+      const res = await authFetch(`/api/reminders/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      const j = await res.json().catch(() => null)
+      if (!res.ok) { toast.error(j?.error || 'Something went wrong - try again'); return }
+      if (action === 'approve') upsert(j.data)
+      else setReminders((prev) => prev.filter((r) => r.id !== id))
+      toast.success(action === 'approve' ? 'Reminder approved' : 'Reminder declined')
+    } catch {
+      toast.error('Something went wrong - try again')
+    } finally {
+      setProcessingId(null)
     }
   }
 
@@ -606,9 +632,21 @@ function RemindersPageContent() {
                 </div>
               )}
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex-col gap-2 sm:flex-col">
+              {/* Kids create freely; "Ask a parent" sends it for approval first. */}
+              {isChild && !editingId && (
+                <Button
+                  variant="outline"
+                  onClick={() => handleSave(true)}
+                  disabled={!title.trim() || !remindAt || notifyChannels.length === 0 || isSaving}
+                  className="w-full"
+                >
+                  <UserCheck className="mr-2 h-4 w-4" />
+                  Ask a parent
+                </Button>
+              )}
               <Button
-                onClick={handleSave}
+                onClick={() => handleSave()}
                 disabled={!title.trim() || !remindAt || notifyChannels.length === 0 || isSaving}
                 className="w-full"
               >
@@ -754,6 +792,24 @@ function RemindersPageContent() {
                               <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
                                 {reminder.description}
                               </p>
+                            )}
+                            {reminder.approval_status === 'PENDING_APPROVAL' && (
+                              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                                <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-950/40 dark:text-orange-400">
+                                  Waiting for a parent
+                                </span>
+                                {isSupervisor && (
+                                  <>
+                                    <Button size="sm" className="h-7 px-2.5 text-xs" disabled={busy} onClick={() => decide(reminder.id, 'approve')}>
+                                      <Check className="mr-1 h-3.5 w-3.5" />
+                                      Approve
+                                    </Button>
+                                    <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs" disabled={busy} onClick={() => decide(reminder.id, 'decline')}>
+                                      Decline
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
                             )}
                             <div
                               className={cn(

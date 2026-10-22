@@ -4,6 +4,7 @@ import { getUserFromRequest } from '@/lib/auth'
 import { createNotification, type NotificationChannel } from '@/lib/notifications'
 import { getHistoryDays } from '@/lib/history-limit'
 import { ensureReminderChildColumn } from '@/lib/reminder-schema'
+import { getParentUserIds } from '@/lib/assignment'
 import { memberName, actorNameInFamily } from "@/lib/member-names"
 
 const VALID_NOTIFY_CHANNELS: NotificationChannel[] = ['in_app', 'push', 'email', 'sms']
@@ -31,10 +32,14 @@ export async function GET(request: NextRequest) {
     // /api/tasks) so a client-supplied familyId can't be used to read
     // another family's reminders.
     const memberships = (await sql`
-      SELECT family_id FROM family_members
+      SELECT family_id, role FROM family_members
       WHERE user_id = ${user.id} AND is_active = true
-    `) as Row<{ family_id: string }>[]
+    `) as Row<{ family_id: string; role: string }>[]
     const myFamilyIds = memberships.map((m: { family_id: string }) => m.family_id)
+    // Families where this person can approve a kid's "Ask a parent" reminder.
+    const supervisedFamilyIds = memberships
+      .filter((m: { role: string }) => m.role === 'PARENT' || m.role === 'GUARDIAN')
+      .map((m: { family_id: string }) => m.family_id)
     if (familyId && !myFamilyIds.includes(familyId)) {
       return NextResponse.json({ error: 'Family not found or access denied' }, { status: 403 })
     }
@@ -94,7 +99,8 @@ export async function GET(request: NextRequest) {
       LEFT JOIN child_profiles cp_o ON cp_o.family_member_id = fm_o.id
       LEFT JOIN families f ON r.family_id = f.id
       LEFT JOIN child_profiles cp ON r.child_profile_id = cp.id
-      WHERE (r.user_id = ${user.id} OR r.created_by_id = ${user.id})
+      WHERE (r.user_id = ${user.id} OR r.created_by_id = ${user.id}
+             OR (r.approval_status = 'PENDING_APPROVAL' AND r.family_id = ANY(${supervisedFamilyIds}::text[])))
         AND r.status = ANY(${statusFilter})
         AND (${familyId || null}::text IS NULL OR r.family_id = ${familyId || null})
       ORDER BY r.remind_at ASC
@@ -146,6 +152,8 @@ export async function POST(request: NextRequest) {
       isRecurring = false,
       recurrenceRule,
       notifyChannels,
+      // A child chose "Ask a parent": the reminder waits for a parent's approval.
+      askParent = false,
     } = body
 
     if (!title || !remindAt) {
@@ -221,17 +229,44 @@ export async function POST(request: NextRequest) {
           )
         : null
 
+    // "Ask a parent" (children only): the reminder waits for a parent's
+    // approval and doesn't fire until then. It's tied to the child's profile
+    // so parents can see it and approve or decline it.
+    const asksParent = membership[0].role === 'CHILD' && askParent === true
+    if (asksParent && !childProfileId && ownerId === user.id) {
+      const own = await sql`
+        SELECT cp.id FROM child_profiles cp JOIN family_members fm ON fm.id = cp.family_member_id
+        WHERE fm.user_id = ${user.id} AND fm.family_id = ${resolvedFamilyId} AND fm.is_active = true
+        LIMIT 1
+      `
+      childProfileId = own[0]?.id ?? null
+    }
+
     const reminder = await sql`
       INSERT INTO reminders (
         family_id, user_id, created_by_id, title, description, remind_at,
-        is_recurring, recurrence_rule, status, notify_channels, child_profile_id
+        is_recurring, recurrence_rule, status, notify_channels, child_profile_id, approval_status
       ) VALUES (
         ${resolvedFamilyId}, ${ownerId}, ${user.id}, ${title}, ${description || null},
         ${remindAtDate.toISOString()}, ${isRecurring}, ${isRecurring ? recurrenceRule : null},
-        'PENDING', ${normalizedNotifyChannels}, ${childProfileId}
+        'PENDING', ${normalizedNotifyChannels}, ${childProfileId}, ${asksParent ? 'PENDING_APPROVAL' : null}
       )
       RETURNING *
     `
+
+    if (asksParent) {
+      const byName = await actorNameInFamily(resolvedFamilyId, user, 'Your child')
+      for (const pid of await getParentUserIds(resolvedFamilyId, user.id)) {
+        await createNotification({
+          userId: pid, type: 'APPROVAL_REQUEST',
+          title: 'Reminder needs your approval',
+          body: `${byName} asked you to approve a reminder: "${title}". Open Reminders to approve or decline.`,
+          data: { reminderId: reminder[0].id, familyId: resolvedFamilyId },
+          sendEmail: true, sendSms: true, channels: normalizedNotifyChannels || undefined,
+        }).catch((err) => console.error('Reminder approval request failed (non-fatal):', err))
+      }
+      return NextResponse.json({ data: reminder[0] }, { status: 201 })
+    }
 
     // Tell the person a reminder was set FOR them right away (the cron only
     // delivers it at remind_at), on the channels the creator picked.

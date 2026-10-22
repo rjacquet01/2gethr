@@ -31,6 +31,8 @@ const createEventSchema = z.object({
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   reminderMinutes: z.array(z.number().int().min(0)).optional(),
   notifyChannels: z.array(z.enum(["in_app", "push", "email", "sms"])).optional(),
+  // A child chose "Ask a parent": the event waits for a parent's approval.
+  askParent: z.boolean().optional(),
   participantIds: z.array(z.string().uuid()).optional(),
   participants: z.array(z.object({
     userId: z.string().uuid().optional().nullable(),
@@ -535,10 +537,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Kids may always invite others (adults then approve, kids accept); a kid
-    // without the create-events permission still can't add solo events.
-    const childInvitesOthers = calendar.role === "CHILD" && (participantUserIds.some((id) => id !== user.id) || participantChildIds.length > 0)
-    if (!calendar.can_create_events && calendar.role !== "PARENT" && !childInvitesOthers) {
+    // Kids create events freely (no parent approval unless they choose "Ask a
+    // parent", below); other non-parents still need the create-events permission.
+    if (!calendar.can_create_events && calendar.role !== "PARENT" && calendar.role !== "CHILD") {
       return NextResponse.json(
         { success: false, error: "You don't have permission to create events" },
         { status: 403 }
@@ -622,23 +623,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Determine initial status
-    // A child inviting a grown-up (parent/guardian/adult) or a guest needs a parent's approval.
-    let needsParentApproval = false
-    if (calendar.role === "CHILD" && participantChildIds.length > 0) {
-      // A child with no login can't accept anything - a parent has to approve.
-      needsParentApproval = true
-    }
-    if (calendar.role === "CHILD" && participantUserIds.length > 0) {
-      const adults = await sql`
-        SELECT 1 FROM family_members
-        WHERE family_id = ${calendar.family_id} AND is_active = true
-        AND role IN ('PARENT', 'GUARDIAN', 'ADULT', 'GUEST')
-        AND user_id = ANY(${participantUserIds}::text[]) AND user_id <> ${user.id}
-      `
-      if (adults.length > 0) needsParentApproval = true
-    }
-    const status = (calendar.requires_event_approval || needsParentApproval) ? "PENDING" : "APPROVED"
+    // Determine initial status. A child's event is approved right away unless
+    // they chose "Ask a parent"; then it waits for a parent or guardian.
+    const status = calendar.role === "CHILD"
+      ? (validatedData.askParent === true ? "PENDING" : "APPROVED")
+      : (calendar.requires_event_approval ? "PENDING" : "APPROVED")
 
     // Create recurrence rule if recurring
     let recurrenceRuleId = null

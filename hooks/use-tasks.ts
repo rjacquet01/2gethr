@@ -111,6 +111,8 @@ export async function createTask(taskData: {
   isRecurring?: boolean
   recurrenceRule?: string
   notifyChannels?: string[]
+  /** A child chose "Ask a parent": the task waits for a parent's approval. */
+  askParent?: boolean
 }) {
   const res = await authFetch('/api/tasks', {
     method: 'POST',
