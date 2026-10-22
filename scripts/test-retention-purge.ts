@@ -7,16 +7,10 @@
 //   F2 - under a temporary OPEN legal case: its 91-day items must stay.
 // The purge runs restricted to these two families, so no other data can be
 // touched. Everything created here is deleted again in `finally`.
-import fs from 'fs'
-import path from 'path'
+// Dev branch only (scripts/dev-db.ts).
+import './dev-db'
 import assert from 'node:assert'
 
-for (const f of ['.env.local', '.env', '.env.production.local']) {
-  try {
-    const m = fs.readFileSync(path.join(process.cwd(), f), 'utf8').match(/^DATABASE_URL\s*=\s*"?([^"\r\n]+)"?/m)
-    if (m && !process.env.DATABASE_URL) process.env.DATABASE_URL = m[1]
-  } catch {}
-}
 // lib/legal imports admin auth, which insists on a secret at import time; unused here.
 process.env.ADMIN_JWT_SECRET ||= 'retention-test-placeholder-not-used'
 

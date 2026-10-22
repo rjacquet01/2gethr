@@ -46,8 +46,9 @@ real email. Read a script's header before running it.
   `scripts/board-test-db.ts` reads it from `.env.test.local` automatically, which points
   at the Neon `board-test` branch. It refuses any host found in `.env` or `.env.local`.
 - **Real database, dev branch only:** data-export, retention-purge,
-  refresh-rotation. They read `.env.local` first. Run them only when asked, and
-  only when `.env.local` exists.
+  refresh-rotation. Run them only when asked. `scripts/dev-db.ts` takes
+  DATABASE_URL from `.env.local` only and never falls back to `.env`. It refuses
+  to run when `.env.local` is missing or points at a production database.
 - **Never run these:** email, weekly-digest, welcome-invite. They send real email.
 - Known failures: none. Every suite above passes on main.
 
