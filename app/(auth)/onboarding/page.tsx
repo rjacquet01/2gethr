@@ -85,7 +85,9 @@ export default function OnboardingPage() {
       // on this device; signing in returns here (registering does too), so
       // an existing user's invite isn't lost on the way to the dashboard.
       // A parent's code for a child's own account is used while creating
-      // that account, so go straight to sign-up for it.
+      // that account, so go straight to sign-up for it. A code typed in here
+      // (not from a link) isn't saved yet, so save it before leaving.
+      try { localStorage.setItem('togethr-pending-invite', inviteCode.trim().toUpperCase()) } catch {}
       let childCode = false
       try {
         const res = await fetch('/api/auth/invite-check', {
@@ -97,7 +99,7 @@ export default function OnboardingPage() {
         childCode = json?.data?.kind === 'CHILD_ACCOUNT'
       } catch {}
       if (childCode) {
-        router.push('/register')
+        router.push(`/register?code=${encodeURIComponent(inviteCode.trim().toUpperCase())}`)
       } else {
         toast.info('Sign in (or create an account) first - your invite code will be waiting.')
         router.push('/login?redirect=%2Fonboarding')
