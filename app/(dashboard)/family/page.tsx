@@ -216,7 +216,7 @@ export default function FamilyPage() {
   }
 
   // Guests don't get the per-member activity overview (the server refuses it).
-  const { data: memberActivities = [], isLoading: activitiesLoading } = useSWR<MemberActivity[]>(
+  const { data: memberActivities = [], isLoading: activitiesLoading, mutate: mutateActivities } = useSWR<MemberActivity[]>(
     primaryFamily?.id && !isGuest ? `/api/families/${primaryFamily.id}/member-activities` : null,
     fetcher
   )
@@ -595,7 +595,7 @@ export default function FamilyPage() {
           ))}
 
       {/* Join requests wait for a decision, so they are always visible */}
-      <JoinRequestsCard familyId={family.id} />
+      <JoinRequestsCard familyId={family.id} onAnswered={() => { mutateFamily(); mutateActivities() }} />
       {inviteOpen && <InviteCodesCard familyId={family.id} familyName={family.name || 'our family'} />}
 
       {/* Family at a glance */}
@@ -661,7 +661,10 @@ export default function FamilyPage() {
                   <MemberAvatar name={member.displayName} avatarUrl={member.avatarUrl} color={member.color} emoji={member.emoji} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <p className="truncate font-medium text-foreground">{member.displayName}</p>
+                      <p className="truncate font-medium text-foreground">
+                        {member.displayName}
+                        {member.userId && member.userId === user?.id && <span className="ml-1 text-xs font-normal text-muted-foreground">(you)</span>}
+                      </p>
                       {member.role !== 'CHILD' && (
                         <Badge variant={getRoleBadgeVariant(member.role) as 'default' | 'secondary' | 'outline'} className="shrink-0 px-1.5 py-0 text-[10px]">
                           <RoleIcon className="mr-1 h-3 w-3" />
@@ -924,6 +927,7 @@ export default function FamilyPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-foreground truncate">
                         {member.displayName}
+                        {member.userId === user?.id && <span className="ml-1 text-xs font-normal text-muted-foreground">(you)</span>}
                       </p>
                       {member.role !== 'CHILD' && (<Badge variant={getRoleBadgeVariant(member.role) as 'default' | 'secondary' | 'outline'} className="mt-1">
                         <RoleIcon className="w-3 h-3 mr-1" />

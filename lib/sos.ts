@@ -3,6 +3,7 @@ import { ddl } from "./schema-snapshot"
 import { sendPushToUser, isFirebaseConfigured } from "./services/push"
 import { sendSMSMetered, isTwilioConfigured } from "./services/sms"
 import { sendEmail, isResendConfigured } from "./services/email"
+import { memberName } from "./member-names"
 
 // Lazy idempotent schema (prod SQL scripts are never run by hand).
 let ensured: Promise<void> | null = null
@@ -99,9 +100,11 @@ export async function dispatchSos(input: SosInput): Promise<RecipientResult[]> {
   const mapUrl = hasLoc ? `https://maps.google.com/?q=${latitude},${longitude}` : null
 
   let recipients = await sql`
-    SELECT fm.user_id, u.email, u.phone, u.first_name, rs.email_enabled, rs.sms_enabled
+    SELECT fm.user_id, fm.role, fm.nickname, cp.display_name AS child_display_name,
+      u.email, u.phone, u.first_name, rs.email_enabled, rs.sms_enabled
     FROM family_members fm
     JOIN users u ON u.id = fm.user_id
+    LEFT JOIN child_profiles cp ON cp.family_member_id = fm.id
     LEFT JOIN reminder_settings rs ON rs.user_id = fm.user_id
     WHERE fm.family_id = ${familyId} AND fm.is_active = true AND fm.user_id != ${senderId}
       AND fm.role IN ('PARENT', 'GUARDIAN', 'ADULT')
@@ -110,9 +113,11 @@ export async function dispatchSos(input: SosInput): Promise<RecipientResult[]> {
     // No other grown-up: an emergency should still reach whoever is in the
     // family - but never guests, who get no location data.
     recipients = await sql`
-      SELECT fm.user_id, u.email, u.phone, u.first_name, rs.email_enabled, rs.sms_enabled
+      SELECT fm.user_id, fm.role, fm.nickname, cp.display_name AS child_display_name,
+        u.email, u.phone, u.first_name, rs.email_enabled, rs.sms_enabled
       FROM family_members fm
       JOIN users u ON u.id = fm.user_id
+      LEFT JOIN child_profiles cp ON cp.family_member_id = fm.id
       LEFT JOIN reminder_settings rs ON rs.user_id = fm.user_id
       WHERE fm.family_id = ${familyId} AND fm.is_active = true AND fm.user_id != ${senderId}
         AND fm.role <> 'GUEST'
@@ -129,7 +134,7 @@ export async function dispatchSos(input: SosInput): Promise<RecipientResult[]> {
 
   const results = await Promise.all(
     recipients.map(async (r): Promise<RecipientResult> => {
-      const out: RecipientResult = { name: r.first_name || "Family member", inApp: "failed", push: "skipped", sms: "skipped", email: "skipped" }
+      const out: RecipientResult = { name: memberName({ role: r.role, nickname: r.nickname, childDisplayName: r.child_display_name, firstName: r.first_name }), inApp: "failed", push: "skipped", sms: "skipped", email: "skipped" }
       const tasks: Promise<void>[] = []
 
       tasks.push((async () => {

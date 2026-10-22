@@ -79,6 +79,30 @@ export async function hasPendingLocationRequest(userId: string): Promise<boolean
   return rows.length > 0
 }
 
+/**
+ * Answer this user's open pings from family members (not legal requests)
+ * with a one-time snapshot that only each requester sees: how a child whose
+ * sharing is off answers a parent's ping without turning sharing on. With
+ * requestId, only that request. Returns how many were answered.
+ */
+export async function answerLocationRequests(
+  userId: string,
+  fix: { latitude: number; longitude: number; accuracy?: number | null },
+  requestId?: string
+): Promise<number> {
+  await ensureLocationRequestsTable()
+  const rows = await sql`
+    UPDATE location_requests
+    SET status = 'FULFILLED', fulfilled_at = NOW(), snapshot_lat = ${fix.latitude}, snapshot_lng = ${fix.longitude},
+        snapshot_accuracy = ${fix.accuracy ?? null}, snapshot_at = NOW()
+    WHERE target_user_id = ${userId} AND status = 'PENDING' AND expires_at > NOW()
+      AND requester_user_id NOT LIKE 'legal:%'
+      AND (${requestId ?? null}::text IS NULL OR id = ${requestId ?? null})
+    RETURNING id
+  `
+  return rows.length
+}
+
 /** A fresh fix arrived: every open request for this user has been answered. */
 export async function fulfillLocationRequests(userId: string): Promise<void> {
   await ensureLocationRequestsTable()

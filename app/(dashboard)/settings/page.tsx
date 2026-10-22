@@ -558,7 +558,7 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground sm:col-span-2">
                 {isChild
                   ? 'Your name is set by your parent. Ask them to change it on your profile.'
-                  : 'Your account name. Each family can show a different name: set "Name shown to this family" next to your name on the Family page.'}
+                  : 'Your account name. Each family can show a different name: on the Family page, open "Manage members & children" and tap Name next to your name.'}
               </p>
               <div className="space-y-1.5 sm:col-span-2">
                 <div className="flex items-center gap-2">

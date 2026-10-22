@@ -11,7 +11,7 @@ import { sendEmail, EMAIL_TEMPLATES, isResendConfigured } from "@/lib/services/e
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
 import { distanceMeters, evaluateGeofence, confirmsDeparture, suggestedIntervalForGaps } from "@/lib/geofence"
 import { shouldMergeWithPrevious, oneTimePingId, isOneTimePingId } from "@/lib/location-dedupe"
-import { fulfillLocationRequests } from "@/lib/location-schema"
+import { answerLocationRequests, fulfillLocationRequests } from "@/lib/location-schema"
 import { alertFamilyAdults } from "@/lib/family-alerts"
 import { memberName, nameInFamily } from "@/lib/member-names"
 import { approvedOwnerMemberIds, needsAccessGrant, locationAudienceUserIds } from "@/lib/location-access"
@@ -184,7 +184,8 @@ export async function GET(request: NextRequest) {
         } : null,
       })),
       // Everyone else in the family who can be asked for a one-time location
-      // (even if their sharing is off). The recipient has to approve.
+      // (even if their sharing is off). The recipient has to approve, except
+      // a child pinged by a parent (app/api/location/request).
       // Guests take no part in this family's location (requests to them are
       // refused), so they aren't offered.
       pingable: locations
@@ -316,6 +317,17 @@ export async function POST(request: NextRequest) {
     const oneTime = !sharingOn && validatedData.once === true &&
       (isAdultMemberRole(setting.role as string) || setting.is_owner === true)
     if (!sharingOn && !oneTime) {
+      // Sharing is off, but a parent pinged this phone (no approval needed
+      // for a child): the fix answers those pings as one-time snapshots for
+      // the requesters only. Nothing is stored as a live location.
+      const answered = await answerLocationRequests(user.id, {
+        latitude: validatedData.latitude,
+        longitude: validatedData.longitude,
+        accuracy: validatedData.accuracy ?? null,
+      })
+      if (answered > 0) {
+        return NextResponse.json({ success: true, data: { answeredRequests: answered, stored: false } })
+      }
       return NextResponse.json(
         { success: false, error: "Location sharing is disabled" },
         { status: 400 }
