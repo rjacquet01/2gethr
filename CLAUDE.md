@@ -19,7 +19,7 @@ portal (support, legal requests). Preparing for a soft launch.
   `STRIPE_SECRET_KEY=sk_test_placeholder_local_build_only npm run build`.
   The build rewrites `next-env.d.ts`, so revert it with `git checkout -- next-env.d.ts`.
 - `npx tsc --noEmit`: baseline **0 errors**. Keep it at 0.
-- `npm run lint`: baseline **422 problems: 1 error, 421 warnings**. The one
+- `npm run lint`: baseline **421 problems: 1 error, 420 warnings**. The one
   error is in `app/(dashboard)/settings/calendar-sync/page.tsx`. Add no new errors and
   no new warnings.
 - `npm run test:e2e`: Playwright smoke test of the public pages (`/`, `/login`,

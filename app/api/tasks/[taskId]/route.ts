@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { notifyTaskCompleted, createNotification } from '@/lib/notifications'
-import { ensureAssignmentColumns, isSupervisorRole, assigneesInFamily } from '@/lib/assignment'
+import { ensureAssignmentColumns, isSupervisorRole, assigneesInFamily, getParentUserIds } from '@/lib/assignment'
 import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
+import { ensureTaskApprovalColumn } from '@/lib/task-approval-schema'
 import { taskInvolvesUser } from '@/lib/guest-scope'
 import { taskAssigneeName, actorNameInFamily } from "@/lib/member-names"
 
@@ -287,9 +288,36 @@ export async function PATCH(
 
     // Handle specific actions
     if (action === 'complete') {
+      // A task that requires approval waits for a parent when anyone else
+      // marks it done; a parent/guardian marking it done completes it.
+      if (task.requires_approval === true && !isSupervisorRole(membership[0].role)) {
+        await sql`
+          UPDATE tasks SET
+            status = 'PENDING_APPROVAL',
+            completed_at = NOW(),
+            completed_by_id = ${user.id},
+            updated_at = NOW()
+          WHERE id = ${taskId}
+        `
+        await sql`
+          INSERT INTO task_history (task_id, user_id, action, new_value)
+          VALUES (${taskId}, ${user.id}, 'SUBMITTED_FOR_APPROVAL', ${JSON.stringify({ previousStatus: task.status, newStatus: 'PENDING_APPROVAL' })}::jsonb)
+        `
+        const doneBy = await actorNameInFamily(task.family_id as string, user, 'Someone')
+        for (const pid of await getParentUserIds(task.family_id as string, user.id)) {
+          await createNotification({
+            userId: pid, type: 'APPROVAL_REQUEST',
+            title: 'Task needs your approval',
+            body: `${doneBy} marked "${task.title}" as done. Open it to approve or reject.`,
+            data: { taskId, familyId: task.family_id },
+          })
+        }
+        return NextResponse.json({ success: true, status: 'PENDING_APPROVAL' })
+      }
+
       // Mark task as completed
       const newStatus = 'COMPLETED'
-      
+
       await sql`
         UPDATE tasks SET 
           status = ${newStatus},
@@ -340,7 +368,11 @@ export async function PATCH(
       if (!isCreator && !isParent) {
         return NextResponse.json({ error: 'Only the task creator or a parent can approve' }, { status: 403 })
       }
-      
+      // Whoever marked it done can't approve their own work (unless a parent).
+      if (!isParent && task.completed_by_id === user.id) {
+        return NextResponse.json({ error: 'A parent needs to approve this' }, { status: 403 })
+      }
+
       await sql`
         UPDATE tasks SET 
           status = 'APPROVED',
@@ -535,6 +567,7 @@ export async function PATCH(
         return NextResponse.json({ error: 'That person is not in this family' }, { status: 400 })
       }
       await ensureTaskEventNotifyChannelsColumns()
+      await ensureTaskApprovalColumn()
       const cleanChannels: string[] | null = Array.isArray(updates.notifyChannels)
         ? (updates.notifyChannels as unknown[]).filter((c): c is string => typeof c === 'string' && ['in_app', 'push', 'email', 'sms'].includes(c))
         : null
@@ -564,7 +597,10 @@ export async function PATCH(
       if (updates.isRecurring !== undefined) {
         changes.isRecurring = { old: task.is_recurring, new: updates.isRecurring }
       }
-      
+      if (updates.requiresApproval !== undefined) {
+        changes.requiresApproval = { old: task.requires_approval ?? false, new: updates.requiresApproval === true }
+      }
+
       await sql`
         UPDATE tasks SET 
           title = COALESCE(${updates.title || null}, title),
@@ -577,6 +613,7 @@ export async function PATCH(
           is_recurring = ${updates.isRecurring !== undefined ? updates.isRecurring : task.is_recurring},
           recurrence_rule = ${updates.recurrenceRule !== undefined ? updates.recurrenceRule : task.recurrence_rule},
           reminder_enabled = ${updates.reminderEnabled !== undefined ? updates.reminderEnabled : task.reminder_enabled},
+          requires_approval = ${updates.requiresApproval !== undefined ? updates.requiresApproval === true : task.requires_approval === true},
           notify_channels = CASE WHEN ${Array.isArray(updates.notifyChannels)} THEN ${cleanChannels && cleanChannels.length > 0 ? cleanChannels : null}::text[] ELSE notify_channels END,
           updated_at = NOW()
         WHERE id = ${taskId}

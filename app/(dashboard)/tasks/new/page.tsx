@@ -92,7 +92,8 @@ export default function NewTaskPage() {
         reminderAt: fullReminderAt || undefined,
         priority,
         requiresApproval,
-        category: category === 'general' || !cleanCustomCategory(category) ? undefined : cleanCustomCategory(category),
+        // Sent even for General: left out, the server stored its own default (Chore).
+        category: category === 'general' || !cleanCustomCategory(category) ? 'GENERAL' : cleanCustomCategory(category),
         isRecurring,
         recurrenceRule: isRecurring ? recurrenceRule : undefined,
         notifyChannels: notifyChannels.length > 0 ? notifyChannels : undefined,

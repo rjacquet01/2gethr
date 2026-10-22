@@ -184,6 +184,9 @@ export default function EditTaskPage({ params }: { params: Promise<{ taskId: str
               <div className="space-y-2">
                 <Label>Assign to Member</Label>
                 <Select value={assignedToUserId} onValueChange={(val) => {
+                  // An empty value is the picker resetting before its options
+                  // load, not a choice: it must not clear the saved assignee.
+                  if (!val) return
                   setAssignedToUserId(val === 'none' ? '' : val)
                   if (val !== 'none') setAssignedToChildId('')
                 }}>
@@ -204,6 +207,7 @@ export default function EditTaskPage({ params }: { params: Promise<{ taskId: str
               <div className="space-y-2">
                 <Label>Or Assign to Child</Label>
                 <Select value={assignedToChildId} onValueChange={(val) => {
+                  if (!val) return
                   setAssignedToChildId(val === 'none' ? '' : val)
                   if (val !== 'none') setAssignedToUserId('')
                 }}>
