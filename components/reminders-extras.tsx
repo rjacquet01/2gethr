@@ -58,7 +58,8 @@ export function parseReminderQuick(raw: string, members: QuickMember[], now: Dat
     return ' '
   })
 
-  text = text.replace(/\s(today|tonight|tomorrow|tmrw|(?:next\s+)?(?:sun|mon|tue|wed|thu|fri|sat)[a-z]*)\b/i, (m, d: string) => {
+  // Whole weekday names and abbreviations only ("friend" is not Friday).
+  text = text.replace(/\s(today|tonight|tomorrow|tmrw|(?:next\s+)?(?:sun(?:day)?|mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?))\b/i, (m, d: string) => {
     const w = d.toLowerCase().replace(/^next\s+/, '')
     if (w === 'today') st.day = new Date(now)
     else if (w === 'tonight') {

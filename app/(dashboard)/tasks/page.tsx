@@ -453,7 +453,13 @@ export default function TasksPage() {
         </Button>
       </div>
 
-      <QuickAdd familyId={primaryFamily.id} people={people} onCreated={() => mutate()} />
+      <QuickAdd
+        familyId={primaryFamily.id}
+        people={people}
+        onCreated={() => mutate()}
+        openTitles={allTasks.filter((t) => [...ACTIVE, 'on_hold'].includes(norm(t.status))).map((t) => t.title)}
+        hasChildren={kids.length > 0 || members.some((m) => m.role === 'CHILD')}
+      />
 
       {/* Who */}
       <div className="flex flex-wrap items-center gap-2">

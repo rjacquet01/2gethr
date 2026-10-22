@@ -39,7 +39,7 @@ real email. Read a script's header before running it.
   admin-delete-child, admin-tier-breakdown, adult-location-access, child-invite, coppa,
   dashboard-prefetch, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
   legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-link, push-ownership,
-  push-picker, schema-snapshot, stillness, stripe-checkout-tax,
+  push-picker, quick-add, schema-snapshot, stillness, stripe-checkout-tax,
   stripe-webhook-events, weather-prompt, weather-route.
 - **Board suites** (board-flyer-download, board-flyers, board-limits,
   board-notify) need a disposable database in `BOARD_TEST_DATABASE_URL`.
