@@ -176,7 +176,12 @@ export default function TermsPage() {
             <p>
               Togethr, LLC
               <br />
-              29 Prospect Rd, Andover, MA 01810
+              Massachusetts, United States
+              <br />
+              Contact:{' '}
+              <a href="mailto:admin@mytogethr.com" className="text-primary hover:underline">
+                admin@mytogethr.com
+              </a>
             </p>
             <p>
               If you have questions about these Terms, please contact us at{' '}
