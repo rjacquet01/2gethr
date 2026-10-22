@@ -1,14 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { addDays, differenceInCalendarDays, endOfDay, format, isPast, isToday, isTomorrow, parseISO } from 'date-fns'
-import { Plus } from 'lucide-react'
+import { Plus, Shuffle } from 'lucide-react'
 import { toast } from 'sonner'
 import { createTask } from '@/hooks/use-tasks'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
+import {
+  SUGGESTION_CATEGORIES,
+  SUGGESTION_CATEGORY_LABELS,
+  dueHint,
+  filterSuggestions,
+  suggestedTokens,
+  suggestionCategories,
+  type QuickAddSuggestion,
+  type SuggestionCategory,
+} from '@/lib/quick-add-suggestions'
 
 /* ------------------------------ People ------------------------------ */
 
@@ -28,8 +38,25 @@ export function initialsOf(name: string) {
 
 const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
 
-export function parseQuickAdd(raw: string, people: Person[]) {
-  const out: { title: string; person?: Person; due?: Date; priority?: string } = { title: '' }
+// Whole weekday names and their usual abbreviations only, so "friend",
+// "monthly" or "sunscreen" stay in the title.
+const DAY_WORD =
+  /\s(today|tonight|tomorrow|tmrw|(?:next\s+)?(?:sun(?:day)?|mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?))\b/i
+
+type QuickParsed = { title: string; person?: Person; due?: Date; priority?: string }
+
+/**
+ * `keepTitle`: a title picked from the suggestions. While the input still
+ * starts with it, it is kept word for word and only what follows is parsed
+ * ("Pack your school bag for tomorrow" keeps its "tomorrow").
+ */
+export function parseQuickAdd(raw: string, people: Person[], keepTitle?: string): QuickParsed {
+  const start = raw.trimStart()
+  if (keepTitle && start.startsWith(keepTitle)) {
+    const rest = parseQuickAdd(start.slice(keepTitle.length), people)
+    return { ...rest, title: (keepTitle + ' ' + rest.title).trim() }
+  }
+  const out: QuickParsed = { title: '' }
   let text = ' ' + raw.trim() + ' '
 
   text = text.replace(/\s@(\w+)/g, (m, n: string) => {
@@ -44,7 +71,7 @@ export function parseQuickAdd(raw: string, people: Person[]) {
     out.priority = p.toLowerCase()
     return ' '
   })
-  text = text.replace(/\s(today|tonight|tomorrow|tmrw|(?:next\s+)?(?:sun|mon|tue|wed|thu|fri|sat)[a-z]*)\b/i, (_m, d: string) => {
+  text = text.replace(DAY_WORD, (_m, d: string) => {
     const now = new Date()
     const w = d.toLowerCase().replace(/^next\s+/, '')
     let target = new Date(now)
@@ -62,18 +89,89 @@ export function parseQuickAdd(raw: string, people: Person[]) {
   return out
 }
 
+const CATEGORY_KEY = 'togethr.quickAdd.category'
+const SHOWN = 6
+
+const noSubscribe = () => () => {}
+function readSavedCategory(): SuggestionCategory | null {
+  try {
+    const v = localStorage.getItem(CATEGORY_KEY) as SuggestionCategory | null
+    return v && SUGGESTION_CATEGORIES.includes(v) ? v : null
+  } catch {
+    return null
+  }
+}
+
 export function QuickAdd({
   familyId,
   people,
   onCreated,
+  openTitles = [],
+  hasChildren = false,
 }: {
   familyId: string
   people: Person[]
   onCreated: () => void
+  /** Titles of the family's open tasks, so they aren't suggested again. */
+  openTitles?: string[]
+  hasChildren?: boolean
 }) {
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
-  const parsed = parseQuickAdd(value, people)
+  const [picked, setPicked] = useState<QuickAddSuggestion | null>(null)
+  const [timingUsed, setTimingUsed] = useState(false)
+  const [chosen, setCategory] = useState<SuggestionCategory | null>(null)
+  const [showAll, setShowAll] = useState(false)
+  const [offset, setOffset] = useState(0)
+
+  const categories = suggestionCategories(hasChildren)
+  const saved = useSyncExternalStore(noSubscribe, readSavedCategory, () => null)
+  const category = chosen ?? saved ?? 'home'
+  const activeCategory = categories.includes(category) ? category : categories[0]
+  // Keep the selected pill in view when it sits past the edge of the row.
+  const pillsRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const row = pillsRef.current
+    const pill = row?.querySelector<HTMLElement>('[aria-pressed="true"]')
+    if (row && pill && (pill.offsetLeft < row.scrollLeft || pill.offsetLeft + pill.offsetWidth > row.scrollLeft + row.clientWidth)) {
+      row.scrollLeft = pill.offsetLeft - 8
+    }
+  }, [activeCategory])
+  const chooseCategory = (c: SuggestionCategory) => {
+    setCategory(c)
+    setShowAll(false)
+    setOffset(0)
+    try {
+      localStorage.setItem(CATEGORY_KEY, c)
+    } catch {}
+  }
+
+  // A picked suggestion stays word for word while the input starts with it.
+  const pickedNow = picked && value.trimStart().startsWith(picked.title) ? picked : null
+  const parsed = parseQuickAdd(value, people, pickedNow?.title)
+  const typing = value.trim() !== ''
+  const matches = filterSuggestions({
+    category: activeCategory,
+    query: typing ? parsed.title : '',
+    hasChildren,
+    openTitles,
+  })
+  const visible =
+    typing || showAll || matches.length <= SHOWN
+      ? matches
+      : Array.from({ length: SHOWN }, (_, i) => matches[(offset + i) % matches.length])
+
+  const pick = (s: QuickAddSuggestion) => {
+    setPicked(s)
+    setTimingUsed(false)
+    setValue(s.title)
+  }
+  const useTiming = () => {
+    if (!pickedNow) return
+    const tokens = suggestedTokens(pickedNow)
+    setValue((v) => `${v.trimEnd()} ${tokens}`)
+    setTimingUsed(true)
+  }
 
   const submit = async () => {
     if (!parsed.title || busy) return
@@ -89,6 +187,7 @@ export function QuickAdd({
       })
       toast.success('Task added')
       setValue('')
+      setPicked(null)
       onCreated()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to add task')
@@ -131,6 +230,80 @@ export function QuickAdd({
             'Type a task title'
           )}
         </p>
+      )}
+      {pickedNow?.due && !timingUsed && (
+        <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+          <span>suggested: {dueHint(pickedNow.due)}</span>
+          <Button type="button" variant="link" size="sm" className="h-11 px-0 text-xs" onClick={useTiming}>
+            Use suggested timing
+          </Button>
+        </div>
+      )}
+
+      {!pickedNow && (!typing || visible.length > 0) && (
+        <div className="space-y-2 pt-1" role="group" aria-label="Suggestions">
+          <p className="text-xs font-medium text-muted-foreground">Suggestions</p>
+          {!typing && (
+            <div ref={pillsRef} className="relative -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+              {categories.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  aria-pressed={c === activeCategory}
+                  onClick={() => chooseCategory(c)}
+                  className={cn(
+                    'min-h-11 shrink-0 rounded-full border px-3 text-sm font-medium transition-colors',
+                    c === activeCategory
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                  )}
+                >
+                  {SUGGESTION_CATEGORY_LABELS[c]}
+                </button>
+              ))}
+            </div>
+          )}
+          <ul role="list" className="flex flex-wrap gap-2">
+            {visible.map((s) => (
+              <li key={s.title}>
+                <button
+                  type="button"
+                  onClick={() => pick(s)}
+                  aria-label={`Use suggestion: ${s.title}`}
+                  className="min-h-11 rounded-full border border-dashed border-border bg-muted/40 px-3 py-1.5 text-left text-sm text-foreground transition-colors hover:border-primary/50 hover:bg-muted"
+                >
+                  {s.title}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {!typing && matches.length > SHOWN && (
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-11 text-xs"
+                aria-expanded={showAll}
+                onClick={() => setShowAll((v) => !v)}
+              >
+                {showAll ? 'Fewer' : `More (${matches.length - SHOWN})`}
+              </Button>
+              {!showAll && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-11 w-11 p-0"
+                  aria-label="Show different suggestions"
+                  onClick={() => setOffset((o) => (o + SHOWN) % matches.length)}
+                >
+                  <Shuffle className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )
