@@ -37,7 +37,7 @@ real email. Read a script's header before running it.
 - **Safe, with no database and no network.** These use pure logic, or the
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
   admin-delete-child, admin-tier-breakdown, adult-location-access, child-invite, coppa,
-  dashboard-prefetch, existing-user-confirmations, geofence, kid-ping, launch-security,
+  dashboard-prefetch, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
   legal-ping, location-dedupe, location-share-now, member-names, push-ownership,
   push-picker, schema-snapshot, stillness, stripe-checkout-tax,
   stripe-webhook-events, weather-prompt, weather-route.
@@ -79,9 +79,11 @@ real email. Read a script's header before running it.
 
 ## Product facts
 
-- Adults must be 18 or older to sign up. Children are added by a parent and never sign up
-  on their own; a parent can invite a child of any age to their own sign-in (email or link,
-  the parent's consent comes with the code).
+- Adults must be 18 or older to sign up. Children never sign up on their own.
+- Invites (Family > Invite) go by email link: Parent (another parent approves), Guest
+  (calendar & tasks), Child (any age: creates the child profile with the parent's consent,
+  and the child's account joins it). Add child is for kids without their own email; the
+  parent tracks them from their own account.
 - Show member names through `lib/member-names.ts` (`memberName`,
   `MEMBER_NAME_SQL`, `nameInFamily`, `actorNameInFamily`, `taskAssigneeName`,
   `participantName`). Don't hand-roll name fallbacks.

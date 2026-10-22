@@ -596,22 +596,14 @@ export default function FamilyPage() {
 
       {/* Join requests wait for a decision, so they are always visible */}
       <JoinRequestsCard familyId={family.id} onAnswered={() => { mutateFamily(); mutateActivities() }} />
-      {viewerIsParent && (family.children || []).some((c) => c.canHaveAccount && c.familyMemberId) && (
-        // Kids with no sign-in yet: one tap to email or share them an invite.
-        <div className="rounded-lg border bg-card p-3">
-          <p className="text-sm font-medium">Invite Child</p>
-          <p className="text-xs text-muted-foreground">Invite them by email or a link they open on their phone. Your invite is your consent.</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {(family.children || []).filter((c) => c.canHaveAccount && c.familyMemberId).map((c) => (
-              <Button key={c.id} size="sm" variant="outline" onClick={() => setAccountChild(c)}>
-                <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-                Invite {c.displayName}
-              </Button>
-            ))}
-          </div>
-        </div>
+      {inviteOpen && (
+        <InviteCodesCard
+          familyId={family.id}
+          familyName={family.name || 'our family'}
+          canInviteChild={viewerIsParent}
+          onChildAdded={() => { mutateFamily(); mutateActivities() }}
+        />
       )}
-      {inviteOpen && <InviteCodesCard familyId={family.id} familyName={family.name || 'our family'} />}
 
       {/* Family at a glance */}
       <div className="flex flex-wrap gap-2">
@@ -1030,7 +1022,7 @@ export default function FamilyPage() {
                 <DialogHeader>
                   <DialogTitle>Add a Child</DialogTitle>
                   <DialogDescription>
-                    Select an existing family member or create a new child profile.
+                    For kids without their own email: you track their activity from your account. Kids with an email get their own sign-in from Invite &gt; Child.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
@@ -1113,7 +1105,7 @@ export default function FamilyPage() {
                         onChange={(e) => setChildName(e.target.value)}
                       />
                       <p className="text-xs text-muted-foreground">
-                        This creates a child profile without a linked user account. You can invite them to their own sign-in any time, by email or a link.
+                        For a child without their own email: no sign-in for them, and you keep track of their activity from your account. To give a child their own sign-in, use Invite &gt; Child.
                       </p>
                       <div className="pt-2">
                         <BirthdateInput id="childBirthdate" value={childBirthdate} onChange={setChildBirthdate} />
