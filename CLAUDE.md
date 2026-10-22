@@ -36,7 +36,7 @@ real email. Read a script's header before running it.
 
 - **Safe, with no database and no network.** These use pure logic, or the
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
-  admin-delete-child, admin-tier-breakdown, adult-location-access, coppa,
+  admin-delete-child, admin-tier-breakdown, adult-location-access, child-invite, coppa,
   dashboard-prefetch, existing-user-confirmations, geofence, kid-ping, launch-security,
   legal-ping, location-dedupe, location-share-now, member-names, push-ownership,
   push-picker, schema-snapshot, stillness, stripe-checkout-tax,
@@ -79,7 +79,9 @@ real email. Read a script's header before running it.
 
 ## Product facts
 
-- Adults must be 18 or older to sign up. Children are added by a parent, never sign up.
+- Adults must be 18 or older to sign up. Children are added by a parent and never sign up
+  on their own; a parent can invite a child of any age to their own sign-in (email or link,
+  the parent's consent comes with the code).
 - Show member names through `lib/member-names.ts` (`memberName`,
   `MEMBER_NAME_SQL`, `nameInFamily`, `actorNameInFamily`, `taskAssigneeName`,
   `participantName`). Don't hand-roll name fallbacks.

@@ -596,6 +596,21 @@ export default function FamilyPage() {
 
       {/* Join requests wait for a decision, so they are always visible */}
       <JoinRequestsCard familyId={family.id} onAnswered={() => { mutateFamily(); mutateActivities() }} />
+      {viewerIsParent && (family.children || []).some((c) => c.canHaveAccount && c.familyMemberId) && (
+        // Kids with no sign-in yet: one tap to email or share them an invite.
+        <div className="rounded-lg border bg-card p-3">
+          <p className="text-sm font-medium">Kids without their own sign-in</p>
+          <p className="text-xs text-muted-foreground">Invite them by email or a link they open on their phone. Your invite is your consent.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(family.children || []).filter((c) => c.canHaveAccount && c.familyMemberId).map((c) => (
+              <Button key={c.id} size="sm" variant="outline" onClick={() => setAccountChild(c)}>
+                <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                Invite {c.displayName}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
       {inviteOpen && <InviteCodesCard familyId={family.id} familyName={family.name || 'our family'} />}
 
       {/* Family at a glance */}
@@ -1098,7 +1113,7 @@ export default function FamilyPage() {
                         onChange={(e) => setChildName(e.target.value)}
                       />
                       <p className="text-xs text-muted-foreground">
-                        This creates a child profile without a linked user account. From age 8 you can create their own login later.
+                        This creates a child profile without a linked user account. You can invite them to their own sign-in any time, by email or a link.
                       </p>
                       <div className="pt-2">
                         <BirthdateInput id="childBirthdate" value={childBirthdate} onChange={setChildBirthdate} />
@@ -1190,7 +1205,7 @@ export default function FamilyPage() {
                             setAccountChild(child)
                           }}
                         >
-                          Create account
+                          Invite to sign in
                         </Button>
                       )}
                       {viewerIsParent && child.familyMemberId && (

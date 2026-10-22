@@ -29,7 +29,7 @@ export default function TermsPage() {
         <h1 className="text-3xl font-bold mb-8">Terms of Service</h1>
         
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: October 20, 2026</p>
+          <p className="text-muted-foreground">Last updated: October 21, 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Acceptance of Terms</h2>
@@ -55,7 +55,7 @@ export default function TermsPage() {
             </p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Togethr is for adults. You must be at least 18 years old to create an account, and you confirm this when you sign up. Children cannot create an account or join a family on their own</li>
-              <li>Only a parent or legal guardian can add a child to their family. A parent may also give a child aged 8 or older their own supervised login, using a one-time code the parent creates, and in doing so consents to that child's use of the Service as described in our Privacy Policy</li>
+              <li>Only a parent or legal guardian can add a child to their family. A parent may also give a child their own supervised login, using a one-time code or invite link the parent creates, and in doing so consents to that child's use of the Service as described in our Privacy Policy</li>
               <li>You must provide accurate and complete information</li>
               <li>You are responsible for all activity on your account</li>
               <li>You must notify us immediately of any unauthorized access</li>

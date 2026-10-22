@@ -5,18 +5,24 @@ import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { canManageFamily } from "@/lib/permissions"
 import { ensureInviteTables, generateInviteCode } from "@/lib/family-invites"
 import { ensureAgeColumns } from "@/lib/age-schema"
-import { MIN_ACCOUNT_AGE, effectiveAge } from "@/lib/age"
+import { effectiveAge } from "@/lib/age"
+import { sendEmail, isResendConfigured, EMAIL_TEMPLATES } from "@/lib/services/email"
+import { actorNameInFamily } from "@/lib/member-names"
 import { recordParentalConsent } from "@/lib/parental-consent"
 
 const INVITE_DAYS = 7
 
 // The parent must tick the consent box; anything other than true is refused.
+// email (optional): the child's address to send the invite link to. Used only
+// to send it: never stored or logged.
 const schema = z.object({
   consent: z.literal(true, { errorMap: () => ({ message: "Parent consent is required to create an account for a child" }) }),
+  email: z.union([z.literal(""), z.string().trim().email("Enter a valid email address").max(254)]).optional(),
 })
 
-// Give an existing child profile (no login yet, aged 8+) its own account: a
-// single-use CHILD invite bound to that profile. Whoever joins with it is
+// Give an existing child profile (no login yet, any age) its own account: a
+// single-use CHILD invite bound to that profile, made with the parent's
+// consent, which the parent can have emailed to the child. Whoever joins with it is
 // linked to the child's existing membership instead of becoming a new member.
 export async function POST(
   request: NextRequest,
@@ -30,7 +36,7 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Only a parent or the family owner can create a child's account" }, { status: 403 })
     }
 
-    schema.parse(await request.json().catch(() => ({})))
+    const { email } = schema.parse(await request.json().catch(() => ({})))
     await ensureAgeColumns()
     await ensureInviteTables()
 
@@ -48,13 +54,8 @@ export async function POST(
       return NextResponse.json({ success: false, error: `${name} already has their own account.` }, { status: 400 })
     }
 
+    // No minimum age: the parent decides, and their consent comes with the code.
     const age = effectiveAge(c.dob, c.age)
-    if (age === null) {
-      return NextResponse.json({ success: false, error: `Add ${name}'s birthdate first so we can check they are old enough for an account.` }, { status: 400 })
-    }
-    if (age < MIN_ACCOUNT_AGE) {
-      return NextResponse.json({ success: false, error: `Children can have their own account from age ${MIN_ACCOUNT_AGE}.` }, { status: 400 })
-    }
 
     // One live account code per child: cancel any earlier unused one.
     await sql`
@@ -77,14 +78,32 @@ export async function POST(
     if (!code) return NextResponse.json({ success: false, error: "Could not create a code, try again" }, { status: 500 })
     await recordParentalConsent({ familyId, parentUserId: user.id, childMemberId: memberId, scope: "CHILD_ACCOUNT", request })
 
+    const joinLink = `${request.nextUrl.origin}/onboarding?code=${code}`
+
+    // Email the link to the child when the parent gave an address.
+    let emailed = false
+    let emailError: string | undefined
+    if (email && !isResendConfigured()) {
+      emailError = "Email isn't set up, so share the link instead."
+    } else if (email) {
+      const fam = await sql`SELECT name FROM families WHERE id = ${familyId} LIMIT 1`
+      const parentName = await actorNameInFamily(familyId, user, "Your parent")
+      const tpl = EMAIL_TEMPLATES.CHILD_ACCOUNT_INVITE(name, parentName, (fam[0]?.name as string) || null, joinLink, code)
+      const sent = await sendEmail({ to: email, ...tpl })
+      emailed = sent.success
+      if (!emailed) emailError = "The email could not be sent. Share the link instead."
+    }
+
     await logAuditEvent(user.id, "CREATE", "child_account_invite", memberId, {
-      newValue: { familyId, childMemberId: memberId, age, consent: true, consentBy: user.id, expiresAt },
+      newValue: { familyId, childMemberId: memberId, age, consent: true, consentBy: user.id, expiresAt, emailed },
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
     })
 
-    const joinLink = `${request.nextUrl.origin}/onboarding?code=${code}`
-    return NextResponse.json({ success: true, data: { code, joinLink, expiresAt } })
+    return NextResponse.json({
+      success: true,
+      data: { code, joinLink, expiresAt, emailed, ...(emailError ? { emailError } : {}) },
+    })
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ success: false, error: error.errors[0].message }, { status: 400 })
     console.error("Child account invite error:", error)

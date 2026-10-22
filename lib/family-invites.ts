@@ -1,7 +1,6 @@
 import { sql } from "./db"
 import { ddl } from "./schema-snapshot"
 import { ensureAgeColumns } from "./age-schema"
-import { MIN_ACCOUNT_AGE, effectiveAge } from "./age"
 import { ensureConsentSchema } from "./consent-schema"
 import { syncChildNameFromProfile } from "./member-names"
 
@@ -234,8 +233,8 @@ export async function findChildAccountInvite(code: string): Promise<{ ok: true; 
   if (r.used_at) return bad("This code was already used. Ask a parent for a new one.")
   if (new Date(r.expires_at) < new Date()) return bad("This code has expired. Ask a parent for a new one.")
   if (r.child_role !== "CHILD" || !r.child_active || r.child_user_id) return bad("This account code is no longer valid. Ask a parent for a new one.")
-  const age = effectiveAge(r.dob, r.age)
-  if (age === null || age < MIN_ACCOUNT_AGE) return bad(`Children can have their own account from age ${MIN_ACCOUNT_AGE}. Ask a parent for help.`)
+  // No minimum age: the parent's code, made with their consent, is what
+  // allows the child's account.
   return {
     ok: true,
     invite: {
