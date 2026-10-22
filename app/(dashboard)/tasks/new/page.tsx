@@ -18,7 +18,7 @@ import {
   NotificationChannelsPicker,
   type NotificationChannelValue,
 } from '@/components/notification-channels-picker'
-import { ArrowLeft, ListTodo } from 'lucide-react'
+import { ArrowLeft, ListTodo, UserCheck } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -32,7 +32,7 @@ export default function NewTaskPage() {
   
   // Fetch detailed family data including members and children
   const { family: primaryFamily, isLoading: familyLoading } = useFamily(primaryFamilyId || null)
-  const { isSupervisor } = useMyRole()
+  const { isSupervisor, isChild } = useMyRole()
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -55,7 +55,9 @@ export default function NewTaskPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+    // A child pressed "Ask a parent" (not Create): the task waits for approval.
+    const askParent = isChild && ((e.nativeEvent as SubmitEvent).submitter as HTMLElement | null)?.getAttribute('name') === 'ask-parent'
+
     if (!title.trim()) {
       toast.error('Task title is required')
       return
@@ -97,9 +99,10 @@ export default function NewTaskPage() {
         isRecurring,
         recurrenceRule: isRecurring ? recurrenceRule : undefined,
         notifyChannels: notifyChannels.length > 0 ? notifyChannels : undefined,
+        askParent: askParent || undefined,
       })
 
-      toast.success('Task created successfully')
+      toast.success(askParent ? 'Sent to a parent to approve' : 'Task created successfully')
       router.push('/dashboard')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to create task')
@@ -356,6 +359,17 @@ export default function NewTaskPage() {
                 </div>
               )}
             </div>
+
+            {/* Kids create freely; "Ask a parent" sends it for approval first. */}
+            {isChild && (
+              <div className="space-y-1 pt-2">
+                <Button type="submit" name="ask-parent" variant="outline" disabled={submitting} className="h-12 w-full touch-target">
+                  <UserCheck className="mr-2 h-4 w-4" />
+                  Ask a parent
+                </Button>
+                <p className="text-center text-xs text-muted-foreground">A parent approves it before it&apos;s added</p>
+              </div>
+            )}
 
             {/* Submit Buttons */}
             <div className="flex gap-3 pt-4 pb-safe">

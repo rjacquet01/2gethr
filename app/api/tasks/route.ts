@@ -1,5 +1,5 @@
 import { createNotification } from '@/lib/notifications'
-import { ensureAssignmentColumns, isSupervisorRole, needsParentToApprove, getParentUserIds, assigneesInFamily } from '@/lib/assignment'
+import { ensureAssignmentColumns, isSupervisorRole, getParentUserIds, assigneesInFamily } from '@/lib/assignment'
 import { NextRequest, NextResponse } from 'next/server'
 import { sql, type Row } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
@@ -167,7 +167,9 @@ export async function POST(request: NextRequest) {
       category,
       isRecurring = false,
       recurrenceRule,
-      notifyChannels
+      notifyChannels,
+      // A child chose "Ask a parent": the task waits for a parent's approval.
+      askParent = false,
     } = body
 
     // Validate notifyChannels is either absent or a plain array of known
@@ -231,11 +233,14 @@ export async function POST(request: NextRequest) {
       targetRole = r[0]?.role || null
     }
 
-    // Kid-created assignments: to a grown-up or a guest => a parent must approve;
-    // to another kid => that kid must accept. Parents/self need neither.
+    // Kid-created tasks need no parent approval unless the kid chose "Ask a
+    // parent" (askParent). Giving one to another kid with a login still waits
+    // for that kid to accept. Parents/self need neither.
     let assignmentStatus: string | null = null
-    if (creatorRole === 'CHILD' && (assignedToUserId || assignedToChildId) && targetUserId !== user.id) {
-      assignmentStatus = (!targetUserId || needsParentToApprove(targetRole)) ? 'PENDING_APPROVAL' : 'PENDING_ACCEPTANCE'
+    if (creatorRole === 'CHILD' && askParent === true) {
+      assignmentStatus = 'PENDING_APPROVAL'
+    } else if (creatorRole === 'CHILD' && targetUserId && targetUserId !== user.id && targetRole === 'CHILD') {
+      assignmentStatus = 'PENDING_ACCEPTANCE'
     }
 
     // Create the task
@@ -270,7 +275,7 @@ export async function POST(request: NextRequest) {
         await createNotification({
           userId: pid, type: 'APPROVAL_REQUEST',
           title: 'Task needs your approval',
-          body: `${assignerName} wants to assign a task${who}: "${title}". Open it to approve or decline.`,
+          body: `${assignerName} asked you to approve a task${who}: "${title}". Open it to approve or decline.`,
           data: { taskId: task[0].id, familyId }, sendEmail: true, sendSms: true, channels: ch,
         })
       }

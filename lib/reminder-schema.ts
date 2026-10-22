@@ -9,6 +9,9 @@ export function ensureReminderChildColumn(): Promise<void> {
   if (!ensured) {
     ensured = (async () => {
       await ddl`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS child_profile_id TEXT`
+      // A child's "Ask a parent" reminder: 'PENDING_APPROVAL' until a parent
+      // approves ('APPROVED') or declines ('DECLINED'). NULL = no approval asked.
+      await ddl`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS approval_status TEXT`
     })().catch((err) => {
       ensured = null
       throw err

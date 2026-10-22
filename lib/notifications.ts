@@ -135,7 +135,9 @@ export async function createNotification({
               ? `/tasks/${data.taskId}`
               : typeof data.eventId === 'string'
                 ? `/calendar/event/${data.eventId}`
-                : '/'
+                : typeof data.reminderId === 'string'
+                  ? '/dashboard/reminders'
+                  : '/'
 
           const pushData: Record<string, string> = { type }
           for (const [key, value] of Object.entries(data)) {

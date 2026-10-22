@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import useSWR, { mutate } from 'swr'
 import { format, addHours } from 'date-fns'
-import { Calendar as CalendarIcon, Clock, MapPin, Users, Tag, Eye, ArrowLeft, Loader2, Check, X, Bell, Star } from 'lucide-react'
+import { Calendar as CalendarIcon, Clock, MapPin, Users, Tag, Eye, ArrowLeft, Loader2, Check, X, Bell, Star, UserCheck } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { localDateTimeToISO, localStartOfDayToISO, localEndOfDayToISO } from '@/lib/datetime'
@@ -82,7 +82,7 @@ function NewEventForm() {
   const dateParam = searchParams.get('date')
   const { user, isLoading: authLoading } = useAuth()
   const { families, isLoading: familiesLoading } = useFamilies()
-  const { isGuest, isSupervisor } = useMyRole()
+  const { isGuest, isSupervisor, isChild } = useMyRole()
   
   // Use date from URL param if provided and valid, otherwise use today
   const getInitialDate = (): Date => {
@@ -267,7 +267,9 @@ function NewEventForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+    // A child pressed "Ask a parent" (not Create): the event waits for approval.
+    const askParent = isChild && ((e.nativeEvent as SubmitEvent).submitter as HTMLElement | null)?.getAttribute('name') === 'ask-parent'
+
     if (!formData.title.trim()) {
       toast.error('Please enter an event title')
       return
@@ -343,6 +345,7 @@ function NewEventForm() {
             userId: p.userId,
             childProfileId: p.childProfileId,
           })),
+          askParent: askParent || undefined,
         }),
       })
       
@@ -356,7 +359,7 @@ function NewEventForm() {
       // Invalidate the events cache so the calendar page shows the new event
       await mutate((key) => typeof key === 'string' && key.startsWith('/api/events'), undefined, { revalidate: true })
       
-      toast.success('Event created successfully!')
+      toast.success(data.data?.status === 'PENDING' ? 'Sent to a parent to approve' : 'Event created successfully!')
       router.push('/calendar')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to create event')
@@ -936,6 +939,23 @@ function NewEventForm() {
                 Optional. Select family members who should be notified about this event.
               </p>
             </div>
+
+            {/* Kids create freely; "Ask a parent" sends it for approval first. */}
+            {isChild && (
+              <div className="space-y-1 pt-2">
+                <Button
+                  type="submit"
+                  name="ask-parent"
+                  variant="outline"
+                  className="h-12 w-full touch-target"
+                  disabled={isSubmitting || !formData.familyId}
+                >
+                  <UserCheck className="mr-2 h-4 w-4" />
+                  Ask a parent
+                </Button>
+                <p className="text-center text-xs text-muted-foreground">A parent approves it before it&apos;s added</p>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex gap-3 pt-4 pb-safe">

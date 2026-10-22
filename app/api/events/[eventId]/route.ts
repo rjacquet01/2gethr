@@ -256,6 +256,14 @@ export async function PATCH(
 
     const body = await request.json()
     const validatedData = updateEventSchema.parse(body)
+    // Approving a waiting event is a parent's or guardian's call (the
+    // /approve route): the person who asked can't approve it by editing.
+    if (validatedData.status === "APPROVED" && event.status === "PENDING" && !["PARENT", "GUARDIAN"].includes(event.role)) {
+      return NextResponse.json(
+        { success: false, error: "A parent or guardian needs to approve this event" },
+        { status: 403 }
+      )
+    }
     const newStart = new Date(validatedData.startTime ?? event.start_time)
     const newEnd = new Date(validatedData.endTime ?? event.end_time)
     if (newEnd < newStart) {

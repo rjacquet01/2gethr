@@ -45,6 +45,8 @@ export async function GET(request: NextRequest) {
       WHERE r.status = 'PENDING'
         AND r.remind_at <= NOW()
         AND r.sent_at IS NULL
+        -- A kid's "Ask a parent" reminder fires only once a parent approves it.
+        AND (r.approval_status IS NULL OR r.approval_status = 'APPROVED')
       -- Reminders waiting out quiet hours stay at the front; a larger batch
       -- keeps them from crowding out newer due ones.
       ORDER BY r.remind_at ASC

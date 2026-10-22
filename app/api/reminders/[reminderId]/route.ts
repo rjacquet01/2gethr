@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
-import type { NotificationChannel } from '@/lib/notifications'
+import { createNotification, type NotificationChannel } from '@/lib/notifications'
+import { actorNameInFamily } from '@/lib/member-names'
+import { ensureReminderChildColumn } from '@/lib/reminder-schema'
 
 const VALID_NOTIFY_CHANNELS: NotificationChannel[] = ['in_app', 'push', 'email', 'sms']
 const VALID_STATUSES = ['PENDING', 'COMPLETED', 'DISMISSED', 'ARCHIVED']
 
 async function loadReminder(reminderId: string, userId: string) {
+  await ensureReminderChildColumn()
   const rows = await sql`
     SELECT r.*, fm.user_id as membership_user_id, fm.role as membership_role,
            (SELECT cfm.user_id FROM child_profiles cp JOIN family_members cfm ON cfm.id = cp.family_member_id
@@ -21,9 +24,11 @@ async function loadReminder(reminderId: string, userId: string) {
   // person it's for and whoever created it; a child's reminder also to
   // parents/guardians and the child's own login. (Guests: own/created only.)
   const own = r.user_id === userId || r.created_by_id === userId
-  const childsReminder = !!r.child_profile_id &&
-    (r.child_user_id === userId || (r.membership_role !== 'GUEST' && ['PARENT', 'GUARDIAN'].includes(r.membership_role)))
-  if (!own && !childsReminder) return null
+  const supervisor = ['PARENT', 'GUARDIAN'].includes(r.membership_role)
+  const childsReminder = !!r.child_profile_id && (r.child_user_id === userId || supervisor)
+  // A kid's "Ask a parent" reminder: any parent/guardian can open it to decide.
+  const awaitingParent = r.approval_status === 'PENDING_APPROVAL' && supervisor
+  if (!own && !childsReminder && !awaitingParent) return null
   return r
 }
 
@@ -55,6 +60,51 @@ export async function PATCH(
       status,
       action,
     } = body
+
+    // A parent/guardian answers a kid's "Ask a parent" reminder.
+    if (action === 'approve' || action === 'decline') {
+      if (!['PARENT', 'GUARDIAN'].includes(reminder.membership_role)) {
+        return NextResponse.json({ error: 'Only a parent or guardian can approve this' }, { status: 403 })
+      }
+      if (reminder.approval_status !== 'PENDING_APPROVAL') {
+        return NextResponse.json({ error: 'This reminder is not waiting for approval' }, { status: 409 })
+      }
+      const decided = await sql`
+        UPDATE reminders SET
+          approval_status = ${action === 'approve' ? 'APPROVED' : 'DECLINED'},
+          status = ${action === 'approve' ? reminder.status : 'DISMISSED'},
+          updated_at = NOW()
+        WHERE id = ${reminderId} AND approval_status = 'PENDING_APPROVAL'
+        RETURNING *
+      `
+      if (decided.length === 0) {
+        return NextResponse.json({ error: 'This reminder is not waiting for approval' }, { status: 409 })
+      }
+      const byName = await actorNameInFamily(reminder.family_id as string, user, 'A parent')
+      await createNotification({
+        userId: reminder.created_by_id,
+        type: 'APPROVAL_RESPONSE',
+        title: action === 'approve' ? 'Reminder approved' : 'Reminder declined',
+        body: `${byName} ${action === 'approve' ? 'approved' : 'declined'} your reminder "${reminder.title}"`,
+        data: { reminderId, familyId: reminder.family_id },
+      }).catch((err) => console.error('Reminder approval response failed (non-fatal):', err))
+      // Set for someone else: tell them now that it's approved.
+      if (action === 'approve' && reminder.user_id !== reminder.created_by_id && reminder.user_id !== user.id) {
+        await createNotification({
+          userId: reminder.user_id,
+          type: 'REMINDER',
+          title: 'New reminder for you',
+          body: `A reminder was set for you: "${reminder.title}"`,
+          data: { reminderId, familyId: reminder.family_id, kind: 'reminder_assigned' },
+        }).catch((err) => console.error('Reminder-assigned notification failed (non-fatal):', err))
+      }
+      return NextResponse.json({ data: decided[0] })
+    }
+
+    // Until a parent approves, the kid can't turn it on another way.
+    if (reminder.approval_status === 'PENDING_APPROVAL' && status && !['PARENT', 'GUARDIAN'].includes(reminder.membership_role)) {
+      return NextResponse.json({ error: 'This reminder is waiting for a parent' }, { status: 409 })
+    }
 
     // A couple of UI shorthand actions, matching the pattern the Archive
     // page already uses for tasks/events (action: 'unarchive' etc.)

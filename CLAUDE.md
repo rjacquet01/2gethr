@@ -84,6 +84,10 @@ real email. Read a script's header before running it.
   (calendar & tasks), Child (any age: creates the child profile with the parent's consent,
   and the child's account joins it). Add child is for kids without their own email; the
   parent tracks them from their own account.
+- Kids create events, tasks and reminders with no parent approval. "Ask a parent" (child
+  accounts only, `askParent: true`) makes one wait: events PENDING (`/api/events/[id]/approve`),
+  tasks `assignment_status = PENDING_APPROVAL`, reminders `approval_status = PENDING_APPROVAL`
+  (not fired until approved). A task one kid gives another kid still waits for that kid to accept.
 - Show member names through `lib/member-names.ts` (`memberName`,
   `MEMBER_NAME_SQL`, `nameInFamily`, `actorNameInFamily`, `taskAssigneeName`,
   `participantName`). Don't hand-roll name fallbacks.
