@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SUBSCRIPTION_TIERS, annualSavingsPercent, PRICE_TAX_NOTE } from '@/lib/subscription-tiers'
+import { FamilyNameTag } from '@/components/family-name-tag'
 
 // Sourced from lib/subscription-tiers.ts rather than a hand-typed copy, so
 // this checkout page can't go out of sync with what /pricing and
@@ -189,7 +190,7 @@ function UpgradeForm() {
         </Button>
         <div className="min-w-0">
           <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Upgrade to {tier.name}</h1>
-          <p className="truncate text-sm text-muted-foreground">{primaryFamily?.name}</p>
+          <FamilyNameTag name={primaryFamily?.name} className="mt-1" />
         </div>
       </div>
 

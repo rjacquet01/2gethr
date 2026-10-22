@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
-import { Bell, Calendar, MapPin, Users, Check, Trash2, Loader2, RefreshCw, ListTodo, AlertCircle, AlertTriangle, Clock } from 'lucide-react'
+import { Bell, Calendar, MapPin, Users, Check, Trash2, Loader2, RefreshCw, ListTodo, AlertCircle, AlertTriangle, Clock, ChevronRight } from 'lucide-react'
+import { notificationHref } from '@/lib/notification-link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -48,6 +50,7 @@ const urgentTypes = ['TASK_OVERDUE', 'GEOFENCE_ALERT']
 
 export default function NotificationsPage() {
   const { user } = useAuth()
+  const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -107,6 +110,13 @@ export default function NotificationsPage() {
     } finally {
       setMarking(null)
     }
+  }
+
+  // Clicking a notification marks it read and opens what it's about.
+  const openNotification = (n: Notification) => {
+    const href = notificationHref(n.type, n.data)
+    if (!n.isRead) void markAsRead(n.id)
+    if (href) router.push(href)
   }
 
   const markAllAsRead = async () => {
@@ -216,13 +226,26 @@ export default function NotificationsPage() {
             const Icon = notificationIcons[notification.type] || notificationIcons.DEFAULT
             const isUrgent = urgentTypes.includes(notification.type)
             const isOverdue = notification.type === 'TASK_OVERDUE'
-            
+            const href = notificationHref(notification.type, notification.data)
+
             return (
               <Card
                 key={notification.id}
+                {...(href
+                  ? {
+                      role: 'link',
+                      tabIndex: 0,
+                      'aria-label': `${notification.title}: open`,
+                      onClick: () => openNotification(notification),
+                      onKeyDown: (e: React.KeyboardEvent) => {
+                        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNotification(notification) }
+                      },
+                    }
+                  : {})}
                 className={`
                   ${notification.isRead ? 'opacity-60' : ''}
                   ${isUrgent && !notification.isRead ? 'border-red-500 border-2 bg-red-50 dark:bg-red-950/20' : ''}
+                  ${href ? 'cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring' : ''}
                 `}
               >
                 <CardContent className="p-4">
@@ -260,9 +283,12 @@ export default function NotificationsPage() {
                             {notification.body}
                           </p>
                         </div>
-                        {!notification.isRead && !isOverdue && (
-                          <Badge variant="secondary" className="shrink-0">New</Badge>
-                        )}
+                        <div className="flex shrink-0 items-center gap-1">
+                          {!notification.isRead && !isOverdue && (
+                            <Badge variant="secondary" className="shrink-0">New</Badge>
+                          )}
+                          {href && <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+                        </div>
                       </div>
                       <div className="flex items-center justify-between mt-2">
                         <span className={`text-xs ${isUrgent && !notification.isRead ? 'text-red-500' : 'text-muted-foreground'}`}>
@@ -272,7 +298,8 @@ export default function NotificationsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => markAsRead(notification.id)}
+                            onClick={(e) => { e.stopPropagation(); markAsRead(notification.id) }}
+                            onKeyDown={(e) => e.stopPropagation()}
                             disabled={marking === notification.id}
                           >
                             {marking === notification.id ? (

@@ -35,6 +35,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { FamilyNameTag } from '@/components/family-name-tag'
 
 export default function TaskDetailPage({ params }: { params: Promise<{ taskId: string }> }) {
   const { taskId } = use(params)
@@ -216,7 +217,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
             {getStatusBadge(task.status)}
             {getPriorityBadge(task.priority)}
           </div>
-          <p className="text-muted-foreground">{task.family_name}</p>
+          <FamilyNameTag name={task.family_name} className="mt-1" />
         </div>
       </div>
 

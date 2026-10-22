@@ -1,5 +1,6 @@
 import { sql, type Row } from '@/lib/db'
 import { sendPushToUser, isFirebaseConfigured, notificationDedupeKey } from "@/lib/services/push"
+import { notificationHref } from "@/lib/notification-link"
 import { sendEmail, isResendConfigured, EMAIL_TEMPLATES } from "@/lib/services/email"
 import { sendSMSMetered, isTwilioConfigured } from "@/lib/services/sms"
 
@@ -146,14 +147,8 @@ export async function createNotification({
         const pushEnabled = force || pushPrefs.length === 0 || pushPrefs[0].push_enabled
 
         if (pushEnabled) {
-          const clickAction =
-            typeof data.taskId === 'string'
-              ? `/tasks/${data.taskId}`
-              : typeof data.eventId === 'string'
-                ? `/calendar/event/${data.eventId}`
-                : typeof data.reminderId === 'string'
-                  ? '/dashboard/reminders'
-                  : '/'
+          // Same destination as clicking it in the app (lib/notification-link.ts).
+          const clickAction = notificationHref(type, data) ?? '/'
 
           const pushData: Record<string, string> = { type }
           for (const [key, value] of Object.entries(data)) {
