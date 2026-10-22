@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { Fragment, useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { useFamilies } from '@/hooks/use-family'
 import { useEvents } from '@/hooks/use-events'
@@ -105,7 +105,8 @@ export default function CalendarPage() {
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 })
-  const weekEnd = endOfWeek(currentDate, { weekStartsOn: 0 })
+  // Week view shows two weeks: this one and the next.
+  const weekEnd = endOfWeek(addWeeks(currentDate, 1), { weekStartsOn: 0 })
   
   const { events, isLoading: eventsLoading } = useEvents({
     familyId: primaryFamily?.id,
@@ -237,7 +238,9 @@ export default function CalendarPage() {
           </div>
 
           <h1 className="text-base sm:text-xl font-bold text-foreground text-center flex-1 min-w-0 truncate px-1 sm:px-2">
-            {format(currentDate, viewMode !== 'week' ? 'MMMM yyyy' : "'Week of' MMM d")}
+            {viewMode !== 'week'
+              ? format(currentDate, 'MMMM yyyy')
+              : `${format(weekStart, 'MMM d')}–${format(weekEnd, isSameMonth(weekStart, weekEnd) ? 'd' : 'MMM d')}`}
           </h1>
 
           <Button asChild size="sm" className="h-10 w-10 sm:w-auto sm:px-4 shrink-0">
@@ -326,18 +329,23 @@ export default function CalendarPage() {
             {/* Calendar Days */}
             <div className={cn('grid grid-cols-7 gap-px bg-border rounded-xl overflow-hidden', viewMode === 'agenda' && 'hidden')}>
               {eventsLoading ? (
-                Array.from({ length: 35 }).map((_, i) => (
+                Array.from({ length: viewMode === 'week' ? 14 : 35 }).map((_, i) => (
                   <Skeleton key={i} className="min-h-16 sm:min-h-24" />
                 ))
               ) : (
-                calendarDays.map((day) => {
+                calendarDays.map((day, i) => {
                   const dayEvents = getEventsForDay(day)
-                  const isCurrentMonth = isSameMonth(day, currentDate)
+                  const isCurrentMonth = viewMode === 'week' || isSameMonth(day, currentDate)
                   const isSelected = selectedDate && isSameDay(day, selectedDate)
                   
                   return (
+                    <Fragment key={day.toISOString()}>
+                    {viewMode === 'week' && i === 7 && (
+                      <div className="col-span-7 bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground">
+                        Week of {format(day, 'MMM d')}
+                      </div>
+                    )}
                     <button
-                      key={day.toISOString()}
                       onClick={() => handleDayClick(day)}
                       className={cn(
                         'relative min-h-16 sm:min-h-24 p-1.5 sm:p-2 flex flex-col bg-background transition-colors active:bg-muted/70',
@@ -403,6 +411,7 @@ export default function CalendarPage() {
                         )}
                       </div>
                     </button>
+                    </Fragment>
                   )
                 })
               )}
