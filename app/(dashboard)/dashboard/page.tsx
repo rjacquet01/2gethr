@@ -249,7 +249,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    // Extra room at the bottom on phones so the floating "Alert child" button
+    // never covers the last shortcuts.
+    <div className="space-y-4 pb-14 sm:space-y-6 md:pb-0">
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>

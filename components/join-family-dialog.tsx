@@ -69,7 +69,9 @@ export function JoinFamilyButton({ variant = 'outline' }: { variant?: 'outline' 
       <DialogTrigger asChild>
         <Button variant={variant}>
           <Users className="w-4 h-4 mr-2" />
-          Join Another Family
+          {/* Short on narrow phones so the Family header buttons fit. */}
+          <span className="max-[399px]:hidden">Join Another Family</span>
+          <span className="min-[400px]:hidden">Join family</span>
         </Button>
       </DialogTrigger>
       <DialogContent>

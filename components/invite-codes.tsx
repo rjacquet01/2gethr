@@ -105,7 +105,7 @@ export function InviteCodesCard({ familyId, familyName, canInviteChild = false, 
         })
         const out = await res.json().catch(() => ({}))
         if (!res.ok) {
-          toast.error(`${childName.trim()} was added, but the invite failed: ${out.error || 'try again from Manage members'}`)
+          toast.error(`${childName.trim()} was added, but the invite failed: ${out.error || 'try again from Members & children'}`)
           return
         }
         data = out.data

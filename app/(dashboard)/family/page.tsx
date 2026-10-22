@@ -667,8 +667,9 @@ export default function FamilyPage() {
                 >
                   <MemberAvatar name={member.displayName} avatarUrl={member.avatarUrl} color={member.color} emoji={member.emoji} />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <p className="truncate font-medium text-foreground">
+                    {/* Badges wrap under the name on narrow screens instead of squeezing it. */}
+                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                      <p className="max-w-full truncate font-medium text-foreground">
                         {member.displayName}
                         {member.userId && member.userId === user?.id && <span className="ml-1 text-xs font-normal text-muted-foreground">(you)</span>}
                       </p>
@@ -741,22 +742,22 @@ export default function FamilyPage() {
                       </div>
                     ) : (
                             <Tabs defaultValue={firstTab} className="w-full">
-                              <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-auto p-0">
+                              <TabsList className="grid h-auto w-full grid-cols-3 rounded-none border-b bg-transparent p-0">
                                 <TabsTrigger 
                                   value="tasks" 
-                                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
+                                  className="rounded-none border-0 border-b-2 border-transparent px-1 py-2 text-xs data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:text-sm"
                                 >
                                   Tasks ({member.tasks.length})
                                 </TabsTrigger>
                                 <TabsTrigger 
                                   value="events"
-                                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
+                                  className="rounded-none border-0 border-b-2 border-transparent px-1 py-2 text-xs data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:text-sm"
                                 >
                                   Events ({member.events.length})
                                 </TabsTrigger>
                                 <TabsTrigger 
                                   value="reminders"
-                                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
+                                  className="rounded-none border-0 border-b-2 border-transparent px-1 py-2 text-xs data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:text-sm"
                                 >
                                   Reminders ({member.reminderCount || 0})
                                 </TabsTrigger>
@@ -894,14 +895,14 @@ export default function FamilyPage() {
         aria-expanded={manageOpen}
         className="flex w-full items-center justify-between rounded-xl border bg-card px-4 py-3 text-left transition-colors hover:bg-muted/40"
       >
-        <span className="flex items-center gap-2 font-medium">
-          <Users className="h-4 w-4 text-muted-foreground" />
-          Manage members &amp; children
-          <span className="text-xs font-normal text-muted-foreground">
+        <span className="flex min-w-0 items-center gap-2 font-medium">
+          <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="truncate">Members &amp; children</span>
+          <span className="shrink-0 whitespace-nowrap text-xs font-normal text-muted-foreground">
             {memberCount} · {childCount}
           </span>
         </span>
-        {manageOpen ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+        {manageOpen ? <ChevronUp className="h-5 w-5 shrink-0 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 shrink-0 text-muted-foreground" />}
       </button>
 
 

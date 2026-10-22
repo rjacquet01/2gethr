@@ -36,7 +36,7 @@ export function FamilySwitcher({ variant = 'sidebar' }: { variant?: 'sidebar' | 
           {variant === 'compact' ? (
             <Button variant="ghost" size="sm" aria-label="Switch family" className="h-10 gap-1 px-2 max-w-[120px]">
               <Users className="h-4 w-4 shrink-0" />
-              <span className="truncate text-xs">{current.name}</span>
+              <span className="truncate text-xs max-[399px]:hidden">{current.name}</span>
             </Button>
           ) : (
             <button
