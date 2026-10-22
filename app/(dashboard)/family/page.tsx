@@ -599,7 +599,7 @@ export default function FamilyPage() {
       {viewerIsParent && (family.children || []).some((c) => c.canHaveAccount && c.familyMemberId) && (
         // Kids with no sign-in yet: one tap to email or share them an invite.
         <div className="rounded-lg border bg-card p-3">
-          <p className="text-sm font-medium">Kids without their own sign-in</p>
+          <p className="text-sm font-medium">Invite Child</p>
           <p className="text-xs text-muted-foreground">Invite them by email or a link they open on their phone. Your invite is your consent.</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {(family.children || []).filter((c) => c.canHaveAccount && c.familyMemberId).map((c) => (
