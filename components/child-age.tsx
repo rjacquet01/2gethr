@@ -42,7 +42,7 @@ export function ChildConsentBox({ id, checked, onCheckedChange }: { id: string; 
     </div>
   )
 }
-import { Cake, Check, Copy, KeyRound, Shield, UserCheck, Baby } from 'lucide-react'
+import { Cake, Check, Copy, KeyRound, Shield, UserCheck, Baby, Mail, Share2 } from 'lucide-react'
 
 export interface AgeAwareChild {
   id: string
@@ -74,7 +74,7 @@ export function BirthdateInput({ id, value, onChange }: { id: string; value: str
     <div className="space-y-2">
       <Label htmlFor={id}>Birthdate (optional)</Label>
       <Input id={id} type="date" max={todayYmd()} value={value} onChange={(e) => onChange(e.target.value)} />
-      <p className="text-xs text-muted-foreground">Used to show their age, remind you before they turn 18, and allow their own account from age 8.</p>
+      <p className="text-xs text-muted-foreground">Used to show their age and remind you before they turn 18.</p>
     </div>
   )
 }
@@ -199,13 +199,16 @@ export function ChildAccountDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const [consent, setConsent] = useState(false)
+  const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<{ code: string; joinLink: string } | null>(null)
+  const [result, setResult] = useState<{ code: string; joinLink: string; emailedTo: string | null; emailError: string | null } | null>(null)
   const [copied, setCopied] = useState(false)
+  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
 
   const close = (open: boolean) => {
     if (!open) {
       setConsent(false)
+      setEmail('')
       setResult(null)
       setCopied(false)
     }
@@ -219,18 +222,27 @@ export function ChildAccountDialog({
       const res = await authFetch(`/api/families/${familyId}/children/${child.familyMemberId}/account-invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ consent }),
+        body: JSON.stringify({ consent, email: email.trim() }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         toast.error(data.error || 'Could not create the account invite')
         return
       }
-      setResult({ code: data.data.code, joinLink: data.data.joinLink })
+      setResult({
+        code: data.data.code,
+        joinLink: data.data.joinLink,
+        emailedTo: data.data.emailed ? email.trim() : null,
+        emailError: data.data.emailError || null,
+      })
+      if (data.data.emailed) toast.success(`Invite emailed to ${email.trim()}`)
     } finally {
       setBusy(false)
     }
   }
+
+  const inviteText = (r: { code: string; joinLink: string }) =>
+    `${child?.displayName ? `${child.displayName}, here` : 'Here'}'s your Togethr invite. Open this link to create your account: ${r.joinLink} (code ${r.code})`
 
   const copy = async () => {
     if (!result) return
@@ -240,31 +252,72 @@ export function ChildAccountDialog({
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // Text or message the invite from the parent's phone (share sheet).
+  const share = async () => {
+    if (!result) return
+    try {
+      await navigator.share({ title: 'Your Togethr invite', text: inviteText(result) })
+    } catch {
+      // cancelled
+    }
+  }
+
+  const emailValid = !email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+
   const under13 = child?.age != null && child.age < 13
 
   return (
     <Dialog open={!!child} onOpenChange={close}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create an account for {child?.displayName}</DialogTitle>
+          <DialogTitle>Invite {child?.displayName} to their own account</DialogTitle>
           <DialogDescription>
-            They get their own sign-in, joined to their existing profile. Location sharing stays off until it&apos;s turned on.
+            They get their own sign-in on their phone, joined to their existing profile. Location sharing stays off until it&apos;s turned on.
           </DialogDescription>
         </DialogHeader>
         {result ? (
           <div className="space-y-3">
+            {result.emailedTo && (
+              <p className="flex items-center gap-2 rounded-lg bg-muted p-3 text-sm">
+                <Mail className="h-4 w-4 shrink-0" />
+                Invite emailed to {result.emailedTo}
+              </p>
+            )}
+            {result.emailError && <p className="text-sm text-destructive">{result.emailError}</p>}
             <div className="rounded-lg border p-3">
               <div className="font-mono text-lg tracking-wider">{result.code}</div>
               <div className="mt-1 break-all text-xs text-muted-foreground">{result.joinLink}</div>
             </div>
-            <p className="text-xs text-muted-foreground">Open the link on their device and sign up. The code works once and expires in 7 days.</p>
-            <Button className="w-full" onClick={copy}>
+            <p className="text-xs text-muted-foreground">They open the link on their phone and choose a password. The code works once and expires in 7 days.</p>
+            {canShare && (
+              <Button className="w-full" onClick={share}>
+                <Share2 className="mr-2 h-4 w-4" />
+                Share link (text or message)
+              </Button>
+            )}
+            <Button className="w-full" variant={canShare ? 'outline' : 'default'} onClick={copy}>
               {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
               Copy link and code
             </Button>
           </div>
         ) : (
           <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="child-account-email">Their email (optional)</Label>
+              <Input
+                id="child-account-email"
+                type="email"
+                inputMode="email"
+                autoComplete="off"
+                placeholder="child@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                We email them the invite link. Leave it empty to share the link yourself. We don&apos;t keep this address; they choose their sign-in email when they sign up.
+              </p>
+              {!emailValid && <p className="text-xs text-destructive">Enter a valid email address</p>}
+            </div>
             <ChildConsentBox id="child-account-consent" checked={consent} onCheckedChange={setConsent} />
             {under13 && (
               <p className="text-xs text-muted-foreground">
@@ -276,9 +329,9 @@ export function ChildAccountDialog({
         {!result && (
           <DialogFooter>
             <Button variant="outline" onClick={() => close(false)}>Cancel</Button>
-            <Button onClick={create} disabled={!consent || busy}>
+            <Button onClick={create} disabled={!consent || !emailValid || busy}>
               {busy ? <Spinner className="mr-2 h-4 w-4" /> : null}
-              Create invite
+              {email.trim() ? 'Create and email invite' : 'Create invite link'}
             </Button>
           </DialogFooter>
         )}

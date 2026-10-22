@@ -10,7 +10,7 @@ Togethr is for adults 18+. A child is in Togethr only because a parent or legal 
 | Date of birth (or age) | Parent adds or edits it | Used for the age rules (own login from 8, adult at 18) |
 | School, grade, emergency notes | Only if a parent adds them | Emergency notes are visible to parents only |
 | Calendar events, tasks, messages, board posts | As the family uses the app | Created by the family |
-| Email and password | Only if a parent gives the child their own login (age 8+) | No phone number is taken for a child |
+| Email and password | Only if a parent gives the child their own login (any age, by the parent's invite) | No phone number is taken for a child |
 | Location | Only if a parent turns it on | Off by default, including when a child's login is linked |
 | Device push token | Only on a device where the child signs in and allows notifications | Used to deliver notifications |
 

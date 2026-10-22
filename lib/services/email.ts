@@ -508,6 +508,48 @@ export const EMAIL_TEMPLATES = {
     }
   },
 
+  // A parent invites their child to their own account. The link carries the
+  // single-use code the parent made with their consent; nothing else about
+  // the family is in the email.
+  CHILD_ACCOUNT_INVITE: (childName: string, parentName: string, familyName: string | null, joinLink: string, code: string) => {
+    const fam = familyName ? `the ${familyName} family` : 'your family'
+    return {
+      subject: `${parentName} set up a Togethr account for you`,
+      html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">Hi ${escapeHtml(childName)},</p>
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 30px;">
+              ${escapeHtml(parentName)} set up your own Togethr account in ${escapeHtml(fam)}. Open the link on your phone and choose a password to sign in.
+            </p>
+            <div style="text-align: center;">
+              <a href="${joinLink}"
+                 style="display: inline-block; background-color: #3b4563; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
+                Create my account
+              </a>
+            </div>
+            <p style="color: #374151; font-size: 14px; line-height: 1.6; margin: 30px 0 0; text-align: center;">
+              Or enter this code in the app: <strong style="font-family: monospace; letter-spacing: 2px;">${code}</strong>
+            </p>
+            <p style="color: #9ca3af; font-size: 12px; line-height: 1.6; margin: 30px 0 0; text-align: center;">
+              The code works once and expires in 7 days. If you weren't expecting this, you can ignore it.
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+      text: `Hi ${childName},\n\n${parentName} set up your own Togethr account in ${fam}. Open this link on your phone and choose a password to sign in:\n${joinLink}\n\nOr enter this code in the app: ${code}\n\nThe code works once and expires in 7 days. If you weren't expecting this, you can ignore it.`,
+    }
+  },
+
   // --- Admin operational alerts ---------------------------------------
   // These four go to notifyAdmin()/ADMIN_EMAIL, never to a regular user.
 

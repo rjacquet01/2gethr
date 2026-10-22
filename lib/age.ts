@@ -3,7 +3,6 @@
 // and someone born on 29 February has their birthday on 1 March in years
 // that are not leap years.
 
-export const MIN_ACCOUNT_AGE = 8
 export const ADULT_AGE = 18
 export const MAX_CHILD_AGE = 25
 
@@ -95,7 +94,7 @@ export function effectiveAge(dob: string | null | undefined, storedAge: number |
 export interface ChildAgeInfo {
   dateOfBirth: string | null
   age: number | null
-  /** Old enough for their own login (8+) and doesn't have one yet. */
+  /** Doesn't have their own login yet, so a parent can invite them to one (any age). */
   canHaveAccount: boolean
   turns18On: string | null
   daysUntil18: number | null
@@ -127,7 +126,7 @@ export function childAgeInfo(row: {
   return {
     dateOfBirth: dob,
     age,
-    canHaveAccount: age !== null && age >= MIN_ACCOUNT_AGE && !row.userId,
+    canHaveAccount: !row.userId,
     turns18On: dob ? birthdayDate(dob, ADULT_AGE) : null,
     daysUntil18: dob ? daysUntilBirthday(dob, ADULT_AGE, now) : null,
     needsRoleChoice: age !== null && age >= ADULT_AGE && row.role === "CHILD" && !snoozed,

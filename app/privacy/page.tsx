@@ -39,7 +39,7 @@ export default function PrivacyPage() {
         <h1 className="text-3xl font-bold mb-8">Privacy Policy</h1>
 
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: October 19, 2026</p>
+          <p className="text-muted-foreground">Last updated: October 21, 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Who we are</h2>
@@ -156,13 +156,15 @@ export default function PrivacyPage() {
               <strong>Only a parent can add a child.</strong> A parent or legal guardian adds a child to
               their family from inside the app. A child can never create an account or join a family on
               their own, and an invite code can never create a child's account. A parent can also give a
-              child aged 8 or older their own login, using a one-time code the parent creates.
+              child their own login, using a one-time code or link the parent creates, which we can email
+              to the child for the parent.
             </p>
             <p><strong>What we collect from a child, only after a parent agrees:</strong></p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Their name and date of birth, and their school, grade or notes only if the parent adds them</li>
               <li>The calendar events, tasks, messages and board posts the family creates</li>
               <li>If the parent gives them their own login: an email address and password to sign in (no phone number)</li>
+              <li>If the parent has us email the invite: the email address the parent enters, used only to send that invite and not kept</li>
               <li>Their location only if a parent turns it on. It is off by default</li>
             </ul>
             <p>
