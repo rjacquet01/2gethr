@@ -65,6 +65,10 @@ async function main() {
     ["FROM reminder_settings WHERE user_id", (v) => { const u = db.users[v[0] as string]; return [{ email_enabled: false, sms_enabled: !!u?.sms, push_enabled: u?.push !== false }] }],
     // notifyFamilyAboutEvent's members
     ["FROM family_members fm WHERE fm.family_id", () => db.members],
+    // SMS consent (lib/sms-consent.ts): everyone here with a number agreed to texts
+    ["SELECT id, phone, sms_consent_at FROM users", (v) => Object.entries(db.users)
+      .filter(([, u]) => u.phone && String(u.phone).replace(/\D/g, "").slice(-10) === v[0])
+      .map(([id, u]) => ({ id, phone: u.phone, sms_consent_at: "2026-10-01T00:00:00Z" }))],
     // SMS quota: a paid plan with room left
     ["SELECT tier, status, trial_ends_at FROM subscriptions", () => [{ tier: "PREMIUM", status: "ACTIVE", trial_ends_at: null }]],
     ["INSERT INTO sms_usage", () => [{ count: 1 }]],

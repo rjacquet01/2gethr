@@ -39,7 +39,7 @@ real email. Read a script's header before running it.
   admin-delete-child, admin-tier-breakdown, adult-location-access, child-invite, coppa,
   dashboard-prefetch, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
   legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-link, push-ownership,
-  push-picker, quick-add, schema-snapshot, stillness, stripe-checkout-tax,
+  push-picker, quick-add, schema-snapshot, sms-consent, stillness, stripe-checkout-tax,
   stripe-webhook-events, weather-prompt, weather-route.
 - **Board suites** (board-flyer-download, board-flyers, board-limits,
   board-notify) need a disposable database in `BOARD_TEST_DATABASE_URL`.
@@ -95,6 +95,10 @@ real email. Read a script's header before running it.
   `PREMIUM_PLUS` = **Premium**. Use the display names, not the enum names.
 - Location: adults see children without sharing their own location. Adults see
   each other only after approval (`lib/location-access.ts`).
+- Texts go only to numbers whose owner agreed (`users.sms_consent_at`, `lib/sms-consent.ts`),
+  urgent alerts included; `lib/services/sms.ts` enforces it. Turning SMS on in Settings is the
+  opt-in; a new number needs it again. Bodies start with "Togethr:". Inbound STOP/HELP:
+  `/api/webhooks/twilio-sms`. Public opt-in page: `/sms-consent`.
 - Cold-start schema setup is skipped when the catalog snapshot shows it is
   already applied (`lib/schema-snapshot.ts`, the `ddl` tag).
 

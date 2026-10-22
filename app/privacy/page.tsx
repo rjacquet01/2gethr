@@ -39,7 +39,7 @@ export default function PrivacyPage() {
         <h1 className="text-3xl font-bold mb-8">Privacy Policy</h1>
 
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: October 21, 2026</p>
+          <p className="text-muted-foreground">Last updated: October 22, 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Who we are</h2>
@@ -127,6 +127,7 @@ export default function PrivacyPage() {
                   <li>Neon: database hosting</li>
                   <li>Stripe: payment processing and billing</li>
                   <li>Resend: transactional and notification email</li>
+                  <li>Twilio: sends the text messages (SMS) you turn on</li>
                   <li>Google Firebase Cloud Messaging: push notifications</li>
                   <li>Open-Meteo: weather forecasts. We send approximate coordinates of your family's saved Home place (or another saved place if the family has no place named Home), rounded to about 1 km, through our servers to retrieve the forecast shown on your calendar. No names, addresses or account details are sent.</li>
                   <li>OpenStreetMap-based services: map tiles and address lookup (the address or coordinates you look up may be sent to them)</li>
@@ -145,8 +146,34 @@ export default function PrivacyPage() {
             </ul>
           </section>
 
+          <section className="space-y-4" id="sms">
+            <h2 className="text-xl font-semibold">6. Text messages (SMS)</h2>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>We collect your mobile number only if you add it to your account.</li>
+              <li>
+                We text you only the notifications you turn on: reminders, event and task alerts, and
+                safety alerts. Message frequency varies with your settings.
+              </li>
+              <li>We do not send marketing texts.</li>
+              <li>
+                Mobile numbers and SMS consent are not sold or shared with third parties or affiliates
+                for marketing or promotional purposes. Twilio sends our texts as a service provider
+                (section 5) and uses your number only to deliver them.
+              </li>
+              <li>
+                You can opt out at any time by replying STOP to any text or by turning text messages off
+                in Settings. Reply HELP for help, or contact <Contact />.
+              </li>
+            </ul>
+            <p>
+              Program details are in the SMS Program Terms in our{' '}
+              <Link href="/terms#sms" className="text-primary hover:underline">Terms of Service</Link>, and the
+              opt-in screen is shown on our <Link href="/sms-consent" className="text-primary hover:underline">text message consent</Link> page.
+            </p>
+          </section>
+
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">6. Children's privacy</h2>
+            <h2 className="text-xl font-semibold">7. Children's privacy</h2>
             <p>
               <strong>Togethr is for adults 18 and older.</strong> Only an adult can create their own
               account, and they confirm they are 18 or older when they sign up. We do not knowingly collect
@@ -197,7 +224,7 @@ export default function PrivacyPage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">7. Security</h2>
+            <h2 className="text-xl font-semibold">8. Security</h2>
             <p>
               We use industry-standard safeguards, including encryption in transit, encrypted database
               storage, hashed passwords, role-based access controls, rate limiting and audit logging. No
@@ -207,7 +234,7 @@ export default function PrivacyPage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">8. Your choices and rights</h2>
+            <h2 className="text-xl font-semibold">9. Your choices and rights</h2>
             <p>You can:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Access and update your information in the app</li>
@@ -227,7 +254,7 @@ export default function PrivacyPage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">9. Data retention</h2>
+            <h2 className="text-xl font-semibold">10. Data retention</h2>
             <p>
               We keep your information while your account is active. After you delete your account, we
               keep it for up to 30 days for recovery and then delete it, except where we must keep
@@ -239,7 +266,7 @@ export default function PrivacyPage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">10. International users</h2>
+            <h2 className="text-xl font-semibold">11. International users</h2>
             <p>
               Togethr, LLC is based in the United States and our providers may process data in the United
               States and other countries. By using the Service you understand that your information may
@@ -248,7 +275,7 @@ export default function PrivacyPage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">11. Changes to this policy</h2>
+            <h2 className="text-xl font-semibold">12. Changes to this policy</h2>
             <p>
               We may update this Privacy Policy. When we make significant changes we will notify you by
               email or in the Service and update the date above.
@@ -256,7 +283,7 @@ export default function PrivacyPage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">12. Contact us</h2>
+            <h2 className="text-xl font-semibold">13. Contact us</h2>
             <p>
               Togethr, LLC
               <br />

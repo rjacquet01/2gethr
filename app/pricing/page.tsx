@@ -193,9 +193,10 @@ export default function PricingPage() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
             <Logo size="xs" />
-            <div className="flex items-center gap-4 sm:gap-6 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 sm:gap-x-6 text-sm text-muted-foreground">
               <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
               <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+              <Link href="/sms-consent" className="hover:text-foreground transition-colors">SMS</Link>
               <a href="mailto:admin@mytogethr.com" className="hover:text-foreground transition-colors">Contact</a>
             </div>
             <p className="text-xs sm:text-sm text-muted-foreground">

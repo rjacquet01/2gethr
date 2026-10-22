@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
             familyId: reminder.family_id,
             userId: reminder.user_id,
             to: reminder.phone,
-            body: `Togethr Reminder: ${displayTitle}`.substring(0, 160),
+            body: `Togethr: Reminder - ${displayTitle}`,
           })
         } catch (smsError) {
           console.error('[Reminder] SMS send failed (non-fatal):', smsError)

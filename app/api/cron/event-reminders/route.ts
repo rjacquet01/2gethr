@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
         if (channels.includes("sms") && us.sms_enabled && hasSms && p.phone && isTwilioConfigured()) {
           try {
             // Counts against the family's monthly SMS quota.
-            await sendSMSMetered({ familyId: event.family_id, to: p.phone, body: `Togethr Reminder: "${event.title}" starts ${timeText}${event.location ? ` at ${event.location}` : ""}.` })
+            await sendSMSMetered({ familyId: event.family_id, to: p.phone, body: `Togethr: Reminder - "${event.title}" starts ${timeText}${event.location ? ` at ${event.location}` : ""}.` })
           } catch (e) {
             console.error("[EventReminder] sms failed (non-fatal):", e)
           }

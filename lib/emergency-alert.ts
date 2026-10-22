@@ -92,7 +92,7 @@ export async function dispatchEmergencyAlert(opts: {
 
   const title = `Urgent: ${senderName} needs you`
   const body = `${senderName} needs you to call or reply right now. Tap "I'm OK" if you're safe, or call back.`
-  const smsBody = `TOGETHR ALERT: ${senderName} needs you to call or reply right now. Please contact them as soon as you see this.`
+  const smsBody = `Togethr: URGENT - ${senderName} needs you to call them right now.`
   const out: EmergencyDeliveryResult = { inApp: "failed", push: "skipped", sms: "skipped" }
   const tasks: Promise<void>[] = []
 

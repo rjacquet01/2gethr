@@ -129,8 +129,8 @@ export async function dispatchSos(input: SosInput): Promise<RecipientResult[]> {
   const inAppBody = `${senderName} pressed SOS and needs help.${note}${mapUrl ? ` Location (${locationNote}): ${mapUrl}` : " No location available - call them now."}`
   // SMS: location link first so it can never be truncated away.
   const smsBody = mapUrl
-    ? `TOGETHR SOS! ${senderName} needs help. Map (${locationNote}): ${mapUrl}${note} Call them now.`
-    : `TOGETHR SOS! ${senderName} needs help (no location available).${note} Call them now.`
+    ? `Togethr: SOS! ${senderName} needs help. Map (${locationNote}): ${mapUrl}${note} Call them now.`
+    : `Togethr: SOS! ${senderName} needs help (no location available).${note} Call them now.`
 
   const results = await Promise.all(
     recipients.map(async (r): Promise<RecipientResult> => {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
-import { getUserFromRequest } from "@/lib/auth"
+import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
+import { SMS_CONSENT_TEXT, getSmsConsent, recordSmsConsent } from "@/lib/sms-consent"
 
 // GET - Get user notification settings
 export async function GET(request: NextRequest) {
@@ -14,9 +15,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Get reminder settings (contains notification preferences)
-    const settings = await sql`
-      SELECT * FROM reminder_settings WHERE user_id = ${user.id}
-    `
+    const [settings, { consentedAt }] = await Promise.all([
+      sql`SELECT * FROM reminder_settings WHERE user_id = ${user.id}`,
+      getSmsConsent(user.id),
+    ])
 
     if (settings.length === 0) {
       // Return defaults
@@ -26,6 +28,7 @@ export async function GET(request: NextRequest) {
           emailNotifications: true,
           pushNotifications: true,
           smsNotifications: false,
+          smsConsentNeeded: false,
           eventReminders: true,
           locationAlerts: true,
           weeklyDigest: false,
@@ -41,7 +44,10 @@ export async function GET(request: NextRequest) {
       data: {
         emailNotifications: s.email_enabled ?? true,
         pushNotifications: s.push_enabled ?? true,
-        smsNotifications: s.sms_enabled ?? false,
+        // Texts only go out with consent: SMS that was on before consent was
+        // recorded shows as off until the user confirms.
+        smsNotifications: !!s.sms_enabled && !!consentedAt,
+        smsConsentNeeded: !!s.sms_enabled && !consentedAt,
         phoneAlerts: s.phone_alerts ?? false,
         eventReminders: true,
         locationAlerts: true,
@@ -81,7 +87,31 @@ export async function PATCH(request: NextRequest) {
       locationAlerts,
       weeklyDigest,
       defaultReminderMinutes,
+      smsConsent,
     } = body
+
+    // Turning texts on is the opt-in: it needs a phone number and the
+    // consent wording agreed to now (smsConsent) or before.
+    if (smsNotifications === true) {
+      const [{ consentedAt }, phoneRows] = await Promise.all([
+        getSmsConsent(user.id),
+        sql`SELECT phone FROM users WHERE id = ${user.id}`,
+      ])
+      if (!phoneRows[0]?.phone) {
+        return NextResponse.json({ success: false, error: "Add a phone number first" }, { status: 400 })
+      }
+      if (!consentedAt) {
+        if (smsConsent !== true) {
+          return NextResponse.json({ success: false, error: "Agree to receive text messages first" }, { status: 400 })
+        }
+        await recordSmsConsent(user.id)
+        await logAuditEvent(user.id, "CREATE", "sms_consent", user.id, {
+          newValue: { phone: phoneRows[0].phone, disclosure: SMS_CONSENT_TEXT, consentedAt: new Date().toISOString() },
+          ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
+          userAgent: request.headers.get("user-agent") || undefined,
+        })
+      }
+    }
 
     // Validate the optional default reminder times: a short list of
     // non-negative whole minutes (e.g. [15, 60]). Anything else is ignored

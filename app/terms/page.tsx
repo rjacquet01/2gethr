@@ -29,7 +29,7 @@ export default function TermsPage() {
         <h1 className="text-3xl font-bold mb-8">Terms of Service</h1>
         
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: October 21, 2026</p>
+          <p className="text-muted-foreground">Last updated: October 22, 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Acceptance of Terms</h2>
@@ -97,8 +97,37 @@ export default function TermsPage() {
             </p>
           </section>
 
+          <section className="space-y-4" id="sms">
+            <h2 className="text-xl font-semibold">7. SMS Program Terms</h2>
+            <ul className="list-disc pl-6 space-y-2">
+              <li><strong>Program:</strong> Togethr Notifications, operated by Togethr, LLC.</li>
+              <li>
+                <strong>What we send:</strong> the notification texts you turn on in Settings, such as
+                reminders, event and task alerts, and family safety alerts (for example SOS and arrival or
+                departure alerts). No marketing texts.
+              </li>
+              <li><strong>How you join:</strong> you add your mobile number and turn on text messages next to the consent wording shown on our <Link href="/sms-consent" className="text-primary hover:underline">text message consent</Link> page.</li>
+              <li><strong>Message frequency varies</strong> with your settings and your family&apos;s activity.</li>
+              <li><strong>Message and data rates may apply.</strong></li>
+              <li>
+                <strong>To cancel,</strong> reply STOP to any text, or turn text messages off in Settings. You
+                will get one message confirming you have opted out.
+              </li>
+              <li>
+                <strong>For help,</strong> reply HELP or email{' '}
+                <a href="mailto:admin@mytogethr.com" className="text-primary hover:underline">admin@mytogethr.com</a>.
+              </li>
+              <li>Carriers are not liable for delayed or undelivered messages.</li>
+              <li>Consent to receive texts is not a condition of any purchase.</li>
+              <li>
+                Your mobile number and consent are handled as described in our{' '}
+                <Link href="/privacy#sms" className="text-primary hover:underline">Privacy Policy</Link>.
+              </li>
+            </ul>
+          </section>
+
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">7. Prohibited Conduct</h2>
+            <h2 className="text-xl font-semibold">8. Prohibited Conduct</h2>
             <p>You agree not to:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Use the Service for any unlawful purpose</li>
@@ -110,7 +139,7 @@ export default function TermsPage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">8. Safety Features Are Not an Emergency Service</h2>
+            <h2 className="text-xl font-semibold">9. Safety Features Are Not an Emergency Service</h2>
             <p>
               <strong>Togethr is not an emergency service and does not replace calling 911 or supervising your children.</strong>{' '}
               In an emergency, call 911 or your local emergency number.
@@ -125,7 +154,7 @@ export default function TermsPage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">9. Disclaimer of Warranties</h2>
+            <h2 className="text-xl font-semibold">10. Disclaimer of Warranties</h2>
             <p>
               To the fullest extent permitted by law, the Service is provided by Togethr, LLC &quot;as is&quot; and &quot;as
               available&quot;, without warranties of any kind, express or implied, including warranties of merchantability,
@@ -135,7 +164,7 @@ export default function TermsPage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">10. Limitation of Liability</h2>
+            <h2 className="text-xl font-semibold">11. Limitation of Liability</h2>
             <p>
               To the fullest extent permitted by law, Togethr, LLC and its members, employees and agents will not be liable
               for any indirect, incidental, special, consequential or punitive damages, or for any loss of data, profits or
@@ -154,7 +183,7 @@ export default function TermsPage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">11. Governing Law</h2>
+            <h2 className="text-xl font-semibold">12. Governing Law</h2>
             <p>
               These Terms are governed by the laws of the Commonwealth of Massachusetts, without regard to its
               conflict-of-laws rules. Any dispute arising from these Terms or the Service will be brought exclusively in
@@ -164,7 +193,7 @@ export default function TermsPage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">12. Changes to Terms</h2>
+            <h2 className="text-xl font-semibold">13. Changes to Terms</h2>
             <p>
               We may update these Terms from time to time. We will notify you of significant changes via 
               email or through the Service. Continued use after changes constitutes acceptance of the new terms.
@@ -172,7 +201,7 @@ export default function TermsPage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold">13. Contact Us</h2>
+            <h2 className="text-xl font-semibold">14. Contact Us</h2>
             <p>
               Togethr, LLC
               <br />
