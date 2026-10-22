@@ -146,7 +146,7 @@ export function InviteCodesCard({ familyId, familyName }: { familyId: string; fa
 // Parents approve or decline people who joined with a parent code. Someone
 // who already belongs to another family is approved as a Guardian or a Guest
 // (default Guest), never as a Parent.
-export function JoinRequestsCard({ familyId }: { familyId: string }) {
+export function JoinRequestsCard({ familyId, onAnswered }: { familyId: string; onAnswered?: () => void }) {
   const [requests, setRequests] = useState<JoinRequest[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [grantRoles, setGrantRoles] = useState<Record<string, CrossFamilyRole>>({})
@@ -178,6 +178,8 @@ export function JoinRequestsCard({ familyId }: { familyId: string }) {
       if (!res.ok) toast.error(data.error || 'Could not save your answer')
       else if (action === 'deny') toast.success('Request declined')
       else toast.success(grantRole === 'GUARDIAN' ? 'Guardian approved' : grantRole === 'GUEST' ? 'Guest approved' : 'Parent approved')
+      // The page's member list and counts change with an approval.
+      if (res.ok) onAnswered?.()
       await load()
     } finally {
       setBusy(null)

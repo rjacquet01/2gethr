@@ -53,8 +53,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Any active family member may ask any other member for a one-time location;
-    // the recipient must approve before anything is shared. Guests can neither
-    // ask nor be asked.
+    // the recipient must approve before anything is shared, except a parent
+    // pinging their child (below). Guests can neither ask nor be asked.
     if (membership[0].role === "GUEST" || membership[0].target_role === "GUEST") return guestForbidden()
 
     // Prevent pinging yourself
@@ -111,10 +111,13 @@ export async function POST(request: NextRequest) {
         AND status = 'AWAITING_APPROVAL'
     `
 
-    // A parent/guardian (not ADULT) pinging a CHILD who is already sharing needs no
-    // approval - the family can see that child's location anyway, so this just
-    // asks their phone for a fresh fix right now (status PENDING is what the
-    // device poll looks for). Every other ping needs the recipient's approval.
+    // A parent/guardian (not ADULT) pinging their CHILD needs no approval: it
+    // asks the child's phone for a fix right now (status PENDING is what the
+    // device looks for). A sharing child's phone answers with its next live
+    // fix; with sharing off it answers with a one-time snapshot only the
+    // pinging parent sees (lib/location-schema.ts answerLocationRequests), and
+    // the child's sharing stays off. Every other ping needs the recipient's
+    // approval.
     const requesterName = await actorNameInFamily(validatedData.familyId, user, "A family member")
     if (["PARENT", "GUARDIAN", "ADMIN"].includes(requesterRole) && membership[0].target_role === "CHILD") {
       const sharing = await sql`
@@ -122,32 +125,34 @@ export async function POST(request: NextRequest) {
         WHERE family_member_id = ${validatedData.memberId} AND mode = 'ACTIVE' AND share_with_family = true
         LIMIT 1
       `
-      if (sharing.length > 0) {
-        const directId = `locreq_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-        await sql`
-          INSERT INTO location_requests (id, requester_user_id, target_user_id, family_id, status, created_at, expires_at)
-          VALUES (
-            ${directId}, ${user.id}, ${membership[0].target_user_id}, ${validatedData.familyId},
-            'PENDING', NOW(), NOW() + make_interval(mins => ${APPROVED_WINDOW_MINUTES}::int)
-          )
-        `
-        // Quiet, in-app only: no push, text or email.
-        try {
-          await insertNotification(
-            membership[0].target_user_id,
-            "Location refreshed",
-            `${requesterName} asked for your latest location. You're sharing with your family, so no approval was needed.`,
-            { subType: "LOCATION_REFRESH", requestId: directId, familyId: validatedData.familyId }
-          )
-        } catch (err) {
-          console.error("direct ping in-app notice failed (non-fatal):", err)
-        }
-        return NextResponse.json({
-          success: true,
-          message: "Asked their phone for a fresh location",
-          data: { requestId: directId, status: "PENDING" },
-        })
+      const directId = `locreq_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+      await sql`
+        INSERT INTO location_requests (id, requester_user_id, target_user_id, family_id, status, created_at, expires_at)
+        VALUES (
+          ${directId}, ${user.id}, ${membership[0].target_user_id}, ${validatedData.familyId},
+          'PENDING', NOW(), NOW() + make_interval(mins => ${APPROVED_WINDOW_MINUTES}::int)
+        )
+      `
+      // Quiet, in-app only: no push, text or email. The child always knows.
+      try {
+        await insertNotification(
+          membership[0].target_user_id,
+          sharing.length > 0 ? "Location refreshed" : "Location checked",
+          sharing.length > 0
+            ? `${requesterName} asked for your latest location. You're sharing with your family, so no approval was needed.`
+            : `${requesterName} checked where you are. Only they see this one location; your sharing is still off.`,
+          { subType: "LOCATION_REFRESH", requestId: directId, familyId: validatedData.familyId }
+        )
+      } catch (err) {
+        console.error("direct ping in-app notice failed (non-fatal):", err)
       }
+      return NextResponse.json({
+        success: true,
+        message: sharing.length > 0
+          ? "Asked their phone for a fresh location"
+          : "Asked their phone for their location. It appears on your map when their phone answers.",
+        data: { requestId: directId, status: "PENDING" },
+      })
     }
 
     // The target must approve before their device shares anything. Status stays
@@ -221,8 +226,15 @@ export async function GET(request: NextRequest) {
     // ?awaiting=1 -> requests this user still has to approve or deny.
     // default    -> approved requests the device should answer with a fresh fix.
     const status = new URL(request.url).searchParams.get("awaiting") ? "AWAITING_APPROVAL" : "PENDING"
+    // `sharing`: whether this user shares in the request's family. A device
+    // that isn't sharing there answers with a one-time snapshot instead.
     const requests = await sql`
-      SELECT lr.*, u.first_name, u.last_name
+      SELECT lr.*, u.first_name, u.last_name,
+        EXISTS (
+          SELECT 1 FROM family_members fm JOIN location_settings ls ON ls.family_member_id = fm.id
+          WHERE fm.user_id = lr.target_user_id AND fm.family_id = lr.family_id AND fm.is_active = true
+            AND ls.mode = 'ACTIVE' AND ls.share_with_family = true
+        ) AS sharing
       FROM location_requests lr
       JOIN users u ON lr.requester_user_id = u.id
       WHERE lr.target_user_id = ${user.id}
@@ -245,6 +257,7 @@ export async function GET(request: NextRequest) {
         requesterId: r.requester_user_id,
         requesterName: await actorNameInFamily(r.family_id as string, { id: r.requester_user_id as string, firstName: r.first_name as string | null }, 'Family Member'),
         familyId: r.family_id,
+        answerWith: r.sharing === true ? "live" : "snapshot",
         createdAt: r.created_at,
         expiresAt: r.expires_at,
       })))

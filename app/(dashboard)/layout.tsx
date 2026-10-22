@@ -24,6 +24,7 @@ import { FavoritesDropdown } from '@/components/favorites-dropdown'
 import { CalendarAutoSync } from '@/components/calendar-auto-sync'
 import { TimezoneSync } from '@/components/timezone-sync'
 import { PresenceHeartbeat } from '@/components/presence-heartbeat'
+import { PingAnswerer } from '@/components/ping-answerer'
 import { ExistingUserConfirmations } from '@/components/existing-user-confirmations'
 import { Logo, LogoIcon } from '@/components/logo'
 import { FamilySwitcher } from '@/components/family-switcher'
@@ -138,6 +139,7 @@ export default function DashboardLayout({
       <CalendarAutoSync />
       <TimezoneSync />
       <PresenceHeartbeat />
+      <PingAnswerer />
       <ExistingUserConfirmations />
       {/* Desktop Sidebar */}
       <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 border-r border-sidebar-border bg-sidebar lg:block">

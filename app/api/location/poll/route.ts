@@ -7,6 +7,7 @@ import { guestForbidden } from "@/lib/permissions"
 // Cheap check the Android background service makes when nothing else has
 // reached the server for a while (app 1.2.5+: 2 min, 5 min paused; older: 45 s):
 // "should I be sharing, and has a parent asked for my location right now?"
+// (requestPending can be true while sharing is false: answer it with one fix.)
 // Authenticated with the same scoped device token as POST /api/location.
 export async function GET(request: NextRequest) {
   const token = request.headers.get("x-device-token")
@@ -23,13 +24,14 @@ export async function GET(request: NextRequest) {
   `
   const s = rows[0]
   const sharing = !!s && s.share_with_family === true && s.mode === "ACTIVE"
+  // Also while sharing is off: a parent's ping to their child needs no
+  // approval, and a fix sent now answers it as a one-time snapshot
+  // (POST /api/location) without turning sharing on.
   let requestPending = false
-  if (sharing) {
-    try {
-      requestPending = await hasPendingLocationRequest(info.userId)
-    } catch (err) {
-      console.error("poll pending check failed:", err)
-    }
+  try {
+    requestPending = await hasPendingLocationRequest(info.userId)
+  } catch (err) {
+    console.error("poll pending check failed:", err)
   }
   return NextResponse.json({
     success: true,

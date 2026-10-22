@@ -31,33 +31,7 @@ import { MemberAvatar } from '@/components/member-avatar'
 import { AccountStatusBadge } from '@/components/account-status-badge'
 import { cn } from '@/lib/utils'
 import { StillnessTracker, MAX_QUIET_MS } from '@/lib/stillness'
-
-// High-accuracy GPS often times out on laptops/desktops and indoors. Try it
-// first, then fall back to a coarser (Wi-Fi/cell/IP) fix so sharing still works.
-// Callers that don't need GPS (a still phone's heartbeat) can ask for a
-// low-accuracy fix and accept a recently cached one via `maximumAge`.
-function getPositionWithFallback(
-  onSuccess: PositionCallback,
-  onError: PositionErrorCallback,
-  opts: { highAccuracy?: boolean; maximumAge?: number } = {}
-) {
-  const { highAccuracy = true, maximumAge = 0 } = opts
-  navigator.geolocation.getCurrentPosition(
-    onSuccess,
-    (err) => {
-      if (err.code === err.PERMISSION_DENIED) {
-        onError(err)
-        return
-      }
-      navigator.geolocation.getCurrentPosition(onSuccess, onError, {
-        enableHighAccuracy: false,
-        timeout: 30000,
-        maximumAge: Math.max(maximumAge, 5 * 60 * 1000),
-      })
-    },
-    { enableHighAccuracy: highAccuracy, timeout: highAccuracy ? 12000 : 20000, maximumAge }
-  )
-}
+import { getPositionWithFallback } from '@/lib/geo-position'
 
 interface FamilyMemberLocation {
   memberId: string
@@ -136,7 +110,7 @@ async function currentBatteryLevel(): Promise<number | null> {
 // Guests don't get family location: show a notice instead of mounting the
 // page (whose hooks would call the location APIs).
 export default function LocationPage() {
-  const { isGuest, isChild, isLoading } = useMyRole()
+  const { isGuest, isChild, isSupervisor, isLoading } = useMyRole()
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -145,10 +119,10 @@ export default function LocationPage() {
     )
   }
   if (isGuest) return <GuestAreaNotice />
-  return <LocationPageContent isChild={isChild} />
+  return <LocationPageContent isChild={isChild} isSupervisor={isSupervisor} />
 }
 
-function LocationPageContent({ isChild }: { isChild: boolean }) {
+function LocationPageContent({ isChild, isSupervisor }: { isChild: boolean; isSupervisor: boolean }) {
   const { families, isLoading: familiesLoading } = useFamilies()
   // Use the first family as the selected family (primary family)
   const selectedFamily = families[0] || null
@@ -381,7 +355,7 @@ function LocationPageContent({ isChild }: { isChild: boolean }) {
       if (res.ok) {
         toast.success(data?.data?.status === 'AWAITING_APPROVAL'
           ? `Asked ${memberName} to approve - you'll be notified when they respond`
-          : `Location request sent to ${memberName}`)
+          : data?.message || `Location request sent to ${memberName}`)
       } else {
         toast.error(data.error || 'Failed to request location')
       }
@@ -1291,7 +1265,11 @@ function LocationPageContent({ isChild }: { isChild: boolean }) {
                   <MemberAvatar name={p.name} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{p.name}</p>
-                    <p className="text-xs text-muted-foreground">They must approve before anything is shared</p>
+                    <p className="text-xs text-muted-foreground">
+                      {isSupervisor && p.role === 'CHILD'
+                        ? 'Ping to see where they are now, no approval needed'
+                        : 'They must approve before anything is shared'}
+                    </p>
                   </div>
                   <Button
                     size="sm"
@@ -1305,7 +1283,7 @@ function LocationPageContent({ isChild }: { isChild: boolean }) {
                     ) : (
                       <>
                         <Crosshair className="mr-1 h-3 w-3" />
-                        Ask
+                        {isSupervisor && p.role === 'CHILD' ? 'Ping' : 'Ask'}
                       </>
                     )}
                   </Button>

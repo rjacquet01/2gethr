@@ -37,7 +37,7 @@ real email. Read a script's header before running it.
 - **Safe, with no database and no network.** These use pure logic, or the
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
   admin-delete-child, admin-tier-breakdown, adult-location-access, coppa,
-  dashboard-prefetch, existing-user-confirmations, geofence, launch-security,
+  dashboard-prefetch, existing-user-confirmations, geofence, kid-ping, launch-security,
   legal-ping, location-dedupe, location-share-now, member-names, push-ownership,
   push-picker, schema-snapshot, stillness, stripe-checkout-tax,
   stripe-webhook-events, weather-prompt, weather-route.
