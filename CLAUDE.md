@@ -38,7 +38,7 @@ real email. Read a script's header before running it.
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
   admin-delete-child, admin-tier-breakdown, adult-location-access, child-invite, coppa,
   dashboard-prefetch, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
-  legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, push-ownership,
+  legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-link, push-ownership,
   push-picker, schema-snapshot, stillness, stripe-checkout-tax,
   stripe-webhook-events, weather-prompt, weather-route.
 - **Board suites** (board-flyer-download, board-flyers, board-limits,

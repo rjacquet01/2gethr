@@ -59,6 +59,7 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import { format, parseISO, isPast } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { FamilyNameTag } from '@/components/family-name-tag'
 
 type TaskT = ReturnType<typeof useTasks>['tasks'][number]
 type Action = 'start' | 'complete' | 'approve' | 'reject' | 'hold' | 'resume' | 'pending' | 'cancel' | 'archive'
@@ -442,7 +443,7 @@ export default function TasksPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground sm:text-2xl">Tasks</h1>
-          <p className="text-sm text-muted-foreground">{primaryFamily.name}</p>
+          <FamilyNameTag name={primaryFamily.name} className="mt-1" />
         </div>
         <Button asChild size="sm" className="self-start sm:self-auto">
           <Link href="/tasks/new">

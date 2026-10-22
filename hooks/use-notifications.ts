@@ -10,7 +10,8 @@ export interface Notification {
   title: string
   body: string
   data: Record<string, unknown>
-  read: boolean
+  /** As the API sends it (GET /api/notifications). */
+  isRead: boolean
   createdAt: string
 }
 

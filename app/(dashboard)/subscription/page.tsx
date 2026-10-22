@@ -38,6 +38,7 @@ import {
 import { cn } from '@/lib/utils'
 import { usePurchaseUi } from '@/hooks/use-purchase-ui'
 import { getTierDefinition, SUBSCRIPTION_TIERS, annualSavingsPercent, TRIAL_DAYS, PRICE_TAX_NOTE } from '@/lib/subscription-tiers'
+import { FamilyNameTag } from '@/components/family-name-tag'
 
 export default function SubscriptionPage() {
   const router = useRouter()
@@ -169,7 +170,7 @@ export default function SubscriptionPage() {
     <div className="space-y-4 pb-20 sm:space-y-5 lg:pb-0">
       <div>
         <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Subscription</h1>
-        <p className="text-sm text-muted-foreground">{primaryFamily.name}</p>
+        <FamilyNameTag name={primaryFamily.name} className="mt-1" />
       </div>
 
       {!isOwner && (

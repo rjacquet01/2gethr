@@ -50,6 +50,7 @@ import {
   DashboardActivityPanel,
   DashboardShortcuts,
 } from '@/components/dashboard-widgets'
+import { FamilyNameTag } from '@/components/family-name-tag'
 
 export default function DashboardPage() {
   const { families, isLoading: familiesLoading } = useFamilies()
@@ -256,7 +257,7 @@ export default function DashboardPage() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground">Home</h1>
-          <p className="text-sm text-muted-foreground">{primaryFamily.name}</p>
+          <FamilyNameTag name={primaryFamily.name} className="mt-1" />
         </div>
         <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 py-1">
           <Button variant="outline" size="sm" asChild className="shrink-0">
