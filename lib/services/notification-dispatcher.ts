@@ -6,7 +6,7 @@
 import { sql } from '@/lib/db'
 import { sendSMSMetered, SMS_TEMPLATES, isTwilioConfigured } from './sms'
 import { sendEmail, EMAIL_TEMPLATES, isResendConfigured } from './email'
-import { sendPushToUser, isFirebaseConfigured } from './push'
+import { isFirebaseConfigured } from './push'
 import { createNotification } from '../notifications'
 
 export type NotificationChannel = 'in_app' | 'push' | 'email' | 'sms'
@@ -115,33 +115,30 @@ export async function dispatchNotification(
     // Determine which channels to use
     const channels = request.channels || ['in_app', 'push', 'email']
 
-    // 1. In-App Notification (always try)
-    if (channels.includes('in_app') && prefs.channels.inApp) {
+    // 1+2. In-app and push, in ONE createNotification call with exactly the
+    // channels requested and allowed. (createNotification already pushes:
+    // calling it and then sendPushToUser as well pushed every notification
+    // twice, and pushed even when the request left push out.) Email and SMS
+    // stay below with this dispatcher's templates, so each fires once.
+    const inAppAndPush: NotificationChannel[] = []
+    if (channels.includes('in_app') && prefs.channels.inApp) inAppAndPush.push('in_app')
+    const wantsPush = channels.includes('push') && prefs.channels.push && isFirebaseConfigured()
+    if (wantsPush) inAppAndPush.push('push')
+    if (inAppAndPush.length > 0) {
       try {
-        await createNotification({
+        const created = await createNotification({
           userId: request.userId,
           type: request.type as Parameters<typeof createNotification>[0]['type'],
           title: request.title,
           body: request.body,
           data: request.data,
+          channels: inAppAndPush,
         })
-        result.inApp = true
+        result.inApp = created.success && inAppAndPush.includes('in_app')
+        // createNotification doesn't report per-device counts; a push was attempted.
+        if (wantsPush && created.success) result.push = { sent: 1, failed: 0 }
       } catch (error) {
-        result.errors.push(`In-app: ${error instanceof Error ? error.message : 'Failed'}`)
-      }
-    }
-
-    // 2. Push Notification
-    if (channels.includes('push') && prefs.channels.push && isFirebaseConfigured()) {
-      try {
-        const pushResult = await sendPushToUser(request.userId, {
-          title: request.title,
-          body: request.body,
-          data: request.data as Record<string, string>,
-        })
-        result.push = pushResult
-      } catch (error) {
-        result.errors.push(`Push: ${error instanceof Error ? error.message : 'Failed'}`)
+        result.errors.push(`In-app/push: ${error instanceof Error ? error.message : 'Failed'}`)
       }
     }
 

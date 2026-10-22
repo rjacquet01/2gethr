@@ -138,10 +138,23 @@ export function isVapidConfigured(): boolean {
  * Send a push message to a single browser subscription using the standard
  * Web Push protocol (VAPID + aes128gcm encryption).
  */
+/** Seconds a push service may hold a message for an offline browser. */
+export const PUSH_TTL_DEFAULT = 900 // reminders, events, tasks: stale after 15 min
+export const PUSH_TTL_URGENT = 3600 // SOS, emergency, geofence/location alerts
+
+/** A Topic header value: URL-safe base64 characters only, at most 32. */
+export function pushTopic(key: string | undefined | null): string | null {
+  const t = String(key ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32)
+  return t || null
+}
+
 export async function sendWebPush(
   subscription: WebPushSubscription,
   payload: Record<string, unknown>,
-  options: { urgent?: boolean } = {}
+  // ttl: how long the push service may queue it for an offline browser (a
+  //   closed Chrome used to get a day's backlog in one burst at startup).
+  // topic: a queued message with the same topic is replaced, not stacked.
+  options: { urgent?: boolean; ttl?: number; topic?: string | null } = {}
 ): Promise<WebPushResult> {
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
   const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY
@@ -162,13 +175,16 @@ export async function sendWebPush(
     )
 
     const authHeader = getVapidAuthHeader(endpointOrigin, subject, vapidPublicKey, vapidPrivateKey)
+    const ttl = Math.max(0, Math.round(options.ttl ?? (options.urgent ? PUSH_TTL_URGENT : PUSH_TTL_DEFAULT)))
+    const topic = pushTopic(options.topic)
 
     const response = await fetch(subscription.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/octet-stream',
         'Content-Encoding': 'aes128gcm',
-        'TTL': '86400',
+        'TTL': String(ttl),
+        ...(topic ? { 'Topic': topic } : {}),
         // Urgency: high lets the push service wake a sleeping (Doze) phone
         // instead of batching the message for later. Emergencies only.
         ...(options.urgent ? { 'Urgency': 'high' } : {}),
