@@ -1,5 +1,5 @@
 import { sql, type Row } from '@/lib/db'
-import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
+import { sendPushToUser, isFirebaseConfigured, notificationDedupeKey } from "@/lib/services/push"
 import { sendEmail, isResendConfigured, EMAIL_TEMPLATES } from "@/lib/services/email"
 import { sendSMSMetered, isTwilioConfigured } from "@/lib/services/sms"
 
@@ -90,6 +90,22 @@ export async function createNotification({
     const wantsSms = channels ? channels.includes('sms') : sendSms
     const wantsEmail = channels ? channels.includes('email') : sendEmailFlag
 
+    // One message per channel per event: the same notification (recipient,
+    // type, title, body and data) made again within a minute - a double call,
+    // a retried request - is not sent again on any channel. Crons keep their
+    // own exactly-once markers (event reminders: the notifications row;
+    // process-reminders: sent_at).
+    const dataJson = JSON.stringify(data)
+    const recent = await sql`
+      SELECT id FROM notifications
+      WHERE user_id = ${userId} AND type = ${type} AND title = ${title} AND body = ${body}
+        AND data = ${dataJson}::jsonb AND created_at > NOW() - INTERVAL '60 seconds'
+      LIMIT 1
+    `
+    if (recent.length > 0) {
+      return { success: true, notificationId: recent[0].id as string }
+    }
+
     console.log('[Notification] Creating notification:', { userId, type, title })
 
     if (wantsInApp) {
@@ -145,8 +161,13 @@ export async function createNotification({
               pushData[key] = String(value)
             }
           }
+          // Same notification = same key: the push Topic (a queued copy is
+          // replaced) and the service worker's tag (a copy isn't shown twice).
+          const dedupeKey = notificationDedupeKey({ userId, type, title, body, data })
+          pushData.dedupeKey = dedupeKey
+          pushData.notificationId = notificationId
 
-          await sendPushToUser(userId, { title, body, data: pushData, clickAction })
+          await sendPushToUser(userId, { title, body, data: pushData, clickAction, topic: dedupeKey })
         }
       } catch (pushError) {
         console.error('[Notification] Push send failed (non-fatal):', pushError)
@@ -162,7 +183,7 @@ export async function createNotification({
         WHERE u.id = ${userId}
       `
       if (userSmsPrefs.length > 0 && userSmsPrefs[0].phone && (force || userSmsPrefs[0].sms_enabled)) {
-        await sendSmsNotification(userSmsPrefs[0].phone, `FamilyApp: ${title} - ${body}`, {
+        await sendSmsNotification(userSmsPrefs[0].phone, `Togethr: ${title} - ${body}`, {
           familyId: typeof data.familyId === 'string' ? data.familyId : null,
           userId,
         })
@@ -328,55 +349,32 @@ export async function notifyFamilyAboutEvent(
 ): Promise<void> {
   // Notify ALL active family members with linked accounts - except guests,
   // who only hear about events they are invited to (via their own invitation).
-  let members
-  if (excludeUserId) {
-    members = await sql`
-      SELECT fm.user_id, u.phone
-      FROM family_members fm
-      LEFT JOIN users u ON fm.user_id = u.id
-      WHERE fm.family_id = ${familyId}
-        AND fm.is_active = true
-        AND fm.user_id IS NOT NULL
-        AND fm.role <> 'GUEST'
-        AND fm.user_id != ${excludeUserId}
-    `
-  } else {
-    members = await sql`
-      SELECT fm.user_id, u.phone
-      FROM family_members fm
-      LEFT JOIN users u ON fm.user_id = u.id
-      WHERE fm.family_id = ${familyId}
-        AND fm.is_active = true
-        AND fm.user_id IS NOT NULL
-        AND fm.role <> 'GUEST'
-    `
-  }
-  
+  const members = await sql`
+    SELECT fm.user_id
+    FROM family_members fm
+    WHERE fm.family_id = ${familyId}
+      AND fm.is_active = true
+      AND fm.user_id IS NOT NULL
+      AND fm.role <> 'GUEST'
+      AND (${excludeUserId ?? null}::text IS NULL OR fm.user_id <> ${excludeUserId ?? null})
+  `
+
   for (const member of members) {
     if (skipUserIds.includes(member.user_id)) continue
-    // Create in-app notification
+    // One call per member, one message per channel: createNotification sends
+    // the text too (when the creator picked SMS or picked nothing), gated by
+    // the member's sms_enabled and the family's plan/quota. (A separate SMS
+    // send here used to text everyone a second time, ignoring sms_enabled.)
     await createNotification({
       userId: member.user_id,
       type: 'EVENT_CREATED',
       title: 'New Family Event',
       body: `${creatorName} created a new event: "${eventTitle}"`,
-      data: { eventId, familyId, sendSms: !!member.phone },
+      data: { eventId, familyId },
       sendEmail: true, // Will check user preferences before sending
+      sendSms: true, // Will check sms_enabled, phone and quota before sending
       channels
     })
-
-    // Send SMS if user has phone number. Gated on the channel override
-    // too (when one is given, 'sms' must be in it), on top of the
-    // existing phone-number check - this direct send bypasses
-    // createNotification's own sms_enabled lookup, which is a pre-existing
-    // quirk left as-is here rather than widened while adding the picker.
-    if (member.phone && (!channels || channels.includes('sms'))) {
-      await sendSmsNotification(
-        member.phone,
-        `FamilyApp: ${creatorName} created a new event: "${eventTitle}". Open the app to view details.`,
-        { familyId, userId: member.user_id }
-      )
-    }
   }
 }
 

@@ -38,7 +38,7 @@ real email. Read a script's header before running it.
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
   admin-delete-child, admin-tier-breakdown, adult-location-access, child-invite, coppa,
   dashboard-prefetch, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
-  legal-ping, location-dedupe, location-share-now, member-names, push-ownership,
+  legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, push-ownership,
   push-picker, schema-snapshot, stillness, stripe-checkout-tax,
   stripe-webhook-events, weather-prompt, weather-route.
 - **Board suites** (board-flyer-download, board-flyers, board-limits,
@@ -46,7 +46,7 @@ real email. Read a script's header before running it.
   `scripts/board-test-db.ts` reads it from `.env.test.local` automatically, which points
   at the Neon `board-test` branch. It refuses any host found in `.env` or `.env.local`.
 - **Real database, dev branch only:** data-export, retention-purge,
-  refresh-rotation. Run them only when asked. `scripts/dev-db.ts` takes
+  refresh-rotation, and `scripts/cleanup-push-tokens.ts` (dry run unless `--apply`). Run them only when asked. `scripts/dev-db.ts` takes
   DATABASE_URL from `.env.local` only and never falls back to `.env`. It refuses
   to run when `.env.local` is missing or points at a production database.
 - **Never run these:** email, weekly-digest, welcome-invite. They send real email.

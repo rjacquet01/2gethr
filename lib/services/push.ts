@@ -25,8 +25,9 @@
  *   a generic support address.
  */
 
+import { createHash } from 'crypto'
 import { sql } from '@/lib/db'
-import { sendWebPush, isVapidConfigured, type WebPushSubscription } from './web-push-vapid'
+import { sendWebPush, isVapidConfigured, PUSH_TTL_DEFAULT, PUSH_TTL_URGENT, type WebPushSubscription } from './web-push-vapid'
 
 interface PushPayload {
   title: string
@@ -37,6 +38,39 @@ interface PushPayload {
   clickAction?: string
   /** Emergency delivery: Urgency: high header + priority flag for the service worker. */
   urgent?: boolean
+  /** Seconds the push service may queue it (default by type: see pushTtlForType). */
+  ttl?: number
+  /** Same topic = a queued copy is replaced, not stacked (lib/services/web-push-vapid.ts). */
+  topic?: string
+}
+
+// SOS, emergencies and location/geofence alerts stay deliverable for an hour;
+// everything else is stale after 15 minutes, so nothing from yesterday turns
+// up when a closed browser comes back.
+export function pushTtlForType(type: string | undefined | null, urgent = false): number {
+  if (urgent) return PUSH_TTL_URGENT
+  return /SOS|EMERGENCY|GEOFENCE|LOCATION/i.test(String(type ?? '')) ? PUSH_TTL_URGENT : PUSH_TTL_DEFAULT
+}
+
+/**
+ * The same notification (recipient, type, text, data) always gets the same
+ * short key: used as the push Topic and the service worker's tag, so copies
+ * replace each other instead of stacking. URL-safe base64, 32 characters.
+ */
+export function notificationDedupeKey(parts: { userId: string; type: string; title: string; body: string; data?: unknown }): string {
+  return createHash('sha256')
+    .update(JSON.stringify([parts.userId, parts.type, parts.title, parts.body, parts.data ?? null]))
+    .digest('base64url')
+    .slice(0, 32)
+}
+
+/** The browser endpoint inside a stored subscription (the token is its JSON); the raw token otherwise. */
+function endpointOf(token: string): string {
+  try {
+    const p = JSON.parse(token)
+    if (p && typeof p.endpoint === 'string') return p.endpoint
+  } catch {}
+  return token
 }
 
 interface PushResult {
@@ -102,7 +136,11 @@ export async function sendPushNotification(
     badge: payload.badge || '/icons/togethr-icon-blue.png',
     url: payload.clickAction || '/',
     ...(payload.urgent ? { priority: 'high' } : {}),
-  }, { urgent: payload.urgent })
+  }, {
+    urgent: payload.urgent,
+    ttl: payload.ttl ?? pushTtlForType(payload.data?.type, payload.urgent),
+    topic: payload.topic ?? payload.data?.dedupeKey,
+  })
 
   if (!result.success) {
     console.error('Web push error:', result.error)
@@ -120,11 +158,22 @@ export async function sendPushToUser(
   payload: PushPayload
 ): Promise<{ sent: number; failed: number }> {
   // Get user's push tokens from database
-  const tokens = await sql`
+  const rows = await sql`
     SELECT token, platform FROM push_tokens
     WHERE user_id = ${userId}
       AND is_active = true
+    ORDER BY updated_at DESC NULLS LAST
   `
+
+  // One send per browser: two rows for the same endpoint (an old and a
+  // re-subscribed copy) would otherwise buzz the same device twice.
+  const seen = new Set<string>()
+  const tokens = rows.filter((r) => {
+    const ep = endpointOf(r.token as string)
+    if (seen.has(ep)) return false
+    seen.add(ep)
+    return true
+  })
 
   if (tokens.length === 0) {
     return { sent: 0, failed: 0 }
@@ -195,6 +244,17 @@ export async function registerPushToken(
         is_active = true,
         updated_at = NOW()
     `
+    // One browser = one active token: a re-subscription (or the same
+    // browser's older subscription) is retired, so this person's pushes go
+    // to it once. "Same browser" is the same platform and browser label
+    // (e.g. "Chrome on Windows"; the full user agent isn't stored).
+    if (platform === 'web' && deviceInfo.browser) {
+      await sql`
+        UPDATE push_tokens SET is_active = false, updated_at = NOW()
+        WHERE user_id = ${userId} AND platform = ${platform} AND is_active = true
+          AND token <> ${token} AND device_info->>'browser' = ${deviceInfo.browser}
+      `
+    }
     return true
   } catch (error) {
     console.error('Failed to register push token:', error)
