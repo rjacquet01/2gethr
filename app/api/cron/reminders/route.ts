@@ -217,7 +217,7 @@ export async function GET(request: NextRequest) {
             await sendSMSMetered({
               familyId: event.family_id,
               to: participant.phone,
-              body: `Togethr Reminder: "${event.title}" starts ${timeText}${event.location ? ` at ${event.location}` : ''}.`,
+              body: `Togethr: Reminder - "${event.title}" starts ${timeText}${event.location ? ` at ${event.location}` : ''}.`,
             })
           } catch (smsError) {
             console.error('[Reminder] SMS send failed (non-fatal):', smsError)

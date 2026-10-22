@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { SmsConsentText } from '@/components/sms-consent-text'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -101,6 +102,9 @@ export default function SettingsPage() {
     language: 'en',
   })
   const [settingsLoading, setSettingsLoading] = useState(true)
+  // SMS was on before consent was recorded (or the number changed): texts
+  // are paused until the user turns text messages on next to the wording.
+  const [smsConsentNeeded, setSmsConsentNeeded] = useState(false)
   // Default reminder times (minutes before an event) that pre-fill the
   // reminders on every new event. Saved to reminder_settings.default_reminder_minutes.
   const [defaultReminders, setDefaultReminders] = useState<number[]>([15])
@@ -128,6 +132,7 @@ export default function SettingsPage() {
               phoneAlerts: data.data.phoneAlerts ?? false,
               weeklyDigest: data.data.weeklyDigest ?? false,
             }))
+            setSmsConsentNeeded(!!data.data.smsConsentNeeded)
             if (Array.isArray(data.data.defaultReminderMinutes)) {
               setDefaultReminders(data.data.defaultReminderMinutes)
             }
@@ -215,14 +220,21 @@ export default function SettingsPage() {
             smsNotifications: key === 'smsNotifications' ? newValue : settings.smsNotifications,
             phoneAlerts: key === 'phoneAlerts' ? newValue : settings.phoneAlerts,
             weeklyDigest: key === 'weeklyDigest' ? newValue : settings.weeklyDigest,
+            // The text messages switch sits next to the consent wording:
+            // turning it on is the agreement.
+            smsConsent: key === 'smsNotifications' && newValue ? true : undefined,
           }),
         })
-        if (!res.ok) throw new Error('Failed to save setting')
-        toast.success('Setting updated')
-      } catch {
+        if (!res.ok) {
+          const data = await res.json().catch(() => null)
+          throw new Error(data?.error || 'Failed to save setting')
+        }
+        if (key === 'smsNotifications') setSmsConsentNeeded(false)
+        toast.success(key === 'smsNotifications' ? (newValue ? 'Text messages on' : 'Text messages off') : 'Setting updated')
+      } catch (e) {
         // Revert on error
         setSettings(prev => ({ ...prev, [key]: !newValue }))
-        toast.error('Failed to save setting')
+        toast.error(e instanceof Error ? e.message : 'Failed to save setting')
       }
     }
   }
@@ -348,6 +360,12 @@ export default function SettingsPage() {
       }
 
       toast.success('Profile updated successfully')
+      // Consent to texts was for the old number (the server cleared it).
+      const digits = (s?: string | null) => (s || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '')
+      if (digits(profile.phone) !== digits(user?.phone) && settings.smsNotifications) {
+        setSettings((prev) => ({ ...prev, smsNotifications: false }))
+        setSmsConsentNeeded(!!profile.phone)
+      }
       mutate() // Refresh user data
     } catch {
       toast.error('Failed to update profile')
@@ -582,6 +600,25 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground">
                   {hasSmsFeature ? 'Used for SMS notifications and alerts.' : 'Add a number now; SMS alerts need the Plus or Premium plan.'}
                 </p>
+                {hasSmsFeature && (
+                  <div className="mt-2 space-y-1.5 rounded-lg border p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="sms-consent-profile" className="text-sm font-medium">Text messages</Label>
+                      <Switch
+                        id="sms-consent-profile"
+                        checked={settings.smsNotifications}
+                        onCheckedChange={() => handleToggle('smsNotifications')}
+                        disabled={!user?.phone || settingsLoading}
+                        aria-describedby="sms-consent-profile-text"
+                      />
+                    </div>
+                    {smsConsentNeeded && (
+                      <p className="text-xs text-amber-600">Texts are paused. Turn text messages on to confirm you agree to receive them.</p>
+                    )}
+                    {!user?.phone && <p className="text-xs text-muted-foreground">Save your phone number first.</p>}
+                    <SmsConsentText id="sms-consent-profile-text" />
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex justify-end">
@@ -603,6 +640,7 @@ export default function SettingsPage() {
             <Row label="Push" htmlFor="push-notifications" hint="Notifications on this device">
               <Switch id="push-notifications" checked={settings.pushNotifications} onCheckedChange={() => handleToggle('pushNotifications')} />
             </Row>
+            <div>
             <Row
               label="SMS"
               htmlFor="sms-notifications"
@@ -610,8 +648,10 @@ export default function SettingsPage() {
               hint={
                 !hasSmsFeature ? (
                   'Upgrade to Plus or Premium for text alerts'
-                ) : !profile.phone ? (
+                ) : !user?.phone ? (
                   <span className="text-amber-600">Add a phone number in Profile first</span>
+                ) : smsConsentNeeded ? (
+                  <span className="text-amber-600">Texts are paused. Turn SMS on to confirm you agree to receive them.</span>
                 ) : smsUsage ? (
                   <span className={smsUsage.used >= smsUsage.quota ? 'text-amber-600' : undefined}>
                     SMS this month: {smsUsage.used} of {smsUsage.quota}
@@ -628,9 +668,11 @@ export default function SettingsPage() {
                   <Link href="/subscription">Upgrade</Link>
                 </Button>
               ) : (
-                <Switch id="sms-notifications" checked={settings.smsNotifications} onCheckedChange={() => handleToggle('smsNotifications')} disabled={!profile.phone} />
+                <Switch id="sms-notifications" checked={settings.smsNotifications} onCheckedChange={() => handleToggle('smsNotifications')} disabled={!user?.phone} aria-describedby="sms-consent-notifications-text" />
               )}
             </Row>
+            {hasSmsFeature && <SmsConsentText id="sms-consent-notifications-text" className="-mt-1 pb-3" />}
+            </div>
             <Row label="Event reminders" htmlFor="event-reminders" hint="Remind me before events start">
               <Switch id="event-reminders" checked={settings.eventReminders} onCheckedChange={() => handleToggle('eventReminders')} />
             </Row>

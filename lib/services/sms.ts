@@ -10,16 +10,34 @@
 import { sql } from '@/lib/db'
 import { ddl } from '../schema-snapshot'
 import { getTierDefinition, TRIAL_SMS_QUOTA } from '@/lib/subscription-tiers'
+import { formatSmsBody, hasSmsConsent, toE164 } from '@/lib/sms-consent'
 
 interface SMSPayload {
   to: string
   body: string
+  /** A safety alert (SOS, emergency): never cut to one segment. */
+  keepWhole?: boolean
 }
 
 interface SMSResult {
   success: boolean
   messageId?: string
   error?: string
+  /** Set when the text was deliberately not sent. */
+  skipped?: 'quota' | 'no-family' | 'consent'
+}
+
+// The SOS / emergency retry loops treat this as permanent ("opted").
+const NO_CONSENT: SMSResult = { success: false, skipped: 'consent', error: 'Not opted in to texts' }
+
+/** Has the owner of this number agreed to texts? A failed check counts as no. */
+async function consented(to: string): Promise<boolean> {
+  try {
+    return await hasSmsConsent(to)
+  } catch (error) {
+    console.error('[SMS] Consent check failed - not sent:', error)
+    return false
+  }
 }
 
 /**
@@ -34,29 +52,27 @@ export function isTwilioConfigured(): boolean {
 }
 
 /**
- * Send SMS via Twilio
+ * Send SMS via Twilio, only to a number whose owner agreed to texts
+ * (lib/sms-consent.ts). The body starts with "Togethr:" and fits one
+ * segment where possible.
  */
-export async function sendSMS({ to, body }: SMSPayload): Promise<SMSResult> {
+export async function sendSMS({ to, body, keepWhole }: SMSPayload): Promise<SMSResult> {
   if (!isTwilioConfigured()) {
     console.warn('Twilio not configured - SMS not sent')
     return { success: false, error: 'Twilio not configured' }
   }
+  if (!(await consented(to))) return NO_CONSENT
+  return deliver(to, formatSmsBody(body, { keepWhole }))
+}
 
+async function deliver(to: string, body: string): Promise<SMSResult> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID!
   const authToken = process.env.TWILIO_AUTH_TOKEN!
   const fromNumber = process.env.TWILIO_PHONE_NUMBER!
 
   try {
-    // Format phone number (ensure it starts with +)
-    // Normalize to E.164. Numbers are stored in several shapes ("6176789621",
-    // "16176789621", "(617) 678-9621", "+16176789621"); blindly prefixing +1
-    // turned an 11-digit "1617..." into an invalid "+1617..." with an extra 1.
-    const digits = to.replace(/\D/g, '')
-    const formattedTo = to.trim().startsWith('+')
-      ? `+${digits}`
-      : digits.length === 11 && digits.startsWith('1')
-        ? `+${digits}`
-        : `+1${digits}`
+    const formattedTo = toE164(to)
+    if (!formattedTo) return { success: false, error: 'Invalid phone number' }
 
     const response = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
@@ -180,24 +196,24 @@ export interface MeteredSMSPayload extends SMSPayload {
   urgent?: boolean
 }
 
-export interface MeteredSMSResult extends SMSResult {
-  /** Set when the text was deliberately not sent. */
-  skipped?: 'quota' | 'no-family'
-}
+export type MeteredSMSResult = SMSResult
 
 /**
- * Send a text if the family still has quota this month, counting it
- * atomically. Over quota: nothing is sent, it's logged once, and the caller
- * carries on (push/email still go out). Urgent alerts always send. Never throws.
+ * Send a text if its recipient agreed to texts and the family still has
+ * quota this month, counting it atomically. Over quota: nothing is sent,
+ * it's logged once, and the caller carries on (push/email still go out).
+ * Urgent alerts skip the quota, never the consent. Never throws.
  */
 export async function sendSMSMetered(payload: MeteredSMSPayload): Promise<MeteredSMSResult> {
-  const { to, body, urgent = false } = payload
+  const { to, urgent = false } = payload
+  const body = formatSmsBody(payload.body, { keepWhole: urgent })
   if (!isTwilioConfigured()) return sendSMS({ to, body })
+  if (!(await consented(to))) return NO_CONSENT
   try {
     const familyId = payload.familyId || (payload.userId ? await familyForUser(payload.userId) : null)
     if (!familyId) {
       // Nothing to count against: an urgent alert still goes out.
-      if (urgent) return sendSMS({ to, body })
+      if (urgent) return deliver(to, body)
       console.warn('[SMS] No family to count this text against - not sent')
       return { success: false, skipped: 'no-family', error: 'No family for SMS quota' }
     }
@@ -234,7 +250,7 @@ export async function sendSMSMetered(payload: MeteredSMSPayload): Promise<Metere
       return { success: false, skipped: 'quota', error: 'Monthly SMS quota reached' }
     }
 
-    const result = await sendSMS({ to, body })
+    const result = await deliver(to, body)
     if (!result.success) {
       // A text that didn't go out doesn't use up the quota.
       await sql`
@@ -246,7 +262,7 @@ export async function sendSMSMetered(payload: MeteredSMSPayload): Promise<Metere
   } catch (error) {
     console.error('[SMS] Metered send failed:', error)
     // Metering broke (e.g. database hiccup): an urgent alert still goes out.
-    if (urgent) return sendSMS({ to, body })
+    if (urgent) return deliver(to, body)
     return { success: false, error: error instanceof Error ? error.message : 'SMS metering failed' }
   }
 }
@@ -276,26 +292,26 @@ export async function sendBulkSMS(
   return { sent, failed, results }
 }
 
-// SMS Templates for Togethr
+// SMS Templates for Togethr (every text starts with "Togethr:")
 export const SMS_TEMPLATES = {
   GEOFENCE_ARRIVAL: (childName: string, placeName: string) =>
-    `Togethr Alert: ${childName} has arrived at ${placeName}.`,
+    `Togethr: ${childName} arrived at ${placeName}.`,
 
   GEOFENCE_DEPARTURE: (childName: string, placeName: string) =>
-    `Togethr Alert: ${childName} has left ${placeName}.`,
+    `Togethr: ${childName} left ${placeName}.`,
 
   EVENT_REMINDER: (eventTitle: string, time: string) =>
-    `Togethr Reminder: "${eventTitle}" starts at ${time}.`,
+    `Togethr: Reminder - "${eventTitle}" starts at ${time}.`,
 
   TASK_OVERDUE: (taskTitle: string, childName: string) =>
-    `Togethr Alert: Task "${taskTitle}" assigned to ${childName} is overdue.`,
+    `Togethr: Task "${taskTitle}" for ${childName} is overdue.`,
 
   EMERGENCY_ALERT: (childName: string, message: string) =>
-    `Togethr EMERGENCY: ${childName} - ${message}`,
+    `Togethr: EMERGENCY - ${childName}: ${message}`,
 
   LOCATION_CHECK_IN: (childName: string, location: string) =>
     `Togethr: ${childName} checked in at ${location}.`,
 
   VERIFICATION_CODE: (code: string) =>
-    `Your Togethr verification code is: ${code}. Valid for 10 minutes.`,
+    `Togethr: Your verification code is ${code}. Valid for 10 minutes.`,
 }

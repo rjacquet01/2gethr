@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth"
 import { z } from "zod"
 import { notifyAdmin, EMAIL_TEMPLATES } from "@/lib/services/email"
+import { SMS_CONSENT_TEXT, recordSmsConsent } from "@/lib/sms-consent"
 import {
   findChildAccountInvite,
   consumeChildAccountInvite,
@@ -41,10 +42,7 @@ const registerSchema = z.object({
   // A parent-made code for a child's own account (the parent gave consent
   // when making it). The only way an account is created for someone under 18.
   childInviteCode: z.string().trim().min(1).max(20).optional(),
-}).refine(
-  (data) => !data.phone || data.smsConsent,
-  { message: "Please check the SMS consent box to add a phone number", path: ["smsConsent"] }
-).superRefine((data, ctx) => {
+}).superRefine((data, ctx) => {
   if (data.childInviteCode) {
     if (data.phone) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["phone"], message: "A child's account doesn't take a phone number" })
     return
@@ -57,13 +55,10 @@ const registerSchema = z.object({
   }
 })
 
-// Snapshot of the disclosure language shown next to the SMS consent checkbox
-// at /register, at the time consent is recorded. Keeping this text alongside
-// the audit log entry (rather than just a boolean) gives us durable proof of
-// exactly what the user agreed to, which is what a toll-free verification
-// review or a TCPA dispute would ask for.
-const SMS_CONSENT_DISCLOSURE =
-  "I agree to receive SMS text messages from Togethr (family coordination reminders and account alerts) at the phone number provided. Message frequency varies. Message and data rates may apply. Reply STOP to cancel, HELP for help. View our Privacy Policy and Terms of Service."
+// The disclosure shown next to the SMS checkbox at /register is
+// SMS_CONSENT_TEXT (lib/sms-consent.ts). It is stored with the consent and
+// in the audit log: proof of exactly what the user agreed to, which is what
+// a 10DLC review or a TCPA dispute would ask for.
 
 export async function POST(request: NextRequest) {
   try {
@@ -235,10 +230,17 @@ export async function POST(request: NextRequest) {
     // evidence trail): who consented, when, from where, to what phone
     // number, and the exact disclosure text they agreed to.
     if (smsConsentGiven) {
+      await recordSmsConsent(userId)
+      // Ticking the box turned text messages on.
+      await sql`
+        INSERT INTO reminder_settings (id, user_id, email_enabled, push_enabled, sms_enabled, created_at, updated_at)
+        VALUES (${crypto.randomUUID()}, ${userId}, true, true, true, NOW(), NOW())
+        ON CONFLICT (user_id) DO UPDATE SET sms_enabled = true, updated_at = NOW()
+      `
       await logAuditEvent(userId, "CREATE", "sms_consent", userId, {
         newValue: {
           phone: validatedData.phone,
-          disclosure: SMS_CONSENT_DISCLOSURE,
+          disclosure: SMS_CONSENT_TEXT,
           consentedAt: new Date().toISOString(),
         },
         ipAddress,

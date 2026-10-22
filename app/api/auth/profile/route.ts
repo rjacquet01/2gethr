@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { isValidTimeZone } from "@/lib/recurrence"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
+import { clearSmsConsentIfNumberChanges } from "@/lib/sms-consent"
 import { isChildLogin, syncAdultNicknames } from "@/lib/member-names"
 import { z } from "zod"
 
@@ -133,6 +134,15 @@ export async function PATCH(request: NextRequest) {
         { success: false, error: "No fields to update" },
         { status: 400 }
       )
+    }
+
+    // Consent to texts was for the old number: a new one needs it again.
+    if (validatedData.phone !== undefined && (await clearSmsConsentIfNumberChanges(user.id, validatedData.phone))) {
+      await logAuditEvent(user.id, "DELETE", "sms_consent", user.id, {
+        newValue: { reason: "phone number changed" },
+        ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
+        userAgent: request.headers.get("user-agent") || undefined,
+      })
     }
 
     // Update with individual fields for Neon tagged template

@@ -15,6 +15,7 @@ import { Eye, EyeOff, Check, Phone } from 'lucide-react'
 import { LogoIcon } from '@/components/logo'
 import { AGE_CONFIRMATION_LABEL } from '@/lib/consent-text'
 import { markChildDevice } from '@/components/privacy-analytics'
+import { SmsConsentText } from '@/components/sms-consent-text'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -84,11 +85,6 @@ export default function RegisterPage() {
 
     if (!passwordsMatch) {
       toast.error('Passwords do not match')
-      return
-    }
-
-    if (!isChildSignup && formData.phone && !smsConsent) {
-      toast.error('Please check the box to consent to SMS messages, or remove your phone number')
       return
     }
 
@@ -203,18 +199,17 @@ export default function RegisterPage() {
                 <div className="flex items-start gap-2 pt-1">
                   <Checkbox
                     id="sms-consent"
-                    checked={smsConsent}
+                    checked={smsConsent && Boolean(formData.phone)}
                     onCheckedChange={(checked) => setSmsConsent(checked === true)}
+                    disabled={!formData.phone}
                     className="mt-0.5"
                   />
-                  <Label htmlFor="sms-consent" className="text-xs font-normal leading-snug text-muted-foreground">
-                    I agree to receive SMS text messages from Togethr, operated by Togethr, LLC (family coordination reminders and
-                    account alerts) at the phone number provided above. Message frequency varies. Message and
-                    data rates may apply. Reply STOP to cancel, HELP for help. View our{' '}
-                    <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>
-                    {' '}and{' '}
-                    <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link>.
-                  </Label>
+                  <div className="space-y-1">
+                    <Label htmlFor="sms-consent" className="text-sm font-medium leading-snug">
+                      Turn on text messages <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                    </Label>
+                    <SmsConsentText />
+                  </div>
                 </div>
               </div>
               )}
@@ -293,7 +288,7 @@ export default function RegisterPage() {
                 className="w-full h-11" 
                 disabled={
                   isLoading || !isPasswordValid || !passwordsMatch ||
-                  (!isChildSignup && ((Boolean(formData.phone) && !smsConsent) || !ageConfirmed || !termsAccepted))
+                  (!isChildSignup && (!ageConfirmed || !termsAccepted))
                 }
               >
                 {isLoading ? <Spinner className="w-4 h-4" /> : 'Create account'}

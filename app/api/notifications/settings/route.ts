@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
+import { clearSmsConsentIfNumberChanges, getSmsConsent } from "@/lib/sms-consent"
 
 // Get user's reminder and notification settings
 export async function GET(request: NextRequest) {
@@ -75,8 +76,15 @@ export async function PUT(request: NextRequest) {
       phoneNumber 
     } = body
 
-    // Update phone number if provided
+    // Texts need consent (lib/sms-consent.ts): this older endpoint can't
+    // record it, so it can turn SMS off but not on without it.
+    if (smsEnabled === true && !(await getSmsConsent(user.id)).consentedAt) {
+      return NextResponse.json({ error: "Turn on text messages in Settings to agree to texts first" }, { status: 400 })
+    }
+
+    // Update phone number if provided (a new number needs consent again)
     if (phoneNumber !== undefined) {
+      await clearSmsConsentIfNumberChanges(user.id, phoneNumber || null)
       await sql`
         UPDATE users SET phone = ${phoneNumber || null}, updated_at = NOW()
         WHERE id = ${user.id}
