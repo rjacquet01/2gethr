@@ -231,8 +231,8 @@ export default function DashboardLayout({
 
       {/* Mobile Header */}
       <header className="fixed top-0 left-0 right-0 z-40 h-14 border-b border-border bg-background lg:hidden safe-area-top">
-        <div className="flex h-full items-center justify-between px-3">
-          <div className="flex items-center gap-2">
+        <div className="flex h-full items-center justify-between gap-1 px-3">
+          <div className="flex min-w-0 items-center gap-2">
             <Button
               variant="ghost"
               size="icon"
@@ -242,9 +242,10 @@ export default function DashboardLayout({
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </Button>
-            <Logo size="xs" />
+            {/* Very narrow phones (e.g. a foldable's cover screen): icon only. */}
+            <Logo size="xs" textClassName="max-[399px]:hidden" />
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             <FamilySwitcher variant="compact" />
             <FavoritesDropdown />
             <Button variant="ghost" size="icon" asChild className="relative h-10 w-10 touch-target">

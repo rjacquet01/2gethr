@@ -492,6 +492,9 @@ export default function SettingsPage() {
               key={key}
               type="button"
               onClick={() => setTab(key)}
+              // On phones the other tabs show only their icon: keep the name for screen readers.
+              aria-label={label}
+              aria-pressed={tab === key}
               className={cn(
                 'flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                 tab === key ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
@@ -558,7 +561,7 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground sm:col-span-2">
                 {isChild
                   ? 'Your name is set by your parent. Ask them to change it on your profile.'
-                  : 'Your account name. Each family can show a different name: on the Family page, open "Manage members & children" and tap Name next to your name.'}
+                  : 'Your account name. Each family can show a different name: on the Family page, open "Members & children" and tap Name next to your name.'}
               </p>
               <div className="space-y-1.5 sm:col-span-2">
                 <div className="flex items-center gap-2">

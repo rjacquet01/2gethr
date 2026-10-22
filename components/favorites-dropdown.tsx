@@ -99,7 +99,7 @@ export function FavoritesDropdown() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
+        <Button variant="outline" size="sm" className="gap-2" aria-label="Favorites">
           <Star className="h-4 w-4" />
           <span className="hidden sm:inline">Favorites</span>
           {favorites.length > 0 && (

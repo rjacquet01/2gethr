@@ -116,7 +116,8 @@ export function StartOwnFamilyButton({
     <>
       <Button variant={variant} size={size} className={className} onClick={() => setOpen(true)}>
         <Plus className="mr-1.5 h-4 w-4" />
-        Start my own family
+        <span className="max-[399px]:hidden">Start my own family</span>
+        <span className="min-[400px]:hidden">New family</span>
       </Button>
       <CreateOwnFamilyDialog open={open} onOpenChange={setOpen} />
     </>
