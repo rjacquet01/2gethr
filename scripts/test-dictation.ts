@@ -2,7 +2,7 @@
 // How dictated words join what's already typed (lib/dictation.ts).
 // Pure function: no database, no network.
 import assert from "node:assert"
-import { appendDictation } from "../lib/dictation"
+import { appendDictation, joinHeard } from "../lib/dictation"
 
 const cases: [string, string, string, string][] = [
   ["empty box: capitalised", "", "pick up milk", "Pick up milk"],
@@ -15,4 +15,14 @@ const cases: [string, string, string, string][] = [
   ["already capitalised stays", "", "Sam's party", "Sam's party"],
 ]
 for (const [name, current, spoken, want] of cases) assert.equal(appendDictation(current, spoken), want, name)
-console.log(`${cases.length} passed`)
+
+const heard: [string, string[], string][] = [
+  ["pieces in order", ["call grandma", "in half an hour"], "call grandma in half an hour"],
+  ["Android repeats the phrase so far", ["call grandma", "call grandma in half an hour"], "call grandma in half an hour"],
+  ["a repeat of the last piece is skipped", ["pick up milk", "milk"], "pick up milk"],
+  ["case and spacing differences", ["Call Grandma ", " call grandma in an hour"], "call grandma in an hour"],
+  ["empty pieces ignored", ["", "  ", "soccer at 4"], "soccer at 4"],
+  ["nothing heard", [], ""],
+]
+for (const [name, pieces, want] of heard) assert.equal(joinHeard(pieces), want, name)
+console.log(`${cases.length + heard.length} passed`)

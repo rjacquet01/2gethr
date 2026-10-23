@@ -14,6 +14,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DictateField } from '@/components/dictate-button'
 import { appendDictation } from '@/lib/dictation'
+import { parseWhen, tidyTitle, type Recurrence } from '@/lib/when-parser'
 import { toast } from 'sonner'
 import { createTask } from '@/hooks/use-tasks'
 import { Input } from '@/components/ui/input'
@@ -109,24 +110,20 @@ export function initialsOf(name: string) {
 
 /* ----------------------------- Quick add ----------------------------- */
 
-const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+// Task repeat values (the task form's frequencies); tasks have no yearly repeat.
+const TASK_REPEAT: Partial<Record<Recurrence, string>> = { DAILY: 'daily', WEEKLY: 'weekly', MONTHLY: 'monthly' }
 
-// Whole weekday names and their usual abbreviations only, so "friend",
-// "monthly" or "sunscreen" stay in the title.
-const DAY_WORD =
-  /\s(today|tonight|tomorrow|tmrw|(?:next\s+)?(?:sun(?:day)?|mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?))\b/i
-
-type QuickParsed = { title: string; person?: Person; due?: Date; priority?: string }
+type QuickParsed = { title: string; person?: Person; due?: Date; priority?: string; repeat?: string }
 
 /**
  * `keepTitle`: a title picked from the suggestions. While the input still
  * starts with it, it is kept word for word and only what follows is parsed
  * ("Pack your school bag for tomorrow" keeps its "tomorrow").
  */
-export function parseQuickAdd(raw: string, people: Person[], keepTitle?: string): QuickParsed {
+export function parseQuickAdd(raw: string, people: Person[], keepTitle?: string, now: Date = new Date()): QuickParsed {
   const start = raw.trimStart()
   if (keepTitle && start.startsWith(keepTitle)) {
-    const rest = parseQuickAdd(start.slice(keepTitle.length), people)
+    const rest = parseQuickAdd(start.slice(keepTitle.length), people, undefined, now)
     return { ...rest, title: (keepTitle + ' ' + rest.title).trim() }
   }
   const out: QuickParsed = { title: '' }
@@ -144,21 +141,12 @@ export function parseQuickAdd(raw: string, people: Person[], keepTitle?: string)
     out.priority = p.toLowerCase()
     return ' '
   })
-  text = text.replace(DAY_WORD, (_m, d: string) => {
-    const now = new Date()
-    const w = d.toLowerCase().replace(/^next\s+/, '')
-    let target = new Date(now)
-    if (w === 'tomorrow' || w === 'tmrw') target = addDays(now, 1)
-    else if (w !== 'today' && w !== 'tonight') {
-      const idx = DAYS.findIndex((x) => x.startsWith(w.slice(0, 3)))
-      if (idx < 0) return _m
-      const diff = (idx - now.getDay() + 7) % 7 || 7
-      target = addDays(now, diff)
-    }
-    out.due = endOfDay(target)
-    return ' '
-  })
-  out.title = text.replace(/\s+/g, ' ').trim()
+  const when = parseWhen(text, now)
+  // A day alone is due by the end of it; a time is due then.
+  if (when.at) out.due = when.hasTime ? when.at : endOfDay(when.at)
+  const repeat = TASK_REPEAT[when.recurrence]
+  if (repeat) out.repeat = repeat
+  out.title = tidyTitle(when.rest)
   return out
 }
 
@@ -243,6 +231,7 @@ export function QuickAdd({
         assignedToUserId: person?.userId,
         assignedToChildId: person?.userId ? undefined : person?.childId,
         dueDate: parsed.due ? parsed.due.toISOString() : undefined,
+        ...(parsed.repeat ? { isRecurring: true, recurrenceRule: parsed.repeat } : {}),
         priority: parsed.priority,
       })
       toast.success(person ? `Task added for ${person.name.split(' ')[0]}` : 'Task added')
@@ -286,7 +275,10 @@ export function QuickAdd({
             <>
               “{parsed.title}”
               {person && <> · for {person.name}</>}
-              {parsed.due && <> · due {format(parsed.due, 'EEE, MMM d')}</>}
+              {parsed.due && (
+                <> · due {format(parsed.due, isEndOfDay(parsed.due) ? 'EEE, MMM d' : 'EEE, MMM d · h:mm a')}</>
+              )}
+              {parsed.repeat && <> · repeats {parsed.repeat}</>}
               {parsed.priority && <> · {parsed.priority} priority</>}
             </>
           ) : (
@@ -492,3 +484,5 @@ export function PersonProgress({
     </div>
   )
 }
+
+const isEndOfDay = (d: Date) => d.getHours() === 23 && d.getMinutes() === 59

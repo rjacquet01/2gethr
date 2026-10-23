@@ -100,6 +100,49 @@ ok("reminders: spoken times (p.m. with dots, at 5:30)", () => {
   assert.equal(at("Gym at 9:30"), "Gym | 22 9:30")
   assert.equal(at("Leave 17:45"), "Leave | 22 17:45")
 })
+// What Google Chrome's recognizer actually typed in a live test (Oct 23),
+// plus other everyday phrasings. Fri Oct 23 2026, 5:06 PM.
+const fri = new Date(2026, 9, 23, 17, 6)
+const when = (s: string) => {
+  const r = parseReminderQuick(s, [], fri)
+  const t = parseQuickAdd(s, [], undefined, fri)
+  const f = (d: Date | null | undefined) =>
+    d ? `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]} ${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}` : "-"
+  return { r: `${r.title} | ${f(r.at)}${r.recurrence !== "NONE" ? " " + r.recurrence : ""}`, t: `${t.title} | ${f(t.due)}${t.repeat ? " " + t.repeat : ""}` }
+}
+ok("spoken reminders: what the recognizer typed", () => {
+  const cases: [string, string][] = [
+    ["play car insurance at 5:30 p.m. today", "play car insurance | Fri 10/23 17:30"],
+    ["call Mom tomorrow at 8:00 a.m.", "call Mom | Sat 10/24 8:00"],
+    ["dentist appointment next Tuesday at 3:00 p.m.", "dentist appointment | Tue 10/27 15:00"],
+    ["remind me to feed the dog in 2 hours", "feed the dog | Fri 10/23 19:06"],
+    ["take out the trash every Monday at 7:00 p.m.", "take out the trash | Mon 10/26 19:00 WEEKLY"],
+    ["soccer practice Saturday at 10:15 in the morning", "soccer practice | Sat 10/24 10:15"],
+    ["pay the water bill on October 30th", "pay the water bill | Fri 10/30 9:00"],
+    ["call Grandma in half an hour", "call Grandma | Fri 10/23 17:36"],
+    ["pick up kids at noon on Friday", "pick up kids | Fri 10/30 12:00"],
+    ["take medicine tonight at 9", "take medicine | Fri 10/23 21:00"],
+    ["call the bank in an hour", "call the bank | Fri 10/23 18:06"],
+    ["pay rent on the 1st", "pay rent | Sun 11/1 9:00"],
+    ["water plants this evening", "water plants | Fri 10/23 18:00"],
+    ["call dad tomorrow morning", "call dad | Sat 10/24 9:00"],
+    ["renew passport next week", "renew passport | Mon 10/26 9:00"],
+    ["get gas at 6 o'clock", "get gas | Fri 10/23 18:00"],
+    ["pay rent November 1st at 9 a.m.", "pay rent | Sun 11/1 9:00"],
+    ["10/31 halloween party", "halloween party | Sat 10/31 9:00"],
+    ["take meds at 8am daily", "take meds | Sat 10/24 8:00 DAILY"],
+    ["lunch at noon tomorrow", "lunch | Sat 10/24 12:00"],
+    ["pay monthly bill", "pay monthly bill | -"],
+  ]
+  for (const [said, want] of cases) assert.equal(when(said).r, want, said)
+})
+ok("spoken tasks: a time sets the due time, a day alone is due by its end, every… repeats", () => {
+  assert.equal(when("pay the water bill on October 30th").t, "pay the water bill | Fri 10/30 23:59")
+  assert.equal(when("call Mom tomorrow at 8:00 a.m.").t, "call Mom | Sat 10/24 8:00")
+  assert.equal(when("take out the trash every Monday at 7:00 p.m.").t, "take out the trash | Mon 10/26 19:00 weekly")
+  assert.equal(when("trash on Mondays").t, "trash | Mon 10/26 23:59 weekly")
+  assert.equal(when("renew passport next week").t, "renew passport | Mon 10/26 23:59")
+})
 
 ok("Kids' Chores only when the family has children", () => {
   assert.ok(!suggestionCategories(false).includes("kids"))
