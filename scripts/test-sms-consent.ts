@@ -190,6 +190,8 @@ async function main() {
   assert.equal(smsKeyword("Unsubscribe"), "stop")
   assert.equal(smsKeyword("stop by later"), null)
   assert.equal(smsKeyword("UNSTOP"), "start")
+  assert.equal(smsKeyword("revoke"), "stop")
+  assert.equal(smsKeyword("OPTOUT"), "stop")
   assert.equal(smsKeyword("help"), "help")
   const URL_ = "https://mytogethr.com/api/webhooks/twilio-sms"
   const inbound = async (params: Record<string, string>, sig?: string) => {

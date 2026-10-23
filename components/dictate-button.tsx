@@ -41,7 +41,7 @@ export function DictateButton({
   className?: string
 }) {
   const supported = useSyncExternalStore(noSubscribe, () => !!recognitionCtor(), () => false)
-  const { isChild } = useMyRole()
+  const { role, isLoading, isChild } = useMyRole()
   const [listening, setListening] = useState(false)
   const rec = useRef<Recognition | null>(null)
   const stopped = useRef(false)
@@ -57,7 +57,8 @@ export function DictateButton({
     []
   )
 
-  if (!supported || isChild) return null
+  // Hidden until the role is known, so a child never sees it flash up.
+  if (!supported || isLoading || !role || isChild) return null
 
   const start = () => {
     const Ctor = recognitionCtor()
