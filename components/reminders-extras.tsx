@@ -30,7 +30,8 @@ const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'frid
 
 // "Take meds tomorrow 8am daily @Sam", "call mom in 2 hours", "pay rent fri 5pm"
 export function parseReminderQuick(raw: string, members: QuickMember[], now: Date = new Date()): QuickParse {
-  let text = ' ' + raw.trim() + ' '
+  // Voice input writes "5:30 p.m."; the time patterns below expect "pm".
+  let text = (' ' + raw.trim() + ' ').replace(/(\d\s*)([ap])\.\s?m\.?(?=\s)/gi, '$1$2m')
   const out: QuickParse = { title: '', at: null, recurrence: 'NONE' }
 
   text = text.replace(/\s@(\w+)/, (m, n: string) => {
@@ -81,7 +82,7 @@ export function parseReminderQuick(raw: string, members: QuickMember[], now: Dat
     st.mm = m
   }
   const t12 = /\s(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i
-  const t24 = /\s(?:at\s+)?(\d{1,2}):(\d{2})\b/
+  const t24 = /\s(at\s+)?(\d{1,2}):(\d{2})\b/i
   const tAt = /\sat\s+(\d{1,2})\b/i
   const tWord = /\s(noon|midnight)\b/i
   if (t12.test(text)) {
@@ -92,8 +93,10 @@ export function parseReminderQuick(raw: string, members: QuickMember[], now: Dat
       return ' '
     })
   } else if (t24.test(text)) {
-    text = text.replace(t24, (_m, h: string, m: string) => {
-      setTime(Math.min(23, parseInt(h, 10)), Math.min(59, parseInt(m, 10)))
+    text = text.replace(t24, (_m, at: string | undefined, h: string, m: string) => {
+      const H = Math.min(23, parseInt(h, 10))
+      // "at 5:30", like "at 5", is the evening unless it's 8-11
+      setTime(at && H >= 1 && H <= 7 ? H + 12 : H, Math.min(59, parseInt(m, 10)))
       return ' '
     })
   } else if (tWord.test(text)) {
@@ -126,6 +129,9 @@ export function parseReminderQuick(raw: string, members: QuickMember[], now: Dat
 
   out.title = text
     .replace(/^\s*remind me\s*(to|about)?\s*/i, '')
+    // Punctuation left behind by removed words, or a spoken full stop
+    .replace(/\s[.,!?]+(?=\s)/g, ' ')
+    .replace(/[.,!]+\s*$/, '')
     .replace(/\s+/g, ' ')
     .replace(/\s+(at|on|by|for|in)$/i, '')
     .trim()

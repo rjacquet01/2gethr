@@ -86,6 +86,20 @@ ok("reminders: friend / monthly bill / sunscreen", () => {
   assert.equal(c.title, "Pay bill")
   assert.equal(c.at?.getDay(), 5)
 })
+ok("reminders: spoken times (p.m. with dots, at 5:30)", () => {
+  const at = (s: string) => {
+    const p = parseReminderQuick(s, [], now)
+    return `${p.title} | ${p.at?.getDate()} ${p.at?.getHours()}:${String(p.at?.getMinutes()).padStart(2, "0")}`
+  }
+  assert.equal(at("Pay car insurance at 5:30 p.m. today"), "Pay car insurance | 22 17:30")
+  assert.equal(at("Pay car insurance at 5:30 p.m. today."), "Pay car insurance | 22 17:30")
+  assert.equal(at("Call mom tomorrow at 8 a.m."), "Call mom | 23 8:00")
+  assert.equal(at("Dentist 3 p. m. friday"), "Dentist | 23 15:00")
+  assert.equal(at("Soccer 6:15 PM"), "Soccer | 22 18:15")
+  assert.equal(at("Walk dog at 5:30"), "Walk dog | 22 17:30")
+  assert.equal(at("Gym at 9:30"), "Gym | 22 9:30")
+  assert.equal(at("Leave 17:45"), "Leave | 22 17:45")
+})
 
 ok("Kids' Chores only when the family has children", () => {
   assert.ok(!suggestionCategories(false).includes("kids"))
