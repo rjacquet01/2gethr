@@ -31,8 +31,8 @@ export function validTwilioSignature(
 
 export type SmsKeyword = "stop" | "start" | "help" | null
 
-const STOP = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"])
-const START = new Set(["START", "UNSTOP"])
+const STOP = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "OPTOUT", "REVOKE"])
+const START = new Set(["START", "UNSTOP", "YES"])
 const HELP = new Set(["HELP", "INFO"])
 
 /** The opt-out keyword a whole message is, if any ("Stop." counts, "stop by later" doesn't). */

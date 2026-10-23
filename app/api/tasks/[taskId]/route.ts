@@ -568,6 +568,42 @@ export async function PATCH(
       }
       await ensureTaskEventNotifyChannelsColumns()
       await ensureTaskApprovalColumn()
+      await ensureAssignmentColumns()
+
+      // Newly assigned to someone else (a member, or a child profile with a login).
+      const newUserId = updates.assignedToUserId !== undefined ? updates.assignedToUserId : null
+      const newChildId = updates.assignedToChildId !== undefined ? updates.assignedToChildId : null
+      const assigneeChanged =
+        (updates.assignedToUserId !== undefined && (updates.assignedToUserId || null) !== (task.assigned_to_id || null)) ||
+        (updates.assignedToChildId !== undefined && (updates.assignedToChildId || null) !== (task.child_profile_id || null))
+      let targetUserId: string | null = newUserId || null
+      let targetRole: string | null = null
+      if (assigneeChanged) {
+        if (!targetUserId && newChildId) {
+          const cp = await sql`
+            SELECT fm.user_id, fm.role FROM child_profiles cp JOIN family_members fm ON cp.family_member_id = fm.id
+            WHERE cp.id = ${newChildId}
+          `
+          targetUserId = (cp[0]?.user_id as string | null) ?? null
+          targetRole = (cp[0]?.role as string | null) ?? null
+        }
+        if (targetUserId && !targetRole) {
+          const r = await sql`
+            SELECT role FROM family_members
+            WHERE family_id = ${task.family_id} AND user_id = ${targetUserId} AND is_active = true LIMIT 1
+          `
+          targetRole = (r[0]?.role as string | null) ?? null
+        }
+      }
+      // As on create: a kid giving a task to another kid waits for that kid to accept.
+      const oldAssignment = (task.assignment_status as string | null) ?? null
+      let newAssignment = oldAssignment
+      if (assigneeChanged && oldAssignment !== 'PENDING_APPROVAL') {
+        if (membership[0].role === 'CHILD' && targetUserId && targetUserId !== user.id && targetRole === 'CHILD') newAssignment = 'PENDING_ACCEPTANCE'
+        else if (oldAssignment === 'PENDING_ACCEPTANCE') newAssignment = null
+      }
+      const assignmentChanged = newAssignment !== oldAssignment
+
       const cleanChannels: string[] | null = Array.isArray(updates.notifyChannels)
         ? (updates.notifyChannels as unknown[]).filter((c): c is string => typeof c === 'string' && ['in_app', 'push', 'email', 'sms'].includes(c))
         : null
@@ -615,6 +651,7 @@ export async function PATCH(
           reminder_enabled = ${updates.reminderEnabled !== undefined ? updates.reminderEnabled : task.reminder_enabled},
           requires_approval = ${updates.requiresApproval !== undefined ? updates.requiresApproval === true : task.requires_approval === true},
           notify_channels = CASE WHEN ${Array.isArray(updates.notifyChannels)} THEN ${cleanChannels && cleanChannels.length > 0 ? cleanChannels : null}::text[] ELSE notify_channels END,
+          assignment_status = CASE WHEN ${assignmentChanged} THEN ${newAssignment}::text ELSE assignment_status END,
           updated_at = NOW()
         WHERE id = ${taskId}
       `
@@ -624,24 +661,21 @@ export async function PATCH(
         VALUES (${taskId}, ${user.id}, 'UPDATED', ${JSON.stringify({ title: task.title, description: task.description })}::jsonb, ${JSON.stringify(changes)}::jsonb)
       `
 
-      // Newly assigned to someone else (a member, or a child profile with a
-      // login): tell them, as when a task is created for them.
-      const newUserId = updates.assignedToUserId !== undefined ? updates.assignedToUserId : null
-      const newChildId = updates.assignedToChildId !== undefined ? updates.assignedToChildId : null
-      if ((newUserId && newUserId !== task.assigned_to_id) || (newChildId && newChildId !== task.child_profile_id)) {
+      // Tell the new assignee, as when a task is created for them.
+      if (assigneeChanged && targetUserId && targetUserId !== user.id) {
         try {
-          let targetUserId: string | null = newUserId || null
-          if (!targetUserId && newChildId) {
-            const cp = await sql`
-              SELECT fm.user_id FROM child_profiles cp JOIN family_members fm ON cp.family_member_id = fm.id
-              WHERE cp.id = ${newChildId}
-            `
-            targetUserId = (cp[0]?.user_id as string | null) ?? null
-          }
-          if (targetUserId && targetUserId !== user.id) {
-            const assignerName = await actorNameInFamily(task.family_id, user, 'Someone')
-            const channels = (cleanChannels && cleanChannels.length > 0 ? cleanChannels : task.notify_channels || undefined) as NotificationChannel[] | undefined
-            await notifyTaskAssigned(targetUserId, (updates.title as string) || task.title, taskId, task.family_id, assignerName, channels)
+          const assignerName = await actorNameInFamily(task.family_id, user, 'Someone')
+          const channels = (cleanChannels && cleanChannels.length > 0 ? cleanChannels : task.notify_channels || undefined) as NotificationChannel[] | undefined
+          const title = (updates.title as string) || task.title
+          if (newAssignment === 'PENDING_ACCEPTANCE') {
+            await createNotification({
+              userId: targetUserId, type: 'APPROVAL_REQUEST',
+              title: 'Task request',
+              body: `${assignerName} wants to assign you a task: "${title}". Accept or decline.`,
+              data: { taskId, familyId: task.family_id }, sendEmail: true, sendSms: true, channels,
+            })
+          } else {
+            await notifyTaskAssigned(targetUserId, title, taskId, task.family_id, assignerName, channels)
           }
         } catch (e) {
           console.error('Task reassignment notification failed (non-fatal):', e)
