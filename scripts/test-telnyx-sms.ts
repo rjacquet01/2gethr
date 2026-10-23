@@ -2,7 +2,7 @@
 // SMS providers: SMS_PROVIDER picks Twilio (default) or Telnyx; each sends
 // the right request (URL, headers, body) and the API key never reaches a log
 // or an error; the consent gate blocks both; Telnyx webhook signatures
-// (Ed25519: valid, tampered, stale, wrong key); STOP / HELP through the
+// (Ed25519: valid, tampered, stale, wrong key); STOP / HELP / START through the
 // Telnyx route change the database exactly as through the Twilio route.
 // In-memory users / reminder_settings (lib/db __setSqlForTests) and a stubbed
 // fetch: no database, nothing is sent.
@@ -40,7 +40,7 @@ async function main() {
   const { __setSqlForTests } = await import("../lib/db")
   const sms = await import("../lib/services/sms")
   const { verifyTelnyxSignature } = await import("../lib/telnyx-webhook")
-  const { SMS_HELP_REPLY } = await import("../lib/sms-consent-text")
+
   const { SMS_START_REPLY } = await import("../lib/sms-inbound")
   const { twilioSignature } = await import("../lib/twilio-webhook")
   const telnyxRoute = await import("../app/api/webhooks/telnyx-sms/route")
@@ -269,20 +269,23 @@ async function main() {
   ok("telnyx route: every STOP synonym turns texts off")
 
   before = calls.length
-  res = await telnyxIn(msg("+16175550101", "help"))
-  assert.equal(res.status, 200)
-  c = calls[calls.length - 1]
-  assert.equal(calls.length, before + 1)
-  assert.equal(c.url, "https://api.telnyx.com/v2/messages")
-  assert.equal(JSON.parse(c.body).to, "+16175550101")
-  assert.equal(JSON.parse(c.body).text, SMS_HELP_REPLY)
-  ok("telnyx route HELP: help text sent back through Telnyx")
+  settings[0].sms_enabled = true
+  for (const word of ["help", "INFO", "Help."]) {
+    res = await telnyxIn(msg("+16175550101", word))
+    assert.equal(res.status, 200, word)
+  }
+  assert.equal(calls.length, before)
+  assert.equal(settings[0].sms_enabled, true)
+  ok("telnyx route HELP: no reply from us (Telnyx's auto-response answers it), nothing changed")
 
   settings[0].sms_enabled = false
   res = await telnyxIn(msg("+16175550101", "START"))
-  assert.equal(JSON.parse(calls[calls.length - 1].body).text, SMS_START_REPLY)
+  c = calls[calls.length - 1]
+  assert.equal(c.url, "https://api.telnyx.com/v2/messages")
+  assert.equal(JSON.parse(c.body).to, "+16175550101")
+  assert.equal(JSON.parse(c.body).text, SMS_START_REPLY)
   assert.equal(settings[0].sms_enabled, false)
-  // HELP and START get a reply even from a number with no consent: they wrote to us.
+  // START gets a reply even from a number with no consent: they wrote to us.
   res = await telnyxIn(msg("+16175550102", "YES"))
   assert.equal(JSON.parse(calls[calls.length - 1].body).to, "+16175550102")
   before = calls.length
