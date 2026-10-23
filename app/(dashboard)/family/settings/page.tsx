@@ -118,6 +118,7 @@ export default function FamilySettingsPage() {
       if (res.ok && data?.success) {
         toast.success('Family deleted')
         // Full reload so every cached family/selection is dropped.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.assign('/dashboard')
         return
       }

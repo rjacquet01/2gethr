@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { getAdminAccessToken } from '@/hooks/use-admin-auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,6 +33,7 @@ const TYPES = [
 ]
 
 export default function LegalRequestsPage() {
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [cases, setCases] = useState<CaseRow[] | null>(null)
   const [denied, setDenied] = useState('')
@@ -72,7 +74,7 @@ export default function LegalRequestsPage() {
     setSaving(false)
     if (!r.ok) { toast.error(d.error || 'Could not open case'); return }
     toast.success(`Opened ${d.data.caseNumber}`)
-    window.location.href = `/admin/legal/${d.data.id}`
+    router.push(`/admin/legal/${d.data.id}`)
   }
 
   if (loading) return <div className="p-8 flex justify-center"><Spinner className="w-6 h-6" /></div>
