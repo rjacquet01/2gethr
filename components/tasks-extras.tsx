@@ -8,6 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -36,6 +37,68 @@ export interface Person {
   userId?: string
   childId?: string
   color?: string | null
+  /** Family role ('PARENT', 'CHILD', 'GUEST', ...); child profiles are 'CHILD'. */
+  role?: string
+}
+
+const ROLE_LABEL: Record<string, string> = { PARENT: 'Parent', GUARDIAN: 'Guardian', ADULT: 'Adult', CHILD: 'Child', GUEST: 'Guest' }
+
+/** The "Unassigned" bubble on a task: tap to hand the task to someone. */
+export function AssigneePicker({
+  options,
+  meId,
+  disabled,
+  onPick,
+}: {
+  options: Person[]
+  meId?: string
+  disabled?: boolean
+  onPick: (p: Person) => void
+}) {
+  const me = options.find((p) => p.userId && p.userId === meId)
+  const others = options.filter((p) => p !== me)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          aria-label="Unassigned. Choose who does this task"
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-dashed border-primary/40 bg-primary/5 py-1 pl-1 pr-2 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+        >
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10" aria-hidden="true">
+            <UserPlus className="h-3 w-3" />
+          </span>
+          Unassigned
+          <ChevronDown className="h-3 w-3 opacity-70" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-[60vh] w-60 max-w-[calc(100vw-1.5rem)] overflow-y-auto">
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Assign to</DropdownMenuLabel>
+        {me && <PersonItem p={me} label="Me" onPick={onPick} />}
+        {me && others.length > 0 && <DropdownMenuSeparator />}
+        {others.map((p) => (
+          <PersonItem key={p.key} p={p} onPick={onPick} />
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function PersonItem({ p, label, onPick }: { p: Person; label?: string; onPick: (p: Person) => void }) {
+  return (
+    <DropdownMenuItem onSelect={() => onPick(p)} className="min-h-11 gap-2">
+      <span
+        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
+        style={{ backgroundColor: p.color || '#6366f1' }}
+        aria-hidden="true"
+      >
+        {initialsOf(p.name)}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label ?? p.name}</span>
+      {p.role && ROLE_LABEL[p.role] && <span className="shrink-0 text-[11px] text-muted-foreground">{ROLE_LABEL[p.role]}</span>}
+    </DropdownMenuItem>
+  )
 }
 
 export function initialsOf(name: string) {
