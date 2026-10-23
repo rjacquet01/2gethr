@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { addDays, addMinutes, differenceInCalendarDays, endOfDay, format, formatDistanceToNowStrict, isToday, isTomorrow, parseISO, set } from 'date-fns'
+import { addDays, differenceInCalendarDays, endOfDay, format, formatDistanceToNowStrict, isToday, isTomorrow, parseISO } from 'date-fns'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { authFetch } from '@/hooks/use-auth'
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { DictateField } from '@/components/dictate-button'
 import { appendDictation } from '@/lib/dictation'
+import { parseWhen, tidyTitle } from '@/lib/when-parser'
 
 /* ----------------------------- Quick parse ----------------------------- */
 
@@ -26,116 +27,25 @@ export interface QuickParse {
   member?: QuickMember
 }
 
-const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-
 // "Take meds tomorrow 8am daily @Sam", "call mom in 2 hours", "pay rent fri 5pm"
 export function parseReminderQuick(raw: string, members: QuickMember[], now: Date = new Date()): QuickParse {
-  // Voice input writes "5:30 p.m."; the time patterns below expect "pm".
-  let text = (' ' + raw.trim() + ' ').replace(/(\d\s*)([ap])\.\s?m\.?(?=\s)/gi, '$1$2m')
-  const out: QuickParse = { title: '', at: null, recurrence: 'NONE' }
-
+  let text = ' ' + raw.trim() + ' '
+  let member: QuickMember | undefined
   text = text.replace(/\s@(\w+)/, (m, n: string) => {
     const hit = members.find((x) => x.userId && x.displayName.toLowerCase().startsWith(n.toLowerCase()))
     if (hit) {
-      out.member = hit
+      member = hit
       return ' '
     }
     return m
   })
-
-  text = text.replace(/\s(?:every\s+(day|week|month|year)|(daily|weekly|monthly|yearly))\b/i, (_m, a?: string, b?: string) => {
-    const w = (a || b || '').toLowerCase()
-    out.recurrence = w.startsWith('day') || w === 'daily' ? 'DAILY' : w.startsWith('week') ? 'WEEKLY' : w.startsWith('month') ? 'MONTHLY' : 'YEARLY'
-    return ' '
-  })
-
-  // Held in an object so TypeScript doesn't narrow these to their initial
-  // values (they're assigned inside the replace callbacks below).
-  const st = { rel: null as Date | null, day: null as Date | null, tonight: false, hh: null as number | null, mm: 0 }
-  text = text.replace(/\sin\s+(\d+)\s*(minutes?|mins?|hours?|hrs?|days?|[mhd])\b/i, (_m, n: string, u: string) => {
-    const k = parseInt(n, 10)
-    const unit = u.toLowerCase()
-    if (unit.startsWith('m')) st.rel = addMinutes(now, k)
-    else if (unit.startsWith('h')) st.rel = addMinutes(now, k * 60)
-    else st.rel = addDays(now, k)
-    return ' '
-  })
-
-  // Whole weekday names and abbreviations only ("friend" is not Friday).
-  text = text.replace(/\s(today|tonight|tomorrow|tmrw|(?:next\s+)?(?:sun(?:day)?|mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?))\b/i, (m, d: string) => {
-    const w = d.toLowerCase().replace(/^next\s+/, '')
-    if (w === 'today') st.day = new Date(now)
-    else if (w === 'tonight') {
-      st.day = new Date(now)
-      st.tonight = true
-    } else if (w === 'tomorrow' || w === 'tmrw') st.day = addDays(now, 1)
-    else {
-      const idx = DAY_NAMES.findIndex((x) => x.startsWith(w.slice(0, 3)))
-      if (idx < 0) return m
-      st.day = addDays(now, (idx - now.getDay() + 7) % 7 || 7)
-    }
-    return ' '
-  })
-
-  const setTime = (h: number, m: number) => {
-    st.hh = h
-    st.mm = m
+  const when = parseWhen(text, now)
+  return {
+    title: tidyTitle(when.rest.replace(/^\s*remind me\s*(to|about)?\s*/i, '')),
+    at: when.at,
+    recurrence: when.recurrence,
+    member,
   }
-  const t12 = /\s(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i
-  const t24 = /\s(at\s+)?(\d{1,2}):(\d{2})\b/i
-  const tAt = /\sat\s+(\d{1,2})\b/i
-  const tWord = /\s(noon|midnight)\b/i
-  if (t12.test(text)) {
-    text = text.replace(t12, (_m, h: string, m: string | undefined, ap: string) => {
-      let H = parseInt(h, 10) % 12
-      if (ap.toLowerCase() === 'pm') H += 12
-      setTime(H, m ? parseInt(m, 10) : 0)
-      return ' '
-    })
-  } else if (t24.test(text)) {
-    text = text.replace(t24, (_m, at: string | undefined, h: string, m: string) => {
-      const H = Math.min(23, parseInt(h, 10))
-      // "at 5:30", like "at 5", is the evening unless it's 8-11
-      setTime(at && H >= 1 && H <= 7 ? H + 12 : H, Math.min(59, parseInt(m, 10)))
-      return ' '
-    })
-  } else if (tWord.test(text)) {
-    text = text.replace(tWord, (_m, w: string) => {
-      setTime(w.toLowerCase() === 'noon' ? 12 : 0, 0)
-      return ' '
-    })
-  } else if (tAt.test(text)) {
-    text = text.replace(tAt, (_m, h: string) => {
-      const H = parseInt(h, 10)
-      // "at 5" is nearly always the evening unless it's 8-11
-      setTime(H >= 1 && H <= 7 ? H + 12 : H, 0)
-      return ' '
-    })
-  }
-
-  if (st.rel) {
-    out.at = st.rel
-  } else if (st.day || st.hh !== null) {
-    let at = set(st.day || now, {
-      hours: st.hh ?? (st.tonight ? 20 : 9),
-      minutes: st.hh !== null ? st.mm : 0,
-      seconds: 0,
-      milliseconds: 0,
-    })
-    // Time only ("8am") and it already passed today -> tomorrow
-    if (!st.day && at.getTime() <= now.getTime()) at = addDays(at, 1)
-    out.at = at
-  }
-
-  out.title = text
-    .replace(/^\s*remind me\s*(to|about)?\s*/i, '')
-    // Punctuation left behind by removed words, or a spoken full stop
-    .replace(/\s[.,!?]+(?=\s)/g, ' ')
-    .replace(/[.,!]+\s*$/, '')
-    .replace(/\s+/g, ' ')
-    .replace(/\s+(at|on|by|for|in)$/i, '')
-    .trim()
-  return out
 }
 
 /* ------------------------------ Quick add ------------------------------ */
