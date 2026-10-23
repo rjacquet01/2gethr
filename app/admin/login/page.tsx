@@ -72,7 +72,7 @@ export default function AdminLoginPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@safelink.app"
+                placeholder="admin@mytogethr.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required

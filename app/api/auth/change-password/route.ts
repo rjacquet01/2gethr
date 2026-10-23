@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { sql } from '@/lib/db'
 import { getUserFromRequest, hashPassword, verifyPassword, logAuditEvent } from '@/lib/auth'
+import { hitRateLimit, tooManyRequests } from '@/lib/rate-limit'
 
 // Lets a signed-in user change their own password (Settings > Security >
 // Change Password). Requires the current password, and uses the same
@@ -31,6 +32,10 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { currentPassword, newPassword } = changePasswordSchema.parse(body)
+
+    // A stolen session must not be a way to guess the password.
+    const limit = await hitRateLimit(`password-check:${user.id}`, 10, 15 * 60)
+    if (!limit.allowed) return tooManyRequests(limit.retryAfterSec, 'password attempts')
 
     const rows = await sql`SELECT password_hash FROM users WHERE id = ${user.id}`
     const currentHash: string | null = rows[0]?.password_hash ?? null

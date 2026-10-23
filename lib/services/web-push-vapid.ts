@@ -158,7 +158,7 @@ export async function sendWebPush(
 ): Promise<WebPushResult> {
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
   const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY
-  const subject = process.env.VAPID_SUBJECT || 'mailto:support@2gethr1.vercel.app'
+  const subject = process.env.VAPID_SUBJECT || 'mailto:admin@mytogethr.com'
 
   if (!vapidPublicKey || !vapidPrivateKey) {
     return { success: false, error: 'VAPID keys not configured' }

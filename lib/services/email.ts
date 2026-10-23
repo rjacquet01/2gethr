@@ -1,3 +1,4 @@
+import { appUrl } from '@/lib/app-url'
 /**
  * Email Service using Resend
  * 
@@ -158,7 +159,7 @@ export const EMAIL_TEMPLATES = {
               Get started by setting up your family profile and inviting your family members.
             </p>
             <div style="text-align: center;">
-              <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://safelink.app'}/dashboard" 
+              <a href="${appUrl()}/dashboard" 
                  style="display: inline-block; background-color: #0d9488; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
                 Get Started
               </a>
@@ -195,7 +196,7 @@ export const EMAIL_TEMPLATES = {
               </p>
             </div>
             <div style="text-align: center;">
-              <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://safelink.app'}/calendar" 
+              <a href="${appUrl()}/calendar" 
                  style="display: inline-block; background-color: #0d9488; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
                 View Event
               </a>
@@ -230,7 +231,7 @@ export const EMAIL_TEMPLATES = {
               </p>
             </div>
             <div style="text-align: center;">
-              <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://safelink.app'}/location" 
+              <a href="${appUrl()}/location" 
                  style="display: inline-block; background-color: #0d9488; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
                 View Location
               </a>
@@ -264,7 +265,7 @@ export const EMAIL_TEMPLATES = {
               </p>
             </div>
             <div style="text-align: center;">
-              <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://safelink.app'}/tasks" 
+              <a href="${appUrl()}/tasks" 
                  style="display: inline-block; background-color: #0d9488; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
                 View Task
               </a>
@@ -297,7 +298,7 @@ export const EMAIL_TEMPLATES = {
               </p>
             </div>
             <div style="text-align: center;">
-              <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://safelink.app'}/tasks"
+              <a href="${appUrl()}/tasks"
                  style="display: inline-block; background-color: #0d9488; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
                 View Task
               </a>
@@ -448,7 +449,7 @@ export const EMAIL_TEMPLATES = {
             </div>
 
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://togethr.app'}/dashboard" 
+              <a href="${appUrl()}/dashboard" 
                  style="display: inline-block; background-color: #3b4563; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
                 View Full Dashboard
               </a>
@@ -456,14 +457,14 @@ export const EMAIL_TEMPLATES = {
 
             <p style="color: #9ca3af; font-size: 12px; line-height: 1.6; margin: 30px 0 0; text-align: center;">
               You're receiving this because you have weekly digest enabled.<br>
-              <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://togethr.app'}/settings" style="color: #6b7280;">Manage notification preferences</a>
+              <a href="${appUrl()}/settings" style="color: #6b7280;">Manage notification preferences</a>
             </p>
           </div>
         </div>
       </body>
       </html>
     `,
-    text: `Weekly Summary for ${familyName} (${weekStart} - ${weekEnd})\n\nHi ${userName},\n\nTasks: ${tasks.completed} completed, ${tasks.pending} pending, ${tasks.overdue} overdue\n\nUpcoming Events: ${events.length}\n${events.slice(0, 5).map(e => `- ${e.title} (${new Date(e.start_time).toLocaleDateString()})`).join('\n')}\n\nView dashboard: ${process.env.NEXT_PUBLIC_APP_URL || 'https://togethr.app'}/dashboard`,
+    text: `Weekly Summary for ${familyName} (${weekStart} - ${weekEnd})\n\nHi ${userName},\n\nTasks: ${tasks.completed} completed, ${tasks.pending} pending, ${tasks.overdue} overdue\n\nUpcoming Events: ${events.length}\n${events.slice(0, 5).map(e => `- ${e.title} (${new Date(e.start_time).toLocaleDateString()})`).join('\n')}\n\nView dashboard: ${appUrl()}/dashboard`,
   }),
 
   // A new pin on the family board. Says only who pinned what kind of thing:

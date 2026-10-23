@@ -67,6 +67,12 @@ export async function POST(request: NextRequest) {
     // user's plaintext password, to server logs.
     const validatedData = registerSchema.parse(body)
 
+    // Slow down scripted sign-ups (each one also emails the admin) and
+    // probing which emails have accounts. A household sharing one IP still
+    // has plenty of room.
+    const byIp = await hitRateLimit(`register:ip:${clientIp(request)}`, 10, 60 * 60)
+    if (!byIp.allowed) return tooManyRequests(byIp.retryAfterSec, "sign-ups from this network")
+
     // Check if email already exists
     const existingUsers = await sql`
       SELECT id FROM users WHERE email = ${validatedData.email.toLowerCase()}

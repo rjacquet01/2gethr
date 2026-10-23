@@ -1,3 +1,4 @@
+import { del } from "@vercel/blob"
 import { sql } from "@/lib/db"
 import { revokeAllUserTokens } from "@/lib/auth"
 import { stripe } from "@/lib/stripe"
@@ -124,6 +125,17 @@ export async function closeUserAccount(user: { id: string; email: string }): Pro
     await sql`DELETE FROM consents WHERE user_id = ${user.id}`
     await sql`DELETE FROM calendar_sync_connections WHERE user_id = ${user.id}`
     await sql`DELETE FROM password_reset_tokens WHERE user_id = ${user.id}`
+    // Devices stop receiving this account's notifications.
+    await sql`DELETE FROM push_tokens WHERE user_id = ${user.id}`
+    // The profile photo file itself, not just the link to it below.
+    const photo = await sql`SELECT profile_photo_url FROM users WHERE id = ${user.id}`
+    if (photo[0]?.profile_photo_url) {
+      try {
+        await del(photo[0].profile_photo_url as string)
+      } catch (err) {
+        if (!/NotFound/i.test((err as Error)?.name || "")) throw new Error("Could not delete your profile photo; try again")
+      }
+    }
 
     // Any remaining family memberships (families this user didn't own)
     await sql`DELETE FROM family_members WHERE user_id = ${user.id}`
