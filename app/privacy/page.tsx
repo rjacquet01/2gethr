@@ -68,6 +68,12 @@ export default function PrivacyPage() {
             <ul className="list-disc pl-6 space-y-2">
               <li>Location, only if you or a parent turn on location sharing, and only while sharing is enabled</li>
               <li>Device and app information such as browser, operating system, push notification token and IP address</li>
+              <li>
+                Voice input, only when you tap the microphone to dictate into a text box. Your browser&apos;s speech
+                service turns your speech into text (Google for Chrome and Edge, Apple for Safari) under that
+                company&apos;s privacy terms. Togethr receives only the text, and only when you save it. Voice input is
+                not offered on children&apos;s accounts.
+              </li>
               <li>Basic usage and performance analytics</li>
               <li>Security and audit logs of account actions</li>
             </ul>

@@ -12,6 +12,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { DictateField } from '@/components/dictate-button'
+import { appendDictation } from '@/lib/dictation'
 import { toast } from 'sonner'
 import { createTask } from '@/hooks/use-tasks'
 import { Input } from '@/components/ui/input'
@@ -264,13 +266,15 @@ export function QuickAdd({
           void submit()
         }}
       >
-        <Input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder='Quick add: "Pack lunches @Bob tomorrow !high"'
-          className="h-10"
-          aria-label="Quick add task"
-        />
+        <DictateField className="min-w-0 flex-1" label="Dictate a task" onText={(t) => setValue((v) => appendDictation(v, t))}>
+          <Input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder='Quick add: "Pack lunches @Bob tomorrow !high"'
+            className="h-10 pr-11"
+            aria-label="Quick add task"
+          />
+        </DictateField>
         <Button type="submit" size="sm" className="h-10 shrink-0" disabled={!parsed.title || busy}>
           {busy ? <Spinner className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
           <span className="ml-1 hidden sm:inline">Add</span>

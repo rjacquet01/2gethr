@@ -23,6 +23,8 @@ import { FlyerEditor } from '@/components/board/flyer-editor'
 import { TakenDownSheet } from '@/components/board/taken-down-sheet'
 import { rolledOffMessage, type BoardPage, type BoardPost, type RolledOff } from '@/components/board/types'
 import { BOARD_LIMITS } from '@/lib/constants'
+import { DictateField } from '@/components/dictate-button'
+import { appendDictation } from '@/lib/dictation'
 
 const POST_MAX = 500
 const POLL_MS = 45_000
@@ -359,14 +361,16 @@ function FamilyBoard({ familyId }: { familyId: string }) {
             <DialogTitle>Write a note</DialogTitle>
             <DialogDescription>It goes up on the board for the whole family.</DialogDescription>
           </DialogHeader>
-          <Textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value.slice(0, POST_MAX))}
-            placeholder="Share something with the family..."
-            rows={4}
-            className="resize-none text-sm"
-            autoFocus
-          />
+          <DictateField multiline label="Dictate the note" onText={(t) => setDraft((v) => appendDictation(v, t).slice(0, POST_MAX))}>
+            <Textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value.slice(0, POST_MAX))}
+              placeholder="Share something with the family..."
+              rows={4}
+              className="resize-none text-sm pr-11"
+              autoFocus
+            />
+          </DictateField>
           <div className="flex items-center gap-3">
             {canModerate && (
               <label className="flex items-center gap-2 text-xs text-muted-foreground">

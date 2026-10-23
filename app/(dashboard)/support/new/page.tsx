@@ -15,6 +15,8 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useFamilies } from '@/hooks/use-family'
 import { authFetch } from '@/hooks/use-events'
+import { DictateField } from '@/components/dictate-button'
+import { appendDictation } from '@/lib/dictation'
 
 const categories: { value: string; label: string; icon: React.ComponentType<{ className?: string }>; description: string }[] = [
   { value: 'BILLING', label: 'Billing & Payments', icon: CreditCard, description: 'Subscription, charges, refunds' },
@@ -149,14 +151,17 @@ export default function NewTicketPage() {
 
             <div className="space-y-2">
               <Label htmlFor="description">Description *</Label>
-              <Textarea
-                id="description"
-                placeholder="Please describe your issue in detail. Include any error messages, steps to reproduce, or relevant information..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={5}
-                required
-              />
+              <DictateField multiline label="Dictate the description" onText={(t) => setDescription((v) => appendDictation(v, t))}>
+                <Textarea
+                  id="description"
+                  placeholder="Please describe your issue in detail. Include any error messages, steps to reproduce, or relevant information..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={5}
+                  required
+                  className="pr-11"
+                />
+              </DictateField>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">

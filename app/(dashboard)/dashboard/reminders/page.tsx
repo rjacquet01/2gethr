@@ -62,6 +62,8 @@ import {
   whenText,
   type ReminderGroupKey,
 } from '@/components/reminders-extras'
+import { DictateField } from '@/components/dictate-button'
+import { appendDictation } from '@/lib/dictation'
 
 interface Reminder {
   id: string
@@ -528,21 +530,27 @@ function RemindersPageContent() {
             <div className="space-y-4 py-2">
               <div className="space-y-1.5">
                 <Label htmlFor="reminder-title">Title</Label>
-                <Input
-                  id="reminder-title"
-                  placeholder="Take medication"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                />
+                <DictateField label="Dictate the title" onText={(t) => setTitle((v) => appendDictation(v, t))}>
+                  <Input
+                    id="reminder-title"
+                    placeholder="Take medication"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="pr-11"
+                  />
+                </DictateField>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="reminder-description">Notes (optional)</Label>
-                <Textarea
-                  id="reminder-description"
-                  placeholder="Any extra details"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
+                <DictateField multiline label="Dictate the notes" onText={(t) => setDescription((v) => appendDictation(v, t))}>
+                  <Textarea
+                    id="reminder-description"
+                    placeholder="Any extra details"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="pr-11"
+                  />
+                </DictateField>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="reminder-time">Remind me at</Label>

@@ -8,6 +8,8 @@ import { authFetch } from '@/hooks/use-auth'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
+import { DictateField } from '@/components/dictate-button'
+import { appendDictation } from '@/lib/dictation'
 
 /* ----------------------------- Quick parse ----------------------------- */
 
@@ -188,13 +190,15 @@ export function ReminderQuickAdd({
           void submit()
         }}
       >
-        <Input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder='Quick add: "Take meds tomorrow 8am daily"'
-          className="h-10"
-          aria-label="Quick add reminder"
-        />
+        <DictateField className="min-w-0 flex-1" label="Dictate a reminder" onText={(t) => setValue((v) => appendDictation(v, t))}>
+          <Input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder='Quick add: "Take meds tomorrow 8am daily"'
+            className="h-10 pr-11"
+            aria-label="Quick add reminder"
+          />
+        </DictateField>
         <Button type="submit" size="sm" className="h-10 shrink-0" disabled={!ready || busy}>
           {busy ? <Spinner className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
           <span className="ml-1 hidden sm:inline">Add</span>

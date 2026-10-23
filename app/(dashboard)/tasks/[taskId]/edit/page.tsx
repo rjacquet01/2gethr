@@ -21,6 +21,8 @@ import { Spinner } from '@/components/ui/spinner'
 import { ArrowLeft, ListTodo, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { format, parseISO } from 'date-fns'
+import { DictateField } from '@/components/dictate-button'
+import { appendDictation } from '@/lib/dictation'
 
 export default function EditTaskPage({ params }: { params: Promise<{ taskId: string }> }) {
   const { taskId } = use(params)
@@ -159,24 +161,30 @@ export default function EditTaskPage({ params }: { params: Promise<{ taskId: str
             {/* Title */}
             <div className="space-y-2">
               <Label htmlFor="title">Task Title *</Label>
-              <Input
-                id="title"
-                placeholder="Enter task title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
+              <DictateField label="Dictate the title" onText={(t) => setTitle((v) => appendDictation(v, t))}>
+                <Input
+                  id="title"
+                  placeholder="Enter task title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="pr-11"
+                />
+              </DictateField>
             </div>
 
             {/* Description */}
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Add task description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-              />
+              <DictateField multiline label="Dictate the description" onText={(t) => setDescription((v) => appendDictation(v, t))}>
+                <Textarea
+                  id="description"
+                  placeholder="Add task description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  className="pr-11"
+                />
+              </DictateField>
             </div>
 
             {/* Assignment */}
