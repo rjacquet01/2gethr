@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
-import { notifyTaskCompleted, createNotification } from '@/lib/notifications'
+import { notifyTaskCompleted, notifyTaskAssigned, createNotification, type NotificationChannel } from '@/lib/notifications'
 import { ensureAssignmentColumns, isSupervisorRole, assigneesInFamily, getParentUserIds } from '@/lib/assignment'
 import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-schema'
 import { ensureTaskApprovalColumn } from '@/lib/task-approval-schema'
@@ -623,7 +623,31 @@ export async function PATCH(
         INSERT INTO task_history (task_id, user_id, action, old_value, new_value)
         VALUES (${taskId}, ${user.id}, 'UPDATED', ${JSON.stringify({ title: task.title, description: task.description })}::jsonb, ${JSON.stringify(changes)}::jsonb)
       `
-      
+
+      // Newly assigned to someone else (a member, or a child profile with a
+      // login): tell them, as when a task is created for them.
+      const newUserId = updates.assignedToUserId !== undefined ? updates.assignedToUserId : null
+      const newChildId = updates.assignedToChildId !== undefined ? updates.assignedToChildId : null
+      if ((newUserId && newUserId !== task.assigned_to_id) || (newChildId && newChildId !== task.child_profile_id)) {
+        try {
+          let targetUserId: string | null = newUserId || null
+          if (!targetUserId && newChildId) {
+            const cp = await sql`
+              SELECT fm.user_id FROM child_profiles cp JOIN family_members fm ON cp.family_member_id = fm.id
+              WHERE cp.id = ${newChildId}
+            `
+            targetUserId = (cp[0]?.user_id as string | null) ?? null
+          }
+          if (targetUserId && targetUserId !== user.id) {
+            const assignerName = await actorNameInFamily(task.family_id, user, 'Someone')
+            const channels = (cleanChannels && cleanChannels.length > 0 ? cleanChannels : task.notify_channels || undefined) as NotificationChannel[] | undefined
+            await notifyTaskAssigned(targetUserId, (updates.title as string) || task.title, taskId, task.family_id, assignerName, channels)
+          }
+        } catch (e) {
+          console.error('Task reassignment notification failed (non-fatal):', e)
+        }
+      }
+
       return NextResponse.json({ success: true })
     }
     

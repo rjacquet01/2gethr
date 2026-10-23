@@ -45,6 +45,7 @@ import { useFavorites } from '@/components/favorites-dropdown'
 import { useCalendarWeather } from '@/components/calendar-extras'
 import {
   ACTIVE,
+  AssigneePicker,
   OUTDOOR,
   PersonProgress,
   QuickAdd,
@@ -118,12 +119,15 @@ export default function TasksPage() {
       name: m.displayName,
       userId: m.userId,
       color: m.color,
+      role: m.role,
     })),
-    ...kids.filter((c) => !c.hasLogin && !c.familyMemberId).map((c) => ({
+    // A child with their own login is already in members (the API sends hasAccount).
+    ...kids.filter((c) => !(c.hasAccount ?? c.hasLogin) && !c.familyMemberId).map((c) => ({
       key: 'c' + c.id,
       name: c.displayName,
       childId: c.id,
       color: c.color,
+      role: 'CHILD',
     })),
   ]
 
@@ -189,18 +193,28 @@ export default function TasksPage() {
     }
   }
 
-  const assignToMe = async (taskId: string) => {
-    if (!user) return
+  const assignTo = async (taskId: string, p: Person) => {
     setProcessingTaskId(taskId)
     try {
-      await updateTask(taskId, 'update', { assignedToUserId: user.id })
+      await updateTask(taskId, 'update', p.userId ? { assignedToUserId: p.userId } : { assignedToChildId: p.childId })
       mutate()
-      toast.success('Assigned to you')
+      toast.success(user && p.userId === user.id ? 'Assigned to you' : `Assigned to ${p.name.split(' ')[0]}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not assign task')
     } finally {
       setProcessingTaskId(null)
     }
+  }
+
+  // Who this person may hand an unassigned task to (the server checks the same):
+  // parents, guardians and adults: anyone; a child: anyone, on a task they
+  // made, else nobody; a guest: only themselves.
+  const myRole = me?.role
+  const assignOptions = (task: TaskT): Person[] => {
+    if (!user || !me) return []
+    if (myRole === 'GUEST') return people.filter((p) => p.userId === user.id)
+    if (myRole === 'CHILD' && task.created_by_id !== user.id) return []
+    return people
   }
 
   const statusBadge = (status: string) => {
@@ -292,24 +306,24 @@ export default function TasksPage() {
             <p className={cn('truncate font-medium text-foreground', status === 'completed' && 'line-through')}>{task.title}</p>
           </Link>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Avatar className="h-4 w-4">
-                {assigneeAvatarSrc && <AvatarImage src={assigneeAvatarSrc} alt={assigneeName} />}
-                <AvatarFallback className="bg-primary/10 text-[9px] text-primary">
-                  {unassigned ? '?' : initialsOf(assigneeName)}
-                </AvatarFallback>
-              </Avatar>
-              {assigneeName}
-              {unassigned && user && ACTIVE.includes(status) && (
-                <button
-                  type="button"
-                  onClick={() => assignToMe(task.id)}
-                  className="ml-1 rounded border px-1.5 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/10"
-                >
-                  Assign to me
-                </button>
-              )}
-            </span>
+            {unassigned && ACTIVE.includes(status) && assignOptions(task).length > 0 ? (
+              <AssigneePicker
+                options={assignOptions(task)}
+                meId={user?.id}
+                disabled={busy}
+                onPick={(p) => assignTo(task.id, p)}
+              />
+            ) : (
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Avatar className="h-4 w-4">
+                  {assigneeAvatarSrc && <AvatarImage src={assigneeAvatarSrc} alt={assigneeName} />}
+                  <AvatarFallback className="bg-primary/10 text-[9px] text-primary">
+                    {unassigned ? '?' : initialsOf(assigneeName)}
+                  </AvatarFallback>
+                </Avatar>
+                {assigneeName}
+              </span>
+            )}
             {task.due_date && (
               <span className={cn('flex items-center gap-1 text-xs', overdue ? 'font-medium text-red-600' : 'text-muted-foreground')}>
                 <Calendar className="h-3 w-3" />
