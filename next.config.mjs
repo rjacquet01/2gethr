@@ -23,10 +23,11 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: "frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; upgrade-insecure-requests",
           },
-          // Location (sharing) and camera (photos) only for this site; nothing else.
+          // Location (sharing), camera (photos) and microphone (voice input)
+          // only for this site; nothing else.
           {
             key: "Permissions-Policy",
-            value: "geolocation=(self), camera=(self), microphone=(), payment=(), usb=(), serial=(), bluetooth=()",
+            value: "geolocation=(self), camera=(self), microphone=(self), payment=(), usb=(), serial=(), bluetooth=()",
           },
         ],
       },

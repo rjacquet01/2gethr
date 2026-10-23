@@ -32,6 +32,8 @@ import { ArrowLeft, Calendar, Clock, MapPin, Save } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
 import { localDateTimeToISO, localStartOfDayToISO, localEndOfDayToISO } from '@/lib/datetime'
+import { DictateField } from '@/components/dictate-button'
+import { appendDictation } from '@/lib/dictation'
 
 const CATEGORIES = [
   { value: 'GENERAL', label: 'General' },
@@ -222,24 +224,30 @@ export default function EditEventPage() {
             {/* Title */}
             <div className="space-y-2">
               <Label htmlFor="title">Event Title *</Label>
-              <Input
-                id="title"
-                placeholder="Enter event title"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              />
+              <DictateField label="Dictate the title" onText={(t) => setFormData((prev) => ({ ...prev, title: appendDictation(prev.title, t) }))}>
+                <Input
+                  id="title"
+                  placeholder="Enter event title"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="pr-11"
+                />
+              </DictateField>
             </div>
 
             {/* Description */}
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Add event description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={3}
-              />
+              <DictateField multiline label="Dictate the description" onText={(t) => setFormData((prev) => ({ ...prev, description: appendDictation(prev.description, t) }))}>
+                <Textarea
+                  id="description"
+                  placeholder="Add event description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  rows={3}
+                  className="pr-11"
+                />
+              </DictateField>
             </div>
 
             {/* Location */}

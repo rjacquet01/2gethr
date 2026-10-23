@@ -24,6 +24,8 @@ import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { useMyRole } from '@/hooks/use-my-role'
 import { AccountStatusBadge } from '@/components/account-status-badge'
+import { DictateField } from '@/components/dictate-button'
+import { appendDictation } from '@/lib/dictation'
 
 export default function NewTaskPage() {
   const router = useRouter()
@@ -160,25 +162,31 @@ export default function NewTaskPage() {
             {/* Title */}
             <div className="space-y-2">
               <Label htmlFor="title">Task Title *</Label>
-              <Input
-                id="title"
-                placeholder="e.g., Clean your room, Do homework, Take out trash"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-              />
+              <DictateField label="Dictate the title" onText={(t) => setTitle((v) => appendDictation(v, t))}>
+                <Input
+                  id="title"
+                  placeholder="e.g., Clean your room, Do homework, Take out trash"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  required
+                  className="pr-11"
+                />
+              </DictateField>
             </div>
 
             {/* Description */}
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Add more details about this task..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-              />
+              <DictateField multiline label="Dictate the description" onText={(t) => setDescription((v) => appendDictation(v, t))}>
+                <Textarea
+                  id="description"
+                  placeholder="Add more details about this task..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  className="pr-11"
+                />
+              </DictateField>
             </div>
 
             {/* Assignment */}

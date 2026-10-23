@@ -31,6 +31,8 @@ import { useAuth, authFetch } from '@/hooks/use-auth'
 import { useFamilies, useFamily, FamilyMember, ChildProfile } from '@/hooks/use-family'
 import { useMyRole } from '@/hooks/use-my-role'
 import { AccountStatusBadge } from '@/components/account-status-badge'
+import { DictateField } from '@/components/dictate-button'
+import { appendDictation } from '@/lib/dictation'
 
 const EVENT_CATEGORIES = [
   { value: 'GENERAL', label: 'General', color: 'bg-gray-500' },
@@ -426,25 +428,31 @@ function NewEventForm() {
             {/* Title */}
             <div className="space-y-2">
               <Label htmlFor="title">Event Title *</Label>
-              <Input
-                id="title"
-                placeholder="Enter event title"
-                value={formData.title}
-                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                required
-              />
+              <DictateField label="Dictate the title" onText={(t) => setFormData((prev) => ({ ...prev, title: appendDictation(prev.title, t) }))}>
+                <Input
+                  id="title"
+                  placeholder="Enter event title"
+                  value={formData.title}
+                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                  required
+                  className="pr-11"
+                />
+              </DictateField>
             </div>
 
             {/* Description */}
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Add event details..."
-                value={formData.description}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                rows={3}
-              />
+              <DictateField multiline label="Dictate the description" onText={(t) => setFormData((prev) => ({ ...prev, description: appendDictation(prev.description, t) }))}>
+                <Textarea
+                  id="description"
+                  placeholder="Add event details..."
+                  value={formData.description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  rows={3}
+                  className="pr-11"
+                />
+              </DictateField>
             </div>
 
             {/* All Day Toggle */}
