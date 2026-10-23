@@ -44,11 +44,18 @@ export function DictateButton({
   const { isChild } = useMyRole()
   const [listening, setListening] = useState(false)
   const rec = useRef<Recognition | null>(null)
+  const stopped = useRef(false)
   const onTextRef = useRef(onText)
   useEffect(() => {
     onTextRef.current = onText
   })
-  useEffect(() => () => rec.current?.abort(), [])
+  useEffect(
+    () => () => {
+      stopped.current = true
+      rec.current?.abort()
+    },
+    []
+  )
 
   if (!supported || isChild) return null
 
@@ -60,27 +67,36 @@ export function DictateButton({
     r.interimResults = false
     // One phrase per tap: continuous mode repeats words on Android Chrome.
     r.continuous = false
+    // Android Chrome often ends a silent session with no "no-speech" error,
+    // so a session that ends with no words says so itself.
+    let heard = false
+    let told = false
     r.onresult = (e) => {
       let text = ''
       for (let i = e.resultIndex; i < e.results.length; i++) {
         if (e.results[i].isFinal) text += e.results[i][0].transcript
       }
-      if (text.trim()) onTextRef.current(text)
+      if (text.trim()) {
+        heard = true
+        onTextRef.current(text)
+      }
     }
     r.onerror = (e) => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        told = true
         toast.error('Allow microphone access in your browser to use voice input')
-      } else if (e.error === 'no-speech') {
-        toast('Didn’t catch that. Tap the mic and try again.')
       } else if (e.error === 'network') {
+        told = true
         toast.error('Voice input needs an internet connection')
       }
     }
     r.onend = () => {
+      if (!heard && !told && !stopped.current) toast('Didn’t catch that. Tap the mic and try again.')
       setListening(false)
       rec.current = null
     }
     rec.current = r
+    stopped.current = false
     try {
       r.start()
       setListening(true)
@@ -92,7 +108,11 @@ export function DictateButton({
   return (
     <button
       type="button"
-      onClick={() => (listening ? rec.current?.stop() : start())}
+      onClick={() => {
+        if (!listening) return start()
+        stopped.current = true
+        rec.current?.stop()
+      }}
       aria-label={listening ? 'Stop dictating' : label}
       aria-pressed={listening}
       title={listening ? 'Listening… tap to stop' : label}
