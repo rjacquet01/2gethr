@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import { sql } from '@/lib/db'
 import { sendEmail, isResendConfigured } from '@/lib/services/email'
+import { appUrl } from '@/lib/app-url'
 
 // One-hour, single-use password reset links. Only the token's hash is stored.
 // Used by "Forgot password" and by an admin's "Send password reset link";
@@ -20,7 +21,7 @@ export async function sendPasswordResetLink(user: { id: string; email: string; f
     VALUES (${user.id}, ${hashResetToken(resetToken)}, ${expiresAt.toISOString()}, NOW())
   `
 
-  const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`
+  const resetUrl = `${appUrl()}/reset-password?token=${resetToken}`
 
   if (isResendConfigured()) {
     await sendEmail({

@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { purchaseBlockedForRequest } from "@/lib/android-app"
 import { stripe } from "@/lib/stripe"
+import { appUrl as siteUrl } from '@/lib/app-url'
 
 // POST - Create a Stripe Customer Portal session so a family owner can
 // self-service their subscription (update payment method, switch plans,
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000"
+    const appUrl = siteUrl()
 
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,

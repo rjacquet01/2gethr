@@ -5,6 +5,7 @@ import { getUserFromRequest, checkFamilySubscription } from '@/lib/auth'
 import { getTierDefinition } from '@/lib/subscription-tiers'
 import { ensureSyncSchema } from '@/lib/sync-schema'
 import { defaultFamilyFor } from '@/lib/permissions'
+import { appUrl } from '@/lib/app-url'
 
 // Lets a user get (or create) a standing subscription URL that any calendar
 // app can subscribe to (Apple Calendar, Outlook, Google Calendar's "From
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, feedUrl: null })
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const baseUrl = appUrl()
   return NextResponse.json({
     success: true,
     feedUrl: `${baseUrl}/api/calendar-sync/ical/feed/${existing[0].ical_token}`,
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest) {
     `
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const baseUrl = appUrl()
   return NextResponse.json({
     success: true,
     feedUrl: `${baseUrl}/api/calendar-sync/ical/feed/${icalToken}`,

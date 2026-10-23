@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, generateOAuthState } from '@/lib/auth'
+import { appUrl } from '@/lib/app-url'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
-const REDIRECT_URI = process.env.NEXT_PUBLIC_APP_URL 
-  ? `${process.env.NEXT_PUBLIC_APP_URL}/api/calendar-sync/google/callback`
-  : 'http://localhost:3000/api/calendar-sync/google/callback'
+const REDIRECT_URI = `${appUrl()}/api/calendar-sync/google/callback`
 
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',

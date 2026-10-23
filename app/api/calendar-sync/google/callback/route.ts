@@ -3,14 +3,13 @@ import { neon } from '@neondatabase/serverless'
 import { encrypt } from '@/lib/encryption'
 import { defaultFamilyFor } from '@/lib/permissions'
 import { verifyOAuthState } from '@/lib/auth'
+import { appUrl } from '@/lib/app-url'
 
 const sql = neon(process.env.DATABASE_URL!)
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
-const REDIRECT_URI = process.env.NEXT_PUBLIC_APP_URL 
-  ? `${process.env.NEXT_PUBLIC_APP_URL}/api/calendar-sync/google/callback`
-  : 'http://localhost:3000/api/calendar-sync/google/callback'
+const REDIRECT_URI = `${appUrl()}/api/calendar-sync/google/callback`
 
 export async function GET(request: NextRequest) {
   try {

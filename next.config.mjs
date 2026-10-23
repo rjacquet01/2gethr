@@ -16,6 +16,18 @@ const nextConfig = {
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Strict-Transport-Security", value: "max-age=31536000" },
+          // Directives that can't break loading the app: no framing by other
+          // sites, no <base> hijack, no plugins, forms post only here. A
+          // script-src allowlist needs per-request nonces; not done yet.
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; upgrade-insecure-requests",
+          },
+          // Location (sharing) and camera (photos) only for this site; nothing else.
+          {
+            key: "Permissions-Policy",
+            value: "geolocation=(self), camera=(self), microphone=(), payment=(), usb=(), serial=(), bluetooth=()",
+          },
         ],
       },
     ]

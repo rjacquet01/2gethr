@@ -4,6 +4,7 @@ import { getUserFromRequest } from "@/lib/auth"
 import { purchaseBlockedForRequest } from "@/lib/android-app"
 import { stripe, getPriceId } from "@/lib/stripe"
 import { buildCheckoutSessionParams, subscriptionUpdateTaxParams } from "@/lib/stripe-checkout"
+import { appUrl as siteUrl } from '@/lib/app-url'
 
 // POST - Create a Stripe Checkout Session for a subscription upgrade.
 //
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
       `
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000"
+    const appUrl = siteUrl()
 
     // Already paying through Stripe? Switch the existing subscription's
     // price (prorated) instead of opening a second Checkout - a second

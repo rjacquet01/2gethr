@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, verifyPassword, logAuditEvent } from "@/lib/auth"
 import { disableTwoFactor } from "@/lib/services/two-factor"
+import { hitRateLimit, tooManyRequests } from "@/lib/rate-limit"
 import { z } from "zod"
 
 const disableSchema = z.object({
@@ -20,6 +21,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { password } = disableSchema.parse(body)
+
+    // Shares the change-password budget: one limit on guessing this account's password.
+    const limit = await hitRateLimit(`password-check:${user.id}`, 10, 15 * 60)
+    if (!limit.allowed) return tooManyRequests(limit.retryAfterSec, "password attempts")
 
     const rows = await sql`SELECT password_hash FROM users WHERE id = ${user.id}`
     if (rows.length === 0 || !(await verifyPassword(password, rows[0].password_hash))) {
