@@ -721,7 +721,7 @@ function ImportIcsCard() {
                   </div>
                 ))}
               {(family.children || [])
-                .filter((c) => !c.hasLogin)
+                .filter((c) => !(c.hasAccount ?? c.hasLogin))
                 .map((c) => (
                   <div key={c.id} className="flex items-center gap-2">
                     <Checkbox

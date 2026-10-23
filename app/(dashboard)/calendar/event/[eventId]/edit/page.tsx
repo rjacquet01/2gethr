@@ -393,7 +393,7 @@ export default function EditEventPage() {
                       {isSupervisor && m.role === 'CHILD' && <AccountStatusBadge hasAccount={m.hasAccount ?? true} />}
                     </div>
                   ))}
-                  {(family.children || []).filter((c) => !c.hasLogin).map((c) => (
+                  {(family.children || []).filter((c) => !(c.hasAccount ?? c.hasLogin)).map((c) => (
                     <div key={c.id} className="flex items-center gap-2">
                       <Checkbox
                         id={`participant-child-${c.id}`}
