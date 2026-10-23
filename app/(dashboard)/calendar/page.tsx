@@ -314,6 +314,8 @@ export default function CalendarPage() {
                 eventsFor={getEventsForDay}
                 weather={weather}
                 members={primaryFamily?.members}
+                colorClass={eventBg}
+                colorStyle={eventStyle}
               />
             )}
             {/* Day Headers */}

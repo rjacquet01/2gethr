@@ -224,11 +224,16 @@ export function AgendaList({
   eventsFor,
   weather,
   members,
+  colorClass,
+  colorStyle,
 }: {
   days: Date[]
   eventsFor: (d: Date) => any[]
   weather: Record<string, DayWeather>
   members?: Array<{ userId: string; color?: string | null; emoji?: string | null }>
+  /** The event's color, as in month view: a category class, or a custom color style. */
+  colorClass?: (e: { category: string; customColor?: string | null }) => string
+  colorStyle?: (e: { customColor?: string | null }) => React.CSSProperties | undefined
 }) {
   const withEvents = days.filter((d) => eventsFor(d).length > 0)
   if (withEvents.length === 0) {
@@ -255,16 +260,23 @@ export function AgendaList({
                 <li key={e.id}>
                   <Link
                     href={`/calendar/event/${e.id}`}
-                    className="block rounded-lg border p-3 hover:bg-muted/50"
+                    className="flex gap-3 rounded-lg border p-3 hover:bg-muted/50"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="min-w-0 truncate font-medium">{e.title}</p>
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {e.allDay || e.isAllDay ? 'All day' : format(parseISO(e.startTime), 'h:mm a')}
-                      </span>
+                    <span
+                      className={cn('w-1 shrink-0 self-stretch rounded-full bg-muted', colorClass?.(e))}
+                      style={colorStyle?.(e)}
+                      aria-hidden="true"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="min-w-0 truncate font-medium">{e.title}</p>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {e.allDay || e.isAllDay ? 'All day' : format(parseISO(e.startTime), 'h:mm a')}
+                        </span>
+                      </div>
+                      {e.location && <p className="truncate text-xs text-muted-foreground">{e.location}</p>}
+                      <ParticipantDots participants={e.participants} members={members} />
                     </div>
-                    {e.location && <p className="truncate text-xs text-muted-foreground">{e.location}</p>}
-                    <ParticipantDots participants={e.participants} members={members} />
                   </Link>
                 </li>
               ))}
