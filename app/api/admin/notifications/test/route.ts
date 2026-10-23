@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAdminFromRequest } from '@/lib/admin-auth'
-import { sendSMS, isTwilioConfigured } from '@/lib/services/sms'
+import { sendSMS, isSmsConfigured, smsProvider, SMS_PROVIDER_NAMES } from '@/lib/services/sms'
 import { sendEmail, isResendConfigured } from '@/lib/services/email'
 import { sendPushNotification, isFirebaseConfigured } from '@/lib/services/push'
 import { neon } from '@neondatabase/serverless'
@@ -18,9 +18,9 @@ export async function POST(request: Request) {
 
     switch (service) {
       case 'sms': {
-        if (!isTwilioConfigured()) {
+        if (!isSmsConfigured()) {
           return NextResponse.json(
-            { error: 'SMS service not configured. Add Twilio environment variables.' },
+            { error: `SMS service not configured. Add the ${SMS_PROVIDER_NAMES[smsProvider()]} environment variables.` },
             { status: 400 }
           )
         }

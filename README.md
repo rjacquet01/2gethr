@@ -24,6 +24,22 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Environment variables
+
+`.env.example` lists the names (never commit values). For SMS:
+
+| Variable | Purpose |
+|---|---|
+| `SMS_PROVIDER` | `twilio` (default) or `telnyx`. Anything else, or unset, uses Twilio. |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` | Twilio sending and webhook signature check. |
+| `TELNYX_API_KEY` | Telnyx API v2 key (sent as a Bearer token, never logged). |
+| `TELNYX_FROM_NUMBER` | The Telnyx sending number in E.164. |
+| `TELNYX_MESSAGING_PROFILE_ID` | Optional messaging profile for sends. |
+| `TELNYX_PUBLIC_KEY` | Base64 Ed25519 public key that verifies Telnyx webhooks. |
+
+Inbound texts (STOP / START / HELP): Twilio posts to `/api/webhooks/twilio-sms`, Telnyx to
+`/api/webhooks/telnyx-sms`. Both share `lib/sms-inbound.ts`.
+
 ## Learn More
 
 To learn more, take a look at the following resources:

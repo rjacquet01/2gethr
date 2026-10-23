@@ -1,7 +1,7 @@
 import { sql } from "./db"
 import { ddl } from "./schema-snapshot"
 import { sendPushToUser, isFirebaseConfigured } from "./services/push"
-import { sendSMSMetered, isTwilioConfigured } from "./services/sms"
+import { sendSMSMetered, isSmsConfigured } from "./services/sms"
 import { sendEmail, isResendConfigured } from "./services/email"
 import { memberName } from "./member-names"
 
@@ -171,7 +171,7 @@ export async function dispatchSos(input: SosInput): Promise<RecipientResult[]> {
       }
 
       // Emergency: text unless the person explicitly turned SMS off.
-      if (r.phone && isTwilioConfigured() && r.sms_enabled !== false) {
+      if (r.phone && isSmsConfigured() && r.sms_enabled !== false) {
         tasks.push((async () => {
           const s = await sendSmsWithRetry(r.phone, smsBody, familyId)
           out.sms = s.ok ? "sent" : "failed"
@@ -182,7 +182,7 @@ export async function dispatchSos(input: SosInput): Promise<RecipientResult[]> {
           await record(eventId, r.user_id, "sms", out.sms, s.error)
         })())
       } else {
-        const why = !r.phone ? "no phone number on file" : !isTwilioConfigured() ? "SMS not configured" : "SMS turned off by user"
+        const why = !r.phone ? "no phone number on file" : !isSmsConfigured() ? "SMS not configured" : "SMS turned off by user"
         out.smsReason = why
         tasks.push(record(eventId, r.user_id, "sms", "skipped", why))
       }

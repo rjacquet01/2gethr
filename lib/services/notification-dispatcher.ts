@@ -4,7 +4,7 @@
  */
 
 import { sql } from '@/lib/db'
-import { sendSMSMetered, SMS_TEMPLATES, isTwilioConfigured } from './sms'
+import { sendSMSMetered, SMS_TEMPLATES, isSmsConfigured } from './sms'
 import { sendEmail, EMAIL_TEMPLATES, isResendConfigured } from './email'
 import { isFirebaseConfigured } from './push'
 import { createNotification } from '../notifications'
@@ -180,7 +180,7 @@ export async function dispatchNotification(
     }
 
     // 4. SMS Notification
-    if (channels.includes('sms') && prefs.channels.sms && prefs.phone && isTwilioConfigured()) {
+    if (channels.includes('sms') && prefs.channels.sms && prefs.phone && isSmsConfigured()) {
       try {
         let smsBody: string
         
@@ -285,7 +285,7 @@ export function getNotificationServicesStatus(): {
   push: boolean
 } {
   return {
-    sms: isTwilioConfigured(),
+    sms: isSmsConfigured(),
     email: isResendConfigured(),
     push: isFirebaseConfigured(),
   }

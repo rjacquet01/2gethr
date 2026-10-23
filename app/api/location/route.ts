@@ -6,7 +6,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, getUserWithFamily, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { verifyDeviceToken } from "@/lib/device-token"
 import { z } from "zod"
-import { sendSMSMetered, SMS_TEMPLATES, isTwilioConfigured } from "@/lib/services/sms"
+import { sendSMSMetered, SMS_TEMPLATES, isSmsConfigured } from "@/lib/services/sms"
 import { sendEmail, EMAIL_TEMPLATES, isResendConfigured } from "@/lib/services/email"
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
 import { distanceMeters, evaluateGeofence, confirmsDeparture, suggestedIntervalForGaps } from "@/lib/geofence"
@@ -792,7 +792,7 @@ async function createGeofenceNotification(
     // SMS — same default as the Settings page (off until the recipient sets
     // a phone number and flips "SMS Notifications" on there).
     const smsEnabled = recipient.sms_enabled === true
-    if (wantsSms && smsEnabled && recipient.phone && isTwilioConfigured()) {
+    if (wantsSms && smsEnabled && recipient.phone && isSmsConfigured()) {
       try {
         const smsBody =
           eventType === "ARRIVAL"

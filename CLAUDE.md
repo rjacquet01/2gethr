@@ -40,7 +40,7 @@ real email. Read a script's header before running it.
   dashboard-prefetch, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
   legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-link, push-ownership,
   dictation, push-picker, quick-add, schema-snapshot, sms-consent, stillness, stripe-checkout-tax,
-  stripe-webhook-events, weather-prompt, weather-route.
+  stripe-webhook-events, telnyx-sms, weather-prompt, weather-route.
 - **Board suites** (board-flyer-download, board-flyers, board-limits,
   board-notify) need a disposable database in `BOARD_TEST_DATABASE_URL`.
   `scripts/board-test-db.ts` reads it from `.env.test.local` automatically, which points
@@ -99,6 +99,9 @@ real email. Read a script's header before running it.
   urgent alerts included; `lib/services/sms.ts` enforces it. Turning SMS on in Settings is the
   opt-in; a new number needs it again. Bodies start with "Togethr:". Inbound STOP/HELP:
   `/api/webhooks/twilio-sms`. Public opt-in page: `/sms-consent`.
+- SMS provider: `SMS_PROVIDER` = `twilio` (default) or `telnyx` (`lib/services/sms.ts`). Gate sends on
+  `isSmsConfigured()`, not a provider's own check. Inbound STOP/START/HELP for both providers is
+  `lib/sms-inbound.ts`; Telnyx posts to `/api/webhooks/telnyx-sms` (Ed25519, `TELNYX_PUBLIC_KEY`).
 - Cold-start schema setup is skipped when the catalog snapshot shows it is
   already applied (`lib/schema-snapshot.ts`, the `ddl` tag).
 

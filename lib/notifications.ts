@@ -2,7 +2,7 @@ import { sql, type Row } from '@/lib/db'
 import { sendPushToUser, isFirebaseConfigured, notificationDedupeKey } from "@/lib/services/push"
 import { notificationHref } from "@/lib/notification-link"
 import { sendEmail, isResendConfigured, EMAIL_TEMPLATES } from "@/lib/services/email"
-import { sendSMSMetered, isTwilioConfigured } from "@/lib/services/sms"
+import { sendSMSMetered, isSmsConfigured } from "@/lib/services/sms"
 
 // SMS for in-app notifications. Goes through the metered sender so every text
 // counts against the family's monthly SMS quota (over quota it is skipped and
@@ -12,9 +12,9 @@ export async function sendSmsNotification(
   message: string,
   meter: { familyId?: string | null; userId?: string | null } = {}
 ): Promise<{ success: boolean; error?: string }> {
-  // If Twilio is not configured, skip SMS without blocking the flow.
-  if (!isTwilioConfigured()) {
-    console.log('[SMS] Twilio not configured, skipping SMS notification')
+  // If SMS is not configured, skip it without blocking the flow.
+  if (!isSmsConfigured()) {
+    console.log('[SMS] Not configured, skipping SMS notification')
     return { success: true }
   }
   const result = await sendSMSMetered({ to: phoneNumber, body: message, familyId: meter.familyId, userId: meter.userId })

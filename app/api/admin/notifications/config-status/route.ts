@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { isTwilioConfigured } from '@/lib/services/sms'
+import { isSmsConfigured, smsProvider, SMS_PROVIDER_NAMES } from '@/lib/services/sms'
 import { isResendConfigured } from '@/lib/services/email'
 import { isFirebaseConfigured } from '@/lib/services/push'
 
@@ -14,8 +14,8 @@ export async function GET() {
     // instead of implying a service was "never tested".
     const status = {
       sms: {
-        configured: isTwilioConfigured(),
-        provider: 'Twilio',
+        configured: isSmsConfigured(),
+        provider: SMS_PROVIDER_NAMES[smsProvider()],
         lastTested: null,
         lastTestResult: null,
         testsRecorded: false

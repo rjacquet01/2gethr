@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { sendPushToUser } from "@/lib/services/push"
 import { sendEmail, isResendConfigured } from "@/lib/services/email"
-import { sendSMSMetered, isTwilioConfigured } from "@/lib/services/sms"
+import { sendSMSMetered, isSmsConfigured } from "@/lib/services/sms"
 import { isQuietNow } from "@/lib/quiet-hours"
 import { tierHasFeature } from "@/lib/subscription-tiers"
 
@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
             console.error("[EventReminder] email failed (non-fatal):", e)
           }
         }
-        if (channels.includes("sms") && us.sms_enabled && hasSms && p.phone && isTwilioConfigured()) {
+        if (channels.includes("sms") && us.sms_enabled && hasSms && p.phone && isSmsConfigured()) {
           try {
             // Counts against the family's monthly SMS quota.
             await sendSMSMetered({ familyId: event.family_id, to: p.phone, body: `Togethr: Reminder - "${event.title}" starts ${timeText}${event.location ? ` at ${event.location}` : ""}.` })

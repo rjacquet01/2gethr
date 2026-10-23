@@ -1,8 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto"
 
 // Inbound texts from Twilio (app/api/webhooks/twilio-sms). Twilio already
-// handles STOP / START / HELP at the carrier level; this keeps our database
-// in step and answers HELP and START.
+// handles STOP / START / HELP at the carrier level; lib/sms-inbound.ts keeps
+// our database in step and answers HELP and START.
 
 /**
  * Twilio's request signature: base64 HMAC-SHA1, keyed with the auth token,
@@ -29,23 +29,8 @@ export function validTwilioSignature(
   })
 }
 
-export type SmsKeyword = "stop" | "start" | "help" | null
-
-const STOP = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "OPTOUT", "REVOKE"])
-const START = new Set(["START", "UNSTOP", "YES"])
-const HELP = new Set(["HELP", "INFO"])
-
-/** The opt-out keyword a whole message is, if any ("Stop." counts, "stop by later" doesn't). */
-export function smsKeyword(body: string | null | undefined): SmsKeyword {
-  const word = (body || "").trim().replace(/[.!?]+$/, "").toUpperCase()
-  if (STOP.has(word)) return "stop"
-  if (START.has(word)) return "start"
-  if (HELP.has(word)) return "help"
-  return null
-}
-
-export const SMS_START_REPLY =
-  "Togethr: You can receive texts again. To turn notification texts back on, go to Settings > Notifications at mytogethr.com."
+// The keywords and what they do are shared with Telnyx (lib/sms-inbound.ts).
+export { smsKeyword, SMS_START_REPLY, type SmsKeyword } from "./sms-inbound"
 
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c] as string)
