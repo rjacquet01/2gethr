@@ -7,6 +7,7 @@ import { parseQuickAdd, type Person } from "../components/tasks-extras"
 import { parseReminderQuick } from "../components/reminders-extras"
 import {
   QUICK_ADD_SUGGESTIONS,
+  SUGGESTION_CATEGORY_LABELS,
   filterSuggestions,
   suggestedTokens,
   suggestionCategories,
@@ -94,6 +95,18 @@ ok("Kids' Chores only when the family has children", () => {
   assert.ok(!filterSuggestions({ category: "home", query: "bed", hasChildren: false }).some((s) => s.kid))
   assert.ok(filterSuggestions({ category: "home", query: "make your bed", hasChildren: true }).some((s) => s.kid))
 })
+ok("10 suggestions in each category, Work & Admin named as asked", () => {
+  for (const c of ["home", "errands", "admin", "health", "kids"] as const) {
+    assert.equal(QUICK_ADD_SUGGESTIONS.filter((s) => s.category === c).length, 10, c)
+  }
+  assert.equal(SUGGESTION_CATEGORY_LABELS.admin, "Work & Admin")
+  assert.equal(new Set(QUICK_ADD_SUGGESTIONS.map((s) => s.title)).size, QUICK_ADD_SUGGESTIONS.length, "no duplicate titles")
+  const home = QUICK_ADD_SUGGESTIONS.filter((s) => s.category === "home").map((s) => s.title)
+  assert.equal(home[0], "Clean the hair out of the shower drain")
+  assert.equal(home[9], "Run a cleaning cycle on the washing machine")
+  const health = QUICK_ADD_SUGGESTIONS.filter((s) => s.category === "health").map((s) => s.title)
+  assert.equal(health[9], "Stand up and do ten air squats to wake up")
+})
 ok("a category lists its suggestions", () => {
   const home = filterSuggestions({ category: "home", hasChildren: false })
   assert.equal(home.length, 10)
@@ -107,16 +120,16 @@ ok("typing: up to 5 case-insensitive matches across categories", () => {
   assert.equal(filterSuggestions({ category: "home", query: "the", hasChildren: true }).length, 5)
 })
 ok("open tasks aren't suggested again", () => {
-  const r = filterSuggestions({ category: "home", hasChildren: false, openTitles: ["  wipe down the MICROWAVE "] })
-  assert.ok(!r.some((s) => s.title === "Wipe down the microwave"))
+  const r = filterSuggestions({ category: "home", hasChildren: false, openTitles: ["  wipe down the MICROWAVE food SPLATTERS "] })
+  assert.ok(!r.some((s) => s.title === "Wipe down the microwave food splatters"))
   assert.equal(r.length, 9)
 })
 ok("suggested timing: today / tomorrow / the coming Saturday + priority", () => {
   const s = (title: string) => QUICK_ADD_SUGGESTIONS.find((x) => x.title === title)!
   assert.equal(suggestedTokens(s("Feed the pet"), now), "today !high")
-  assert.equal(suggestedTokens(s("Wash the kitchen trash can"), now), "saturday !low")
+  assert.equal(suggestedTokens(s("Wash the kitchen trash can liner"), now), "saturday !low")
   assert.equal(suggestedTokens(s("Water the plants"), now), "saturday !low")
-  assert.equal(suggestedTokens(s("Wash the kitchen trash can"), new Date(2026, 9, 24)), "today !low")
+  assert.equal(suggestedTokens(s("Wash the kitchen trash can liner"), new Date(2026, 9, 24)), "today !low")
   assert.equal(suggestedTokens({ title: "x", category: "home", due: "tomorrow" }, now), "tomorrow")
 })
 ok("every suggestion title survives the parser", () => {

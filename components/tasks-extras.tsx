@@ -1,8 +1,16 @@
 'use client'
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { addDays, differenceInCalendarDays, endOfDay, format, isPast, isToday, isTomorrow, parseISO } from 'date-fns'
-import { Plus, Shuffle } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Lightbulb, Plus, UserPlus } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { createTask } from '@/hooks/use-tasks'
 import { Input } from '@/components/ui/input'
@@ -90,7 +98,7 @@ export function parseQuickAdd(raw: string, people: Person[], keepTitle?: string)
 }
 
 const CATEGORY_KEY = 'togethr.quickAdd.category'
-const SHOWN = 6
+const NOBODY = '__nobody'
 
 const noSubscribe = () => () => {}
 function readSavedCategory(): SuggestionCategory | null {
@@ -121,26 +129,18 @@ export function QuickAdd({
   const [picked, setPicked] = useState<QuickAddSuggestion | null>(null)
   const [timingUsed, setTimingUsed] = useState(false)
   const [chosen, setCategory] = useState<SuggestionCategory | null>(null)
-  const [showAll, setShowAll] = useState(false)
-  const [offset, setOffset] = useState(0)
+  // Who the task is for, from the "Assign to" menu; NOBODY falls back to an @name in the text.
+  const [assignee, setAssignee] = useState(NOBODY)
 
   const categories = suggestionCategories(hasChildren)
   const saved = useSyncExternalStore(noSubscribe, readSavedCategory, () => null)
   const category = chosen ?? saved ?? 'home'
   const activeCategory = categories.includes(category) ? category : categories[0]
-  // Keep the selected pill in view when it sits past the edge of the row.
-  const pillsRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const row = pillsRef.current
-    const pill = row?.querySelector<HTMLElement>('[aria-pressed="true"]')
-    if (row && pill && (pill.offsetLeft < row.scrollLeft || pill.offsetLeft + pill.offsetWidth > row.scrollLeft + row.clientWidth)) {
-      row.scrollLeft = pill.offsetLeft - 8
-    }
-  }, [activeCategory])
-  const chooseCategory = (c: SuggestionCategory) => {
+  const categoryIndex = categories.indexOf(activeCategory)
+  // The arrows in the menu header rotate through the categories (and wrap).
+  const rotate = (step: number) => {
+    const c = categories[(categoryIndex + step + categories.length) % categories.length]
     setCategory(c)
-    setShowAll(false)
-    setOffset(0)
     try {
       localStorage.setItem(CATEGORY_KEY, c)
     } catch {}
@@ -149,17 +149,12 @@ export function QuickAdd({
   // A picked suggestion stays word for word while the input starts with it.
   const pickedNow = picked && value.trimStart().startsWith(picked.title) ? picked : null
   const parsed = parseQuickAdd(value, people, pickedNow?.title)
-  const typing = value.trim() !== ''
-  const matches = filterSuggestions({
-    category: activeCategory,
-    query: typing ? parsed.title : '',
-    hasChildren,
-    openTitles,
-  })
-  const visible =
-    typing || showAll || matches.length <= SHOWN
-      ? matches
-      : Array.from({ length: SHOWN }, (_, i) => matches[(offset + i) % matches.length])
+  const person = people.find((p) => p.key === assignee) ?? parsed.person
+  const inCategory = filterSuggestions({ category: activeCategory, hasChildren, openTitles })
+  // Typed text (not a picked suggestion): matches from every category first.
+  // (raw text when it parses to nothing: "sun" alone is Sunday, but should find sunscreen)
+  const query = pickedNow ? '' : parsed.title || value.trim()
+  const matches = query ? filterSuggestions({ category: activeCategory, query, hasChildren, openTitles }) : []
 
   const pick = (s: QuickAddSuggestion) => {
     setPicked(s)
@@ -180,14 +175,15 @@ export function QuickAdd({
       await createTask({
         familyId,
         title: parsed.title,
-        assignedToUserId: parsed.person?.userId,
-        assignedToChildId: parsed.person?.userId ? undefined : parsed.person?.childId,
+        assignedToUserId: person?.userId,
+        assignedToChildId: person?.userId ? undefined : person?.childId,
         dueDate: parsed.due ? parsed.due.toISOString() : undefined,
         priority: parsed.priority,
       })
-      toast.success('Task added')
+      toast.success(person ? `Task added for ${person.name.split(' ')[0]}` : 'Task added')
       setValue('')
       setPicked(null)
+      setAssignee(NOBODY)
       onCreated()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to add task')
@@ -222,7 +218,7 @@ export function QuickAdd({
           {parsed.title ? (
             <>
               “{parsed.title}”
-              {parsed.person && <> · for {parsed.person.name}</>}
+              {person && <> · for {person.name}</>}
               {parsed.due && <> · due {format(parsed.due, 'EEE, MMM d')}</>}
               {parsed.priority && <> · {parsed.priority} priority</>}
             </>
@@ -240,72 +236,86 @@ export function QuickAdd({
         </div>
       )}
 
-      {!pickedNow && (!typing || visible.length > 0) && (
-        <div className="space-y-2 pt-1" role="group" aria-label="Suggestions">
-          <p className="text-xs font-medium text-muted-foreground">Suggestions</p>
-          {!typing && (
-            <div ref={pillsRef} className="relative -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-              {categories.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  aria-pressed={c === activeCategory}
-                  onClick={() => chooseCategory(c)}
-                  className={cn(
-                    'min-h-11 shrink-0 rounded-full border px-3 text-sm font-medium transition-colors',
-                    c === activeCategory
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border bg-background text-muted-foreground hover:bg-muted'
-                  )}
-                >
-                  {SUGGESTION_CATEGORY_LABELS[c]}
-                </button>
-              ))}
-            </div>
-          )}
-          <ul role="list" className="flex flex-wrap gap-2">
-            {visible.map((s) => (
-              <li key={s.title}>
-                <button
-                  type="button"
-                  onClick={() => pick(s)}
-                  aria-label={`Use suggestion: ${s.title}`}
-                  className="min-h-11 rounded-full border border-dashed border-border bg-muted/40 px-3 py-1.5 text-left text-sm text-foreground transition-colors hover:border-primary/50 hover:bg-muted"
-                >
-                  {s.title}
-                </button>
-              </li>
-            ))}
-          </ul>
-          {!typing && matches.length > SHOWN && (
-            <div className="flex items-center gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-11 text-xs"
-                aria-expanded={showAll}
-                onClick={() => setShowAll((v) => !v)}
-              >
-                {showAll ? 'Fewer' : `More (${matches.length - SHOWN})`}
+      <div className="flex flex-wrap items-center gap-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="outline" size="sm" className="h-11 gap-1.5">
+              <Lightbulb className="h-4 w-4 text-accent" aria-hidden="true" />
+              Suggestions
+              {matches.length > 0 && (
+                <span className="rounded-full bg-accent/15 px-1.5 text-xs font-semibold text-foreground">{matches.length}</span>
+              )}
+              <ChevronDown className="h-4 w-4 opacity-60" aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            className="w-80 max-w-[calc(100vw-1.5rem)] p-0"
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                e.preventDefault()
+                rotate(e.key === 'ArrowLeft' ? -1 : 1)
+              }
+            }}
+          >
+            {matches.length > 0 && (
+              <div className="border-b p-1">
+                <DropdownMenuLabel className="text-xs text-muted-foreground">Matching “{query}”</DropdownMenuLabel>
+                {matches.map((s) => (
+                  <SuggestionItem key={s.title} s={s} onPick={pick} />
+                ))}
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-1 border-b px-1 py-1">
+              <Button type="button" variant="ghost" size="icon" className="h-11 w-11" aria-label="Previous category" onClick={() => rotate(-1)}>
+                <ChevronLeft className="h-4 w-4" />
               </Button>
-              {!showAll && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-11 w-11 p-0"
-                  aria-label="Show different suggestions"
-                  onClick={() => setOffset((o) => (o + SHOWN) % matches.length)}
-                >
-                  <Shuffle className="h-4 w-4" />
-                </Button>
+              <div className="min-w-0 text-center" aria-live="polite">
+                <p className="truncate text-sm font-semibold">{SUGGESTION_CATEGORY_LABELS[activeCategory]}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {categoryIndex + 1} of {categories.length}
+                </p>
+              </div>
+              <Button type="button" variant="ghost" size="icon" className="h-11 w-11" aria-label="Next category" onClick={() => rotate(1)}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="max-h-[50vh] overflow-y-auto p-1">
+              {inCategory.map((s) => (
+                <SuggestionItem key={s.title} s={s} onPick={pick} />
+              ))}
+              {inCategory.length === 0 && (
+                <p className="px-2 py-3 text-center text-sm text-muted-foreground">These are all on your list already.</p>
               )}
             </div>
-          )}
-        </div>
-      )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Select value={assignee} onValueChange={setAssignee}>
+          <SelectTrigger className="h-11 w-auto min-w-36 max-w-full" aria-label="Assign to">
+            <UserPlus className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NOBODY}>{parsed.person ? `@${parsed.person.name.split(' ')[0]}` : 'Assign to…'}</SelectItem>
+            {people.map((p) => (
+              <SelectItem key={p.key} value={p.key}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
+  )
+}
+
+function SuggestionItem({ s, onPick }: { s: QuickAddSuggestion; onPick: (s: QuickAddSuggestion) => void }) {
+  return (
+    <DropdownMenuItem onSelect={() => onPick(s)} className="min-h-11 items-start gap-2 whitespace-normal">
+      <span className="flex-1">{s.title}</span>
+      {s.due && <span className="shrink-0 pt-0.5 text-[11px] text-muted-foreground">{dueHint(s.due)}</span>}
+    </DropdownMenuItem>
   )
 }
 
