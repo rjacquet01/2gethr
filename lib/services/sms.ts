@@ -1,10 +1,12 @@
 /**
- * SMS Service using Twilio
- * 
- * Required environment variables:
- * - TWILIO_ACCOUNT_SID: Your Twilio Account SID
- * - TWILIO_AUTH_TOKEN: Your Twilio Auth Token  
- * - TWILIO_PHONE_NUMBER: Your Twilio phone number (e.g., +1234567890)
+ * SMS Service: Twilio (default) or Telnyx, chosen by SMS_PROVIDER.
+ *
+ * - SMS_PROVIDER: "twilio" (default) or "telnyx"; anything else means twilio
+ * - Twilio: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER
+ * - Telnyx: TELNYX_API_KEY, TELNYX_FROM_NUMBER, TELNYX_MESSAGING_PROFILE_ID (optional)
+ *
+ * Consent, quotas, metering and the "Togethr:" prefix are the same for both.
+ * API keys never go into logs or error messages.
  */
 
 import { sql } from '@/lib/db'
@@ -40,6 +42,15 @@ async function consented(to: string): Promise<boolean> {
   }
 }
 
+export type SmsProvider = 'twilio' | 'telnyx'
+
+/** The provider texts go out through: SMS_PROVIDER, Twilio unless it says "telnyx". */
+export function smsProvider(): SmsProvider {
+  return (process.env.SMS_PROVIDER || '').trim().toLowerCase() === 'telnyx' ? 'telnyx' : 'twilio'
+}
+
+export const SMS_PROVIDER_NAMES: Record<SmsProvider, string> = { twilio: 'Twilio', telnyx: 'Telnyx' }
+
 /**
  * Check if Twilio is configured
  */
@@ -51,29 +62,88 @@ export function isTwilioConfigured(): boolean {
   )
 }
 
+export function isTelnyxConfigured(): boolean {
+  return !!(process.env.TELNYX_API_KEY && process.env.TELNYX_FROM_NUMBER)
+}
+
+/** Whether the active provider (smsProvider()) can send. */
+export function isSmsConfigured(): boolean {
+  return smsProvider() === 'telnyx' ? isTelnyxConfigured() : isTwilioConfigured()
+}
+
 /**
- * Send SMS via Twilio, only to a number whose owner agreed to texts
- * (lib/sms-consent.ts). The body starts with "Togethr:" and fits one
+ * Send SMS through the active provider, only to a number whose owner agreed
+ * to texts (lib/sms-consent.ts). The body starts with "Togethr:" and fits one
  * segment where possible.
  */
 export async function sendSMS({ to, body, keepWhole }: SMSPayload): Promise<SMSResult> {
-  if (!isTwilioConfigured()) {
-    console.warn('Twilio not configured - SMS not sent')
-    return { success: false, error: 'Twilio not configured' }
+  if (!isSmsConfigured()) {
+    const name = SMS_PROVIDER_NAMES[smsProvider()]
+    console.warn(`${name} not configured - SMS not sent`)
+    return { success: false, error: `${name} not configured` }
   }
   if (!(await consented(to))) return NO_CONSENT
   return deliver(to, formatSmsBody(body, { keepWhole }))
 }
 
 async function deliver(to: string, body: string): Promise<SMSResult> {
+  const formattedTo = toE164(to)
+  if (!formattedTo) return { success: false, error: 'Invalid phone number' }
+  return smsProvider() === 'telnyx' ? deliverTelnyx(formattedTo, body) : deliverTwilio(formattedTo, body)
+}
+
+/**
+ * A reply to a text someone sent us (HELP / START), through Telnyx. They
+ * wrote first, so there is no consent check or quota, as with Twilio's
+ * TwiML replies.
+ */
+export async function sendTelnyxReply(to: string, body: string): Promise<SMSResult> {
+  if (!isTelnyxConfigured()) {
+    console.warn('Telnyx not configured - reply not sent')
+    return { success: false, error: 'Telnyx not configured' }
+  }
+  const formattedTo = toE164(to)
+  if (!formattedTo) return { success: false, error: 'Invalid phone number' }
+  return deliverTelnyx(formattedTo, formatSmsBody(body))
+}
+
+async function deliverTelnyx(to: string, text: string): Promise<SMSResult> {
+  const profileId = process.env.TELNYX_MESSAGING_PROFILE_ID
+  try {
+    const response = await fetch('https://api.telnyx.com/v2/messages', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.TELNYX_API_KEY}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        from: process.env.TELNYX_FROM_NUMBER,
+        to,
+        text,
+        ...(profileId ? { messaging_profile_id: profileId } : {}),
+      }),
+    })
+    const data = await response.json().catch(() => null)
+    if (!response.ok) {
+      // Only Telnyx's error code and title: never the request or its headers.
+      const err = data?.errors?.[0]
+      console.error('Telnyx error:', response.status, err?.code ?? '', err?.title ?? '')
+      return { success: false, error: err?.detail || err?.title || `Telnyx error ${response.status}` }
+    }
+    return { success: true, messageId: data?.data?.id }
+  } catch (error) {
+    console.error('SMS send error (Telnyx):', error instanceof Error ? error.message : 'unknown')
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+async function deliverTwilio(formattedTo: string, body: string): Promise<SMSResult> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID!
   const authToken = process.env.TWILIO_AUTH_TOKEN!
   const fromNumber = process.env.TWILIO_PHONE_NUMBER!
 
   try {
-    const formattedTo = toE164(to)
-    if (!formattedTo) return { success: false, error: 'Invalid phone number' }
-
     const response = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
       {
@@ -207,7 +277,7 @@ export type MeteredSMSResult = SMSResult
 export async function sendSMSMetered(payload: MeteredSMSPayload): Promise<MeteredSMSResult> {
   const { to, urgent = false } = payload
   const body = formatSmsBody(payload.body, { keepWhole: urgent })
-  if (!isTwilioConfigured()) return sendSMS({ to, body })
+  if (!isSmsConfigured()) return sendSMS({ to, body })
   if (!(await consented(to))) return NO_CONSENT
   try {
     const familyId = payload.familyId || (payload.userId ? await familyForUser(payload.userId) : null)

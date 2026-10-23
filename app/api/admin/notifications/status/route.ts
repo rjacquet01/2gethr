@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAdminFromRequest } from '@/lib/admin-auth'
-import { isTwilioConfigured } from '@/lib/services/sms'
+import { isSmsConfigured, smsProvider, SMS_PROVIDER_NAMES } from '@/lib/services/sms'
 import { isResendConfigured } from '@/lib/services/email'
 import { isFirebaseConfigured } from '@/lib/services/push'
 
@@ -16,8 +16,8 @@ export async function GET(request: Request) {
     // lastTested stays null and testsRecorded: false says so.
     const status = {
       sms: {
-        configured: isTwilioConfigured(),
-        provider: 'Twilio',
+        configured: isSmsConfigured(),
+        provider: SMS_PROVIDER_NAMES[smsProvider()],
         lastTested: null,
         lastTestResult: null,
         testsRecorded: false

@@ -1,7 +1,7 @@
 import { sql } from "./db"
 import { ddl } from "./schema-snapshot"
 import { sendPushToUser, isFirebaseConfigured } from "./services/push"
-import { sendSMSMetered, isTwilioConfigured } from "./services/sms"
+import { sendSMSMetered, isSmsConfigured } from "./services/sms"
 
 // Parent/guardian -> child emergency alert ("call me / reply now").
 // Lazy idempotent schema, same approach as lib/sos.ts.
@@ -129,7 +129,7 @@ export async function dispatchEmergencyAlert(opts: {
     })())
   }
 
-  if (child?.phone && isTwilioConfigured() && child.sms_enabled !== false) {
+  if (child?.phone && isSmsConfigured() && child.sms_enabled !== false) {
     tasks.push((async () => {
       const s = await sendSmsWithRetry(child.phone, smsBody, familyId, childUserId)
       out.sms = s.ok ? "sent" : "failed"
@@ -137,7 +137,7 @@ export async function dispatchEmergencyAlert(opts: {
       await record(alertId, "sms", out.sms, s.error)
     })())
   } else {
-    const why = !child?.phone ? "no phone number on file" : !isTwilioConfigured() ? "SMS not configured" : "SMS turned off by user"
+    const why = !child?.phone ? "no phone number on file" : !isSmsConfigured() ? "SMS not configured" : "SMS turned off by user"
     out.smsReason = why
     tasks.push(record(alertId, "sms", "skipped", why))
   }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { sendPushToUser } from "@/lib/services/push"
 import { sendEmail, isResendConfigured } from "@/lib/services/email"
-import { sendSMSMetered, isTwilioConfigured } from "@/lib/services/sms"
+import { sendSMSMetered, isSmsConfigured } from "@/lib/services/sms"
 import { ensureReminderChildColumn } from "@/lib/reminder-schema"
 import { isQuietNow } from "@/lib/quiet-hours"
 
@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      if (channels.includes('sms') && userSettings.sms_enabled && reminder.phone && isTwilioConfigured()) {
+      if (channels.includes('sms') && userSettings.sms_enabled && reminder.phone && isSmsConfigured()) {
         try {
           // Counts against the family's monthly SMS quota.
           await sendSMSMetered({
