@@ -7,7 +7,8 @@ import { verifyTelnyxSignature } from "@/lib/telnyx-webhook"
 // https://mytogethr.com/api/webhooks/telnyx-sms (HTTP POST).
 // Signature first (lib/telnyx-webhook.ts), then message.received goes
 // through the same STOP / START / HELP handling as Twilio
-// (lib/sms-inbound.ts). Replies go out through the Telnyx API after the
+// (lib/sms-inbound.ts), except that HELP gets no reply from us: Telnyx's
+// auto-response answers it. Replies go out through the Telnyx API after the
 // 200, so Telnyx gets a quick answer.
 
 /** Run after the response; outside a request (tests) just run it. */
@@ -46,8 +47,9 @@ export async function POST(request: NextRequest) {
 
   const from = data.payload?.from?.phone_number
   try {
-    const { reply } = await handleInboundSms(from, data.payload?.text, "Telnyx")
-    if (reply && from) {
+    const { keyword, reply } = await handleInboundSms(from, data.payload?.text, "Telnyx")
+    // Telnyx's own auto-response answers HELP; a second reply would double it.
+    if (reply && from && keyword !== "help") {
       await afterResponse(async () => {
         const r = await sendTelnyxReply(from, reply)
         if (!r.success) console.error("[SMS] Telnyx reply failed:", r.error)
