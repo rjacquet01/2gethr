@@ -110,6 +110,11 @@ export default function DashboardLayout({
       // Remember where the user was headed (e.g. a tapped push notification)
       // so the login page can send them back there afterwards.
       const here = window.location.pathname + window.location.search
+      // A #fragment (e.g. the device-confirm code) can't ride in ?redirect=
+      // without reaching server logs; keep it in this tab for the login page.
+      try {
+        if (window.location.hash) sessionStorage.setItem('togethr-return-hash', window.location.pathname + window.location.hash)
+      } catch {}
       router.push(here && here !== '/' ? `/login?redirect=${encodeURIComponent(here)}` : '/login')
     }
   }, [isLoading, isAuthenticated, router])

@@ -76,7 +76,11 @@ export async function verifyDeviceToken(token: string): Promise<DeviceTokenInfo 
   return { userId: rows[0].user_id, memberId: rows[0].family_member_id, familyId: rows[0].family_id }
 }
 
-/** The app received this token: lock it until confirmed. Returns the one-time code for the confirm page. */
+/**
+ * The app received this token: lock it until confirmed. Returns the one-time code for the confirm page.
+ * Once per token: the phone that claims it first holds the only code, so no one (the
+ * token's owner included) can re-claim it to replace that code.
+ */
 export async function claimDeviceToken(token: string): Promise<(DeviceTokenInfo & { code: string }) | null> {
   if (!token.startsWith("tgd_")) return null
   await ensureTable()
@@ -84,7 +88,7 @@ export async function claimDeviceToken(token: string): Promise<(DeviceTokenInfo 
   const rows = await sql`
     UPDATE location_device_tokens
     SET claim_hash = ${hash(code)}, claimed_at = NOW()
-    WHERE token_hash = ${hash(token)} AND revoked_at IS NULL AND confirmed_at IS NULL
+    WHERE token_hash = ${hash(token)} AND revoked_at IS NULL AND claimed_at IS NULL AND confirmed_at IS NULL
     RETURNING user_id, family_member_id, family_id
   `
   if (rows.length === 0) return null

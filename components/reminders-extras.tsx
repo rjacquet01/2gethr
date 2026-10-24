@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { DictateField } from '@/components/dictate-button'
 import { appendDictation } from '@/lib/dictation'
-import { parseWhen, tidyTitle } from '@/lib/when-parser'
+import { nextOccurrence, parseWhen, tidyTitle } from '@/lib/when-parser'
 
 /* ----------------------------- Quick parse ----------------------------- */
 
@@ -40,9 +40,14 @@ export function parseReminderQuick(raw: string, members: QuickMember[], now: Dat
     return m
   })
   const when = parseWhen(text, now)
+  // A repeat with no time ("every Saturday") goes off at 9 AM: if that already
+  // passed today, the first reminder is the next one.
+  const at = when.at && !when.hasTime && when.recurrence !== 'NONE' && when.at.getTime() <= now.getTime()
+    ? nextOccurrence(when.at, when.recurrence)
+    : when.at
   return {
     title: tidyTitle(when.rest.replace(/^\s*remind me\s*(to|about)?\s*/i, '')),
-    at: when.at,
+    at,
     recurrence: when.recurrence,
     member,
   }

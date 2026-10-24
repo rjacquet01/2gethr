@@ -47,7 +47,8 @@ async function main() {
       return r ? [r] : []
     }
     if (q.startsWith("UPDATE location_device_tokens SET claim_hash")) {
-      const r = rows.find((x) => x.token_hash === v[1] && x.revoked_at === null && x.confirmed_at === null)
+      if (!q.includes("claimed_at IS NULL AND confirmed_at IS NULL")) throw new Error("claim must require an unclaimed token")
+      const r = rows.find((x) => x.token_hash === v[1] && x.revoked_at === null && x.claimed_at === null && x.confirmed_at === null)
       if (!r) return []
       r.claim_hash = String(v[0]); r.claimed_at = now
       return [r]
@@ -101,6 +102,7 @@ async function main() {
   assert.equal(r.json.familyName, "Ace family")
   assert.match(r.json.code, /^[0-9a-f]{48}$/)
   assert.equal(await dt.verifyDeviceToken(token), null, "claimed, unconfirmed token is refused")
+  assert.equal((await claim(token)).status, 401, "claimed once: a second claim can't replace the code")
   assert.equal((await dt.getDeviceTokenStatus("u-alice", "m-alice")).active, false)
   ok("claim returns the owner's name and family; token unusable until confirmed")
 
