@@ -200,13 +200,20 @@ export default function SettingsPage() {
           return
         }
       } else {
+        // Off is for this device only: the account keeps push for its other
+        // phones and computers.
         await pushNotifications.unsubscribe()
+        setSettings(prev => ({ ...prev, pushNotifications: false }))
+        toast.success('Push off on this device')
+        return
       }
     }
 
     setSettings(prev => ({ ...prev, [key]: newValue }))
 
-    // Save notification settings to database
+    // Save only the switch that changed. The Push switch shows this device's
+    // subscription, so sending it along with another switch turned push off
+    // for the whole account whenever this device wasn't subscribed.
     if (['emailNotifications', 'pushNotifications', 'smsNotifications', 'phoneAlerts', 'weeklyDigest'].includes(key)) {
       try {
         const res = await authFetch('/api/user/notification-settings', {
@@ -215,11 +222,7 @@ export default function SettingsPage() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            emailNotifications: key === 'emailNotifications' ? newValue : settings.emailNotifications,
-            pushNotifications: key === 'pushNotifications' ? newValue : settings.pushNotifications,
-            smsNotifications: key === 'smsNotifications' ? newValue : settings.smsNotifications,
-            phoneAlerts: key === 'phoneAlerts' ? newValue : settings.phoneAlerts,
-            weeklyDigest: key === 'weeklyDigest' ? newValue : settings.weeklyDigest,
+            [key]: newValue,
             // The text messages switch sits next to the consent wording:
             // turning it on is the agreement.
             smsConsent: key === 'smsNotifications' && newValue ? true : undefined,
