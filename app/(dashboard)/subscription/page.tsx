@@ -37,7 +37,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePurchaseUi } from '@/hooks/use-purchase-ui'
-import { alertPlaceLimit, getTierDefinition, SUBSCRIPTION_TIERS, annualSavingsPercent, TRIAL_DAYS, PRICE_TAX_NOTE } from '@/lib/subscription-tiers'
+import { alertPlaceLimit, getTierDefinition, SUBSCRIPTION_TIERS, annualSavingsPercent, TRIAL_DAYS, priceTaxNote } from '@/lib/subscription-tiers'
 import { FamilyNameTag } from '@/components/family-name-tag'
 
 export default function SubscriptionPage() {
@@ -361,7 +361,7 @@ export default function SubscriptionPage() {
                         {selectedBilling === 'annual' && price > 0 ? `$${price.toFixed(2)}/year billed annually · about 2 months free` : ''}
                       </p>
                       {/* Same fixed height on every card; empty on Free so the cards line up. */}
-                      <p className="h-4 text-xs text-muted-foreground">{price > 0 ? PRICE_TAX_NOTE : ''}</p>
+                      <p className="h-4 text-xs text-muted-foreground">{price > 0 ? priceTaxNote() : ''}</p>
                     </div>
                     <ul className="space-y-1.5">
                       {tier.features.map((feature) => (

@@ -51,10 +51,15 @@ export const TRIAL_DAYS = 7
 export const TRIAL_SMS_QUOTA = 10
 
 /**
- * Shown under paid prices. Prices are set tax-inclusive in the Stripe
- * Dashboard (docs/STRIPE_TAX_SETUP.md), so the amounts above stay the same.
+ * Shown under paid prices only once Stripe Tax is on (STRIPE_TAX_ENABLED,
+ * passed to the browser by next.config.mjs at build time); until then nothing.
  */
-export const PRICE_TAX_NOTE = "Price includes applicable sales tax"
+export function priceTaxNote(): string {
+  return process.env.NEXT_PUBLIC_STRIPE_TAX_ENABLED === "true" ? "Taxes calculated at checkout" : ""
+}
+
+/** Plan bullet for texts while the SMS provider isn't approved yet. smsMonthlyQuota still applies. */
+export const TEXT_ALERTS_SOON = "Text alerts (coming soon)"
 
 /** Yearly price as a whole-percent saving over 12 monthly payments (e.g. 17). */
 export function annualSavingsPercent(def: Pick<TierDefinition, "priceMonthlyCents" | "priceAnnualCents">): number {
@@ -142,7 +147,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       "Custom reminder times",
       "Complex recurring events",
       "90 days history",
-      "25 text alerts/month",
+      TEXT_ALERTS_SOON,
       "Priority support",
     ],
   },
@@ -178,7 +183,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       "Emergency alerts to your child",
       "90 days history",
       "Custom reminder times",
-      "100 text alerts/month",
+      TEXT_ALERTS_SOON,
       "Priority support",
     ],
   },

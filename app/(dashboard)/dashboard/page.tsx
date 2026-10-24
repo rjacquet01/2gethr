@@ -327,7 +327,7 @@ export default function DashboardPage() {
               <div>
                 <h3 className="font-semibold text-foreground text-sm sm:text-base">Upgrade to Plus or Premium</h3>
                 <p className="text-xs sm:text-sm text-muted-foreground">
-                  Unlock arrival alerts, text alerts, more places and more
+                  Unlock arrival alerts, more places and more
                 </p>
               </div>
             </div>

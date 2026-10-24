@@ -21,7 +21,8 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { SUBSCRIPTION_TIERS, annualSavingsPercent, PRICE_TAX_NOTE } from '@/lib/subscription-tiers'
+import { SUBSCRIPTION_TIERS, annualSavingsPercent, priceTaxNote } from '@/lib/subscription-tiers'
+import { parseUpgradeParams, orderSummaryCents, centsToDollars, type PaidTierKey, type BillingCycle } from '@/lib/upgrade-order'
 import { FamilyNameTag } from '@/components/family-name-tag'
 
 // Sourced from lib/subscription-tiers.ts rather than a hand-typed copy, so
@@ -66,28 +67,22 @@ function UpgradeForm() {
   useEffect(() => {
     if (ready && !canPurchase) router.replace('/subscription')
   }, [ready, canPurchase, router])
-  const rawTierParam = searchParams.get('tier')?.toUpperCase()
-
-  // Map URL params to internal tier keys
-  const getTierKey = (param: string | undefined | null): 'PREMIUM' | 'PREMIUM_PLUS' => {
-    if (!param) return 'PREMIUM'
-    if (param === 'PREMIUM_PLUS' || param === 'PREMIUM PLUS') return 'PREMIUM_PLUS'
-    // PREMIUM (or the old BASIC / new PLUS names) maps to the Plus plan (PREMIUM key)
-    return 'PREMIUM'
-  }
+  const tierParam = searchParams.get('tier')
+  const billingParam = searchParams.get('billing')
 
   const { user, isLoading: authLoading } = useAuth()
   const { families, isLoading: familiesLoading } = useFamilies()
 
-  const [selectedTier, setSelectedTier] = useState<'PREMIUM' | 'PREMIUM_PLUS'>(getTierKey(rawTierParam))
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual')
+  const [selectedTier, setSelectedTier] = useState<PaidTierKey>(() => parseUpgradeParams(tierParam, billingParam).tier)
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>(() => parseUpgradeParams(tierParam, billingParam).billing)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // A new ?tier=/&billing= (e.g. navigating here again) resets the selection.
   useEffect(() => {
-    if (rawTierParam) {
-      setSelectedTier(getTierKey(rawTierParam))
-    }
-  }, [rawTierParam])
+    const p = parseUpgradeParams(tierParam, billingParam)
+    setSelectedTier(p.tier)
+    setBillingCycle(p.billing)
+  }, [tierParam, billingParam])
 
   const primaryFamily = families?.[0]
   const tier = tiers[selectedTier] ?? tiers.PREMIUM
@@ -127,7 +122,8 @@ function UpgradeForm() {
     )
   }
 
-  const price = billingCycle === 'annual' ? tier.price.annual : tier.price.monthly
+  const summary = orderSummaryCents(selectedTier, billingCycle)
+  const taxNote = priceTaxNote()
   const monthlyEquivalent = billingCycle === 'annual' ? (tier.price.annual / 12).toFixed(2) : tier.price.monthly
 
   // Redirects to Stripe Checkout. Stripe collects and stores the card
@@ -270,13 +266,15 @@ function UpgradeForm() {
 
               <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">{tier.name} plan</span>
-                  <span>${price.toFixed(2)}</span>
+                  <span className="text-muted-foreground">
+                    {tier.name} plan{billingCycle === 'annual' ? ` (12 × ${centsToDollars(SUBSCRIPTION_TIERS[selectedTier].priceMonthlyCents)})` : ''}
+                  </span>
+                  <span>{centsToDollars(summary.listCents)}</span>
                 </div>
-                {billingCycle === 'annual' && (
+                {summary.discountCents > 0 && (
                   <div className="flex justify-between text-green-600">
                     <span>Annual discount</span>
-                    <span>-${(tier.price.monthly * 12 - tier.price.annual).toFixed(2)}</span>
+                    <span>-{centsToDollars(summary.discountCents)}</span>
                   </div>
                 )}
               </div>
@@ -285,9 +283,9 @@ function UpgradeForm() {
 
               <div className="flex justify-between text-lg font-semibold">
                 <span>Total</span>
-                <span>${price.toFixed(2)}</span>
+                <span>{centsToDollars(summary.totalCents)}</span>
               </div>
-              <p className="-mt-2 text-right text-xs text-muted-foreground">{PRICE_TAX_NOTE}</p>
+              {taxNote && <p className="-mt-2 text-right text-xs text-muted-foreground">{taxNote}</p>}
               {billingCycle === 'annual' && (
                 <p className="text-center text-xs text-muted-foreground">That&apos;s just ${monthlyEquivalent}/month</p>
               )}

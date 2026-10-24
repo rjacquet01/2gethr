@@ -40,7 +40,7 @@ real email. Read a script's header before running it.
   dashboard-prefetch, device-token-claim, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
   legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-link, push-ownership,
   dictation, place-alerts, push-picker, quick-add, schema-snapshot, sms-consent, stillness, stripe-checkout-tax,
-  stripe-webhook-events, telnyx-sms, weather-prompt, weather-route.
+  stripe-webhook-events, telnyx-sms, upgrade-order, weather-prompt, weather-route.
 - **Board suites** (board-flyer-download, board-flyers, board-limits,
   board-notify) need a disposable database in `BOARD_TEST_DATABASE_URL`.
   `scripts/board-test-db.ts` reads it from `.env.test.local` automatically, which points
