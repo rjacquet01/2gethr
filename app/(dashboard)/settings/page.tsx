@@ -24,7 +24,9 @@ import { ActiveSessions } from '@/components/active-sessions'
 import { usePushNotifications } from '@/hooks/use-push-notifications'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { Bell, Lock, Shield, Globe, User, Camera, Trash2, Phone, Smartphone, Download, RotateCcw, Sun, Moon, RefreshCw, ChevronRight, Mail } from 'lucide-react'
+import { Bell, Lock, Shield, Globe, User, Camera, Trash2, Phone, Smartphone, Download, RotateCcw, Sun, Moon, RefreshCw, ChevronRight, Mail, MessageSquareOff } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { smsAllowanceNotice, type SmsUsage } from '@/lib/sms-allowance'
 import { useTheme } from 'next-themes'
 import { useMyRole } from '@/hooks/use-my-role'
 import {
@@ -167,7 +169,7 @@ export default function SettingsPage() {
   // happen to include SMS/phone alerts today.
   const hasSmsFeature = !!access?.featureFlags.smsNotifications
   // Texts used this month vs the plan's allowance (only fetched on the Notifications tab).
-  const { data: smsUsage } = useSWR<{ used: number; quota: number; trial: boolean }>(
+  const { data: smsUsage } = useSWR<SmsUsage>(
     tab === 'notifications' && hasSmsFeature && primaryFamily?.id ? `/api/families/${primaryFamily.id}/sms-usage` : null,
     async (url: string) => {
       const res = await authFetch(url)
@@ -175,6 +177,7 @@ export default function SettingsPage() {
       return (await res.json()).data
     }
   )
+  const smsAllowance = smsAllowanceNotice(smsUsage)
   const hasPhoneAlerts = !!access?.featureFlags.phoneAlerts
 
   const handleToggle = async (key: keyof typeof settings) => {
@@ -659,7 +662,6 @@ export default function SettingsPage() {
                   <span className={smsUsage.used >= smsUsage.quota ? 'text-amber-600' : undefined}>
                     SMS this month: {smsUsage.used} of {smsUsage.quota}
                     {smsUsage.trial ? ' (trial)' : ''}
-                    {smsUsage.used >= smsUsage.quota ? ' - texts resume next month; push and email still arrive' : ''}
                   </span>
                 ) : (
                   'Text message alerts'
@@ -675,6 +677,20 @@ export default function SettingsPage() {
               )}
             </Row>
             {hasSmsFeature && <SmsConsentText id="sms-consent-notifications-text" className="-mt-1 pb-3" />}
+            {hasSmsFeature && smsAllowance && (
+              <Alert className="mb-3 border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                <MessageSquareOff />
+                <AlertTitle>{smsAllowance.title}</AlertTitle>
+                <AlertDescription className="text-amber-900/90 dark:text-amber-200/90">
+                  <p>{smsAllowance.body}</p>
+                  {smsAllowance.canUpgrade && (
+                    <Link href="/subscription" className="font-medium underline underline-offset-2">
+                      See plans with more texts
+                    </Link>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
             </div>
             <Row label="Event reminders" htmlFor="event-reminders" hint="Remind me before events start">
               <Switch id="event-reminders" checked={settings.eventReminders} onCheckedChange={() => handleToggle('eventReminders')} />
