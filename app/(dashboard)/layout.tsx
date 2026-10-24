@@ -25,7 +25,7 @@ import { PresenceHeartbeat } from '@/components/presence-heartbeat'
 import { PingAnswerer } from '@/components/ping-answerer'
 import { NotificationBell } from '@/components/notification-bell'
 import { ExistingUserConfirmations } from '@/components/existing-user-confirmations'
-import { Logo, LogoIcon } from '@/components/logo'
+import { Logo } from '@/components/brand/logo'
 import { FamilySwitcher } from '@/components/family-switcher'
 import { 
   Home, 
@@ -144,7 +144,7 @@ export default function DashboardLayout({
         <div className="flex h-full flex-col">
           {/* Logo */}
           <div className="flex h-16 items-center border-b border-sidebar-border px-6">
-            <Logo size="md" textClassName="text-sidebar-foreground" />
+            <Logo tone="reversed" height={34} priority />
           </div>
 
           {/* Family switcher (2+ families, or one you don't own: offers "create your own") */}
@@ -240,8 +240,8 @@ export default function DashboardLayout({
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </Button>
-            {/* Very narrow phones (e.g. a foldable's cover screen): icon only. */}
-            <Logo size="xs" textClassName="max-[399px]:hidden" />
+            {/* Phone header: the T-mark alone (the logotype needs more width). */}
+            <Logo variant="mark" height={26} priority />
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <FamilySwitcher variant="compact" />

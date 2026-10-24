@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Check, Sparkles } from 'lucide-react'
-import { Logo } from '@/components/logo'
+import { Logo, BRAND_MOTTO } from '@/components/brand/logo'
 import { cn } from '@/lib/utils'
 import { listTierDefinitions, annualSavingsPercent, SUBSCRIPTION_TIERS, TRIAL_DAYS, priceTaxNote } from '@/lib/subscription-tiers'
 
@@ -32,7 +32,7 @@ export default function PricingPage() {
       <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur-sm z-50">
         <div className="container mx-auto px-4 h-14 sm:h-16 flex items-center justify-between">
           <Link href="/">
-            <Logo size="sm" />
+            <Logo height={36} priority />
           </Link>
           <div className="flex items-center gap-2 sm:gap-3">
             <Button variant="ghost" size="sm" asChild>
@@ -192,7 +192,10 @@ export default function PricingPage() {
       <footer className="border-t border-border py-6 sm:py-8 mt-12 sm:mt-20">
         <div className="container mx-auto px-4">
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
-            <Logo size="xs" />
+            <div className="flex flex-col items-center gap-1 sm:items-start">
+              <Logo height={28} />
+              <p className="text-xs text-muted-foreground">{BRAND_MOTTO}</p>
+            </div>
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 sm:gap-x-6 text-sm text-muted-foreground">
               <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
               <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>

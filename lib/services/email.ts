@@ -22,6 +22,19 @@ interface EmailResult {
   error?: string
 }
 
+// Brand header for every email: the logotype as a hosted PNG (2x, 480px wide).
+export const EMAIL_LOGO_URL = 'https://mytogethr.com/brand/logotype-color-email.png'
+const EMAIL_LOGO = `<div style="text-align: center; margin: 0 0 28px;"><img src="${EMAIL_LOGO_URL}" width="240" height="73" alt="Togethr" style="display: inline-block; border: 0; outline: none; width: 240px; height: auto;"></div>`
+
+/**
+ * Full templates (an <html> document) already carry the logo. Short HTML
+ * bodies (reminders, alerts, admin notes) get the same branded card around them.
+ */
+export function brandEmailHtml(html: string): string {
+  if (/<html[\s>]/i.test(html)) return html
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5;"><div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;"><div style="background-color: #ffffff; border-radius: 12px; padding: 32px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); color: #374151; font-size: 16px; line-height: 1.6;">${EMAIL_LOGO}${html}</div><p style="color: #9ca3af; font-size: 12px; text-align: center; margin: 20px 0 0;">Togethr &middot; Connect people, connect events.</p></div></body></html>`
+}
+
 /**
  * Check if Resend is configured
  */
@@ -54,7 +67,7 @@ export async function sendEmail(payload: EmailPayload): Promise<EmailResult> {
         from: verifiedFrom,
         to: Array.isArray(payload.to) ? payload.to : [payload.to],
         subject: payload.subject,
-        html: payload.html,
+        html: brandEmailHtml(payload.html),
         text: payload.text,
         reply_to: payload.replyTo,
       }),
@@ -142,13 +155,8 @@ export const EMAIL_TEMPLATES = {
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5;">
         <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <div style="text-align: center; margin-bottom: 30px;">
-              <div style="width: 60px; height: 60px; background-color: #0d9488; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center;">
-                <span style="color: white; font-size: 24px; font-weight: bold;">S</span>
-              </div>
-            </div>
-            <h1 style="color: #0d9488; font-size: 24px; margin: 0 0 20px; text-align: center;">Welcome to Togethr!</h1>
+          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${EMAIL_LOGO}
+            <h1 style="color: #3b4563; font-size: 24px; margin: 0 0 20px; text-align: center;">Welcome to Togethr!</h1>
             <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">
               Hi ${name},
             </p>
@@ -160,7 +168,7 @@ export const EMAIL_TEMPLATES = {
             </p>
             <div style="text-align: center;">
               <a href="${appUrl()}/dashboard" 
-                 style="display: inline-block; background-color: #0d9488; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
+                 style="display: inline-block; background-color: #3b4563; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
                 Get Started
               </a>
             </div>
@@ -186,9 +194,9 @@ export const EMAIL_TEMPLATES = {
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5;">
         <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <h1 style="color: #0d9488; font-size: 24px; margin: 0 0 20px;">Event Reminder</h1>
-            <div style="background-color: #f0fdfa; border-left: 4px solid #0d9488; padding: 20px; border-radius: 0 8px 8px 0; margin-bottom: 20px;">
+          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${EMAIL_LOGO}
+            <h1 style="color: #3b4563; font-size: 24px; margin: 0 0 20px;">Event Reminder</h1>
+            <div style="background-color: #fff6ee; border-left: 4px solid #3b4563; padding: 20px; border-radius: 0 8px 8px 0; margin-bottom: 20px;">
               <h2 style="color: #374151; font-size: 18px; margin: 0 0 10px;">${eventTitle}</h2>
               <p style="color: #6b7280; font-size: 14px; margin: 0;">
                 <strong>When:</strong> ${startTime}
@@ -197,7 +205,7 @@ export const EMAIL_TEMPLATES = {
             </div>
             <div style="text-align: center;">
               <a href="${appUrl()}/calendar" 
-                 style="display: inline-block; background-color: #0d9488; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
+                 style="display: inline-block; background-color: #3b4563; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
                 View Event
               </a>
             </div>
@@ -220,9 +228,9 @@ export const EMAIL_TEMPLATES = {
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5;">
         <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <h1 style="color: #0d9488; font-size: 24px; margin: 0 0 20px;">Location Alert</h1>
-            <div style="background-color: ${action === 'arrived' ? '#f0fdfa' : '#fef2f2'}; border-left: 4px solid ${action === 'arrived' ? '#0d9488' : '#ef4444'}; padding: 20px; border-radius: 0 8px 8px 0; margin-bottom: 20px;">
+          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${EMAIL_LOGO}
+            <h1 style="color: #3b4563; font-size: 24px; margin: 0 0 20px;">Location Alert</h1>
+            <div style="background-color: ${action === 'arrived' ? '#fff6ee' : '#fef2f2'}; border-left: 4px solid ${action === 'arrived' ? '#3b4563' : '#ef4444'}; padding: 20px; border-radius: 0 8px 8px 0; margin-bottom: 20px;">
               <p style="color: #374151; font-size: 16px; margin: 0;">
                 <strong>${childName}</strong> ${action === 'arrived' ? 'arrived at' : 'left'} <strong>${placeName}</strong>
               </p>
@@ -232,7 +240,7 @@ export const EMAIL_TEMPLATES = {
             </div>
             <div style="text-align: center;">
               <a href="${appUrl()}/location" 
-                 style="display: inline-block; background-color: #0d9488; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
+                 style="display: inline-block; background-color: #3b4563; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
                 View Location
               </a>
             </div>
@@ -255,8 +263,8 @@ export const EMAIL_TEMPLATES = {
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5;">
         <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <h1 style="color: #0d9488; font-size: 24px; margin: 0 0 20px;">Task Reminder</h1>
+          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${EMAIL_LOGO}
+            <h1 style="color: #3b4563; font-size: 24px; margin: 0 0 20px;">Task Reminder</h1>
             <div style="background-color: #fefce8; border-left: 4px solid #eab308; padding: 20px; border-radius: 0 8px 8px 0; margin-bottom: 20px;">
               <h2 style="color: #374151; font-size: 18px; margin: 0 0 10px;">${taskTitle}</h2>
               <p style="color: #6b7280; font-size: 14px; margin: 0;">
@@ -266,7 +274,7 @@ export const EMAIL_TEMPLATES = {
             </div>
             <div style="text-align: center;">
               <a href="${appUrl()}/tasks" 
-                 style="display: inline-block; background-color: #0d9488; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
+                 style="display: inline-block; background-color: #3b4563; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
                 View Task
               </a>
             </div>
@@ -289,9 +297,9 @@ export const EMAIL_TEMPLATES = {
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5;">
         <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <h1 style="color: #0d9488; font-size: 24px; margin: 0 0 20px;">Task Update</h1>
-            <div style="background-color: #f0fdfa; border-left: 4px solid #0d9488; padding: 20px; border-radius: 0 8px 8px 0; margin-bottom: 20px;">
+          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${EMAIL_LOGO}
+            <h1 style="color: #3b4563; font-size: 24px; margin: 0 0 20px;">Task Update</h1>
+            <div style="background-color: #fff6ee; border-left: 4px solid #3b4563; padding: 20px; border-radius: 0 8px 8px 0; margin-bottom: 20px;">
               <h2 style="color: #374151; font-size: 18px; margin: 0 0 10px;">${taskTitle}</h2>
               <p style="color: #6b7280; font-size: 14px; margin: 0;">
                 <strong>${changedBy}</strong> marked this task as <strong>${newStatus}</strong>.
@@ -299,7 +307,7 @@ export const EMAIL_TEMPLATES = {
             </div>
             <div style="text-align: center;">
               <a href="${appUrl()}/tasks"
-                 style="display: inline-block; background-color: #0d9488; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
+                 style="display: inline-block; background-color: #3b4563; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
                 View Task
               </a>
             </div>
@@ -322,14 +330,14 @@ export const EMAIL_TEMPLATES = {
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5;">
         <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <h1 style="color: #0d9488; font-size: 24px; margin: 0 0 20px; text-align: center;">Reset Your Password</h1>
+          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${EMAIL_LOGO}
+            <h1 style="color: #3b4563; font-size: 24px; margin: 0 0 20px; text-align: center;">Reset Your Password</h1>
             <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">
               We received a request to reset your Togethr password. Click the button below to create a new password.
             </p>
             <div style="text-align: center; margin: 30px 0;">
               <a href="${resetLink}" 
-                 style="display: inline-block; background-color: #0d9488; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
+                 style="display: inline-block; background-color: #3b4563; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
                 Reset Password
               </a>
             </div>
@@ -355,19 +363,14 @@ export const EMAIL_TEMPLATES = {
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5;">
         <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <div style="text-align: center; margin-bottom: 30px;">
-              <div style="width: 60px; height: 60px; background-color: #0d9488; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center;">
-                <span style="color: white; font-size: 24px; font-weight: bold;">S</span>
-              </div>
-            </div>
-            <h1 style="color: #0d9488; font-size: 24px; margin: 0 0 20px; text-align: center;">You're Invited!</h1>
+          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${EMAIL_LOGO}
+            <h1 style="color: #3b4563; font-size: 24px; margin: 0 0 20px; text-align: center;">You're Invited!</h1>
             <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px; text-align: center;">
               <strong>${inviterName}</strong> has invited you to join the <strong>${familyName}</strong> family on Togethr.
             </p>
             <div style="text-align: center; margin: 30px 0;">
               <a href="${inviteLink}" 
-                 style="display: inline-block; background-color: #0d9488; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
+                 style="display: inline-block; background-color: #3b4563; color: white; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600;">
                 Accept Invitation
               </a>
             </div>
@@ -400,12 +403,7 @@ export const EMAIL_TEMPLATES = {
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5;">
         <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <div style="text-align: center; margin-bottom: 30px;">
-              <div style="width: 60px; height: 60px; background-color: #3b4563; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center;">
-                <span style="color: white; font-size: 24px; font-weight: bold;">T</span>
-              </div>
-            </div>
+          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${EMAIL_LOGO}
             <h1 style="color: #3b4563; font-size: 24px; margin: 0 0 10px; text-align: center;">Weekly Summary</h1>
             <p style="color: #6b7280; font-size: 14px; margin: 0 0 30px; text-align: center;">${familyName} - ${weekStart} to ${weekEnd}</p>
             
@@ -485,7 +483,7 @@ export const EMAIL_TEMPLATES = {
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5;">
         <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${EMAIL_LOGO}
             <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">${hi}</p>
             <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 30px;">
               ${escapeHtml(posterName)} pinned ${what} on ${escapeHtml(where)}. Open the board to see it.
@@ -526,7 +524,7 @@ export const EMAIL_TEMPLATES = {
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5;">
         <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${EMAIL_LOGO}
             <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">Hi,</p>
             <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 30px;">
               ${escapeHtml(inviterName)} invited you to join ${escapeHtml(fam)} on Togethr ${as}. Open the link to create your account, or sign in if you already have one, and join. ${after}
@@ -568,7 +566,7 @@ export const EMAIL_TEMPLATES = {
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5;">
         <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${EMAIL_LOGO}
             <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">Hi ${escapeHtml(childName)},</p>
             <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 30px;">
               ${escapeHtml(parentName)} set up your own Togethr account in ${escapeHtml(fam)}. Open the link on your phone and choose a password to sign in.
@@ -601,7 +599,7 @@ export const EMAIL_TEMPLATES = {
     subject: `New signup: ${userEmail}`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px;">
-        <h2 style="color: #0d9488;">New user signup</h2>
+        <h2 style="color: #3b4563;">New user signup</h2>
         <p><strong>Name:</strong> ${userName}</p>
         <p><strong>Email:</strong> ${userEmail}</p>
         <p><strong>When:</strong> ${new Date().toISOString()}</p>
@@ -614,7 +612,7 @@ export const EMAIL_TEMPLATES = {
     subject: `New support ticket: ${subject}`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px;">
-        <h2 style="color: #0d9488;">New support ticket</h2>
+        <h2 style="color: #3b4563;">New support ticket</h2>
         <p><strong>Ticket ID:</strong> ${ticketId}</p>
         <p><strong>From:</strong> ${userEmail}</p>
         <p><strong>Subject:</strong> ${subject}</p>
@@ -642,7 +640,7 @@ export const EMAIL_TEMPLATES = {
     subject: `Tier changed: ${familyName} (${previousTier} -> ${newTier})`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px;">
-        <h2 style="color: #0d9488;">Subscription tier changed</h2>
+        <h2 style="color: #3b4563;">Subscription tier changed</h2>
         <p><strong>Family:</strong> ${familyName}</p>
         <p><strong>Owner email:</strong> ${userEmail}</p>
         <p><strong>Previous tier:</strong> ${previousTier}</p>

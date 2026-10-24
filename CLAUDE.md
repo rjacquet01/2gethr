@@ -19,8 +19,8 @@ portal (support, legal requests). Preparing for a soft launch.
   `STRIPE_SECRET_KEY=sk_test_placeholder_local_build_only npm run build`.
   The build rewrites `next-env.d.ts`, so revert it with `git checkout -- next-env.d.ts`.
 - `npx tsc --noEmit`: baseline **0 errors**. Keep it at 0.
-- `npm run lint`: baseline **421 problems: 1 error, 420 warnings**. The one
-  error is in `app/(dashboard)/settings/calendar-sync/page.tsx`. Add no new errors and
+- `npm run lint`: baseline **419 problems: 1 error, 418 warnings**. The one
+  error is `prefer-const` in `scripts/test-push-ownership.ts`. Add no new errors and
   no new warnings.
 - `npm run test:e2e`: Playwright smoke test of the public pages (`/`, `/login`,
   `/privacy`, `/terms`). No sign-in, no writes. It starts `next dev` on port 3210.
@@ -36,7 +36,7 @@ real email. Read a script's header before running it.
 
 - **Safe, with no database and no network.** These use pure logic, or the
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
-  admin-delete-child, admin-tier-breakdown, adult-location-access, child-invite, coppa,
+  admin-delete-child, admin-tier-breakdown, adult-location-access, brand-logo, child-invite, coppa,
   dashboard-prefetch, device-token-claim, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
   legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-link, push-ownership,
   dictation, place-alerts, push-picker, quick-add, schema-snapshot, sms-consent, stillness, stripe-checkout-tax,
@@ -109,6 +109,10 @@ real email. Read a script's header before running it.
 - SMS provider: `SMS_PROVIDER` = `twilio` (default) or `telnyx` (`lib/services/sms.ts`). Gate sends on
   `isSmsConfigured()`, not a provider's own check. Inbound STOP/START/HELP for both providers is
   `lib/sms-inbound.ts`; Telnyx posts to `/api/webhooks/telnyx-sms` (Ed25519, `TELNYX_PUBLIC_KEY`).
+- Logo: `components/brand/logo.tsx` (`Logo`, variant `logotype` | `mark`, tone `color` | `reversed` | `auto`).
+  The logotype already spells "Togethr" with the T, so never put the T-mark or the word "Togethr" next to it;
+  the mark alone only where width is under ~90px. Motto: `BRAND_MOTTO` ("Connect people, connect events.").
+  Emails get the hosted logotype PNG (`lib/services/email.ts`, `brandEmailHtml`).
 - Cold-start schema setup is skipped when the catalog snapshot shows it is
   already applied (`lib/schema-snapshot.ts`, the `ddl` tag).
 

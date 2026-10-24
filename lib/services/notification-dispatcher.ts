@@ -156,7 +156,7 @@ export async function dispatchNotification(
             subject: request.title,
             html: `
               <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #0d9488;">${escapeHtml(request.title)}</h2>
+                <h2 style="color: #3b4563;">${escapeHtml(request.title)}</h2>
                 <p>${escapeHtml(request.body)}</p>
               </div>
             `,
