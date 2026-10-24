@@ -30,7 +30,8 @@ const BEFORE = {
   metadata: meta,
   integration_identifier: "togethr_abcdefgh",
   success_url: "https://example.test/subscription/confirmation?session_id={CHECKOUT_SESSION_ID}",
-  cancel_url: "https://example.test/subscription/upgrade?tier=premium",
+  // Backing out of Checkout returns to the same plan and billing choice.
+  cancel_url: "https://example.test/subscription/upgrade?tier=premium&billing=monthly",
 }
 
 for (const v of [undefined, "", "false", "TRUE", "1", "yes", " true"]) {

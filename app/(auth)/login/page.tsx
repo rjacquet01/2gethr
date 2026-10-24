@@ -30,7 +30,16 @@ export default function LoginPage() {
   const getRedirectTarget = () => {
     try {
       const r = new URLSearchParams(window.location.search).get('redirect')
-      if (r && r.startsWith('/') && !r.startsWith('//') && !r.startsWith('/\\') && !r.startsWith('/login')) return r
+      if (r && r.startsWith('/') && !r.startsWith('//') && !r.startsWith('/\\') && !r.startsWith('/login')) {
+        // Put back a #fragment the dashboard kept for this same page (app/(dashboard)/layout.tsx).
+        const kept = sessionStorage.getItem('togethr-return-hash')
+        const path = r.split(/[?#]/)[0]
+        if (kept && kept.startsWith(path + '#')) {
+          sessionStorage.removeItem('togethr-return-hash')
+          return r.split('#')[0] + kept.slice(path.length)
+        }
+        return r
+      }
     } catch {}
     return '/dashboard'
   }

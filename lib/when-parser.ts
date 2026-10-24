@@ -19,6 +19,11 @@ const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'frid
 // Whole weekday names and their usual abbreviations only, so "friend",
 // "monthly" or "sunscreen" are never read as days.
 const WEEKDAY = 'sun(?:day)?|mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?'
+// On their own (no "on", "by", "next", "this" or "every" before them): full
+// names anywhere, short forms only last or before a time ("pay bill fri",
+// "dentist fri at 3"), so "sun hat", "SAT prep" and "we wed today" stay text.
+const WEEKDAY_BARE = 'sunday|monday|tuesday|tues|wednesday|thursday|thurs|friday|saturday'
+const BEFORE_TIME = '(?=\\s*$|\\s+(?:at|by|morning|afternoon|evening|night)\\b|\\s+\\d)'
 const WEEKDAYS = 'sundays|mondays|tuesdays|wednesdays|thursdays|fridays|saturdays'
 const MONTH =
   'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?'
@@ -61,6 +66,7 @@ export function parseWhen(raw: string, now: Date = new Date()): When {
     m: 0,
     ampm: null as 'am' | 'pm' | null,
     viaAt: false,
+    midnight: false,
   }
   const cut = (re: RegExp, fn: (...g: string[]) => boolean | void) => {
     text = text.replace(re, (...a) => (fn(...(a.slice(0, -2) as string[])) === false ? a[0] : ' '))
@@ -127,8 +133,8 @@ export function parseWhen(raw: string, now: Date = new Date()): When {
   cut(/\snext\s+week\b/i, () => {
     st.day = addDays(startOfWeek(now, { weekStartsOn: 1 }), 7)
   })
-  cut(new RegExp(`\\s(?:on\\s+|by\\s+)?(?:(?:next|this)\\s+)?(${WEEKDAY})\\b`, 'i'), (_m, d) => {
-    const date = nextWeekday(d, now)
+  cut(new RegExp(`\\s(?:(?:on|by)\\s+(?:(?:next|this)\\s+)?(${WEEKDAY})|(?:next|this)\\s+(${WEEKDAY})|(${WEEKDAY_BARE})|(${WEEKDAY})${BEFORE_TIME})\\b`, 'i'), (_m, d1, d2, d3, d4) => {
+    const date = nextWeekday(d1 || d2 || d3 || d4, now)
     if (!date) return false
     st.day = st.day ?? date
   })
@@ -159,6 +165,7 @@ export function parseWhen(raw: string, now: Date = new Date()): When {
     cut(timeWord, (_m, w) => {
       st.h = 0
       st.ampm = w.toLowerCase() === 'noon' ? 'pm' : 'am'
+      st.midnight = w.toLowerCase() === 'midnight'
     })
   } else if (timeAt.test(text)) {
     cut(timeAt, (_m, _at, h) => {
@@ -176,18 +183,26 @@ export function parseWhen(raw: string, now: Date = new Date()): When {
   }
 
   let hour: number | null = null
+  // Hours after midnight that belong to the day the user named ("tonight at 12",
+  // "Friday at midnight" = the night of that day, i.e. early the next day).
+  let nextDayHour = false
   if (st.h !== null) {
     if (st.ampm === 'pm') hour = st.h + 12
     else if (st.ampm === 'am') hour = st.h
     else if (st.h > 12) hour = st.h
     else if (st.part === 'morning') hour = st.h % 12
-    else if (st.part) hour = st.h < 12 ? st.h + 12 : st.h
+    else if ((st.part === 'evening' || st.part === 'night') && (st.h === 12 || st.h < 4)) {
+      hour = st.h % 12
+      nextDayHour = true
+    } else if (st.part) hour = st.h < 12 ? st.h + 12 : st.h
     // "at 5" or "at 5:30" is nearly always the evening unless it's 8-11
     else if (st.viaAt && st.h >= 1 && st.h <= 7) hour = st.h + 12
     else hour = st.h
   }
+  if (st.midnight && st.day) nextDayHour = true
 
   let at: Date | null = null
+  const hasTime = !!st.rel || hour !== null || !!st.part
   if (st.rel) {
     at = st.rel
   } else if (st.day || hour !== null || st.part) {
@@ -197,15 +212,35 @@ export function parseWhen(raw: string, now: Date = new Date()): When {
       seconds: 0,
       milliseconds: 0,
     })
+    if (nextDayHour) at = addDays(at, 1)
     if (at.getTime() <= now.getTime()) {
+      const later = st.part === 'evening' || st.part === 'night'
       // A time with no day ("8am") that already passed means tomorrow;
-      // a repeat that already passed today starts next time.
+      // a repeat with a time that already passed today starts next time
+      // (a day-only repeat stays today: tasks are due by the end of it).
       if (!st.day && hour !== null) at = addDays(at, 1)
-      else if (recurrence === 'WEEKLY') at = addDays(at, 7)
-      else if (recurrence === 'DAILY') at = addDays(at, 1)
+      else if (hasTime && recurrence === 'WEEKLY') at = addDays(at, 7)
+      else if (hasTime && recurrence === 'DAILY') at = addDays(at, 1)
+      // "tonight" / "this evening" said after 8 / 6 pm: an hour from now.
+      else if (later && hour === null && recurrence === 'NONE' && sameDay(at, now)) at = roundUp5(addMinutes(now, 60))
     }
   }
-  return { rest: text, at, hasTime: !!st.rel || hour !== null || !!st.part, recurrence }
+  return { rest: text, at, hasTime, recurrence }
+}
+
+const sameDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+const roundUp5 = (d: Date) => set(d, { minutes: Math.ceil(d.getMinutes() / 5) * 5, seconds: 0, milliseconds: 0 })
+
+/** The next time a repeat comes round after `at` (for a day-only reminder that already passed today). */
+export function nextOccurrence(at: Date, recurrence: Recurrence): Date {
+  switch (recurrence) {
+    case 'DAILY': return addDays(at, 1)
+    case 'WEEKLY': return addDays(at, 7)
+    case 'MONTHLY': return set(at, { month: at.getMonth() + 1 })
+    case 'YEARLY': return set(at, { year: at.getFullYear() + 1 })
+    default: return at
+  }
 }
 
 /** Tidies what is left of the text into a title. */

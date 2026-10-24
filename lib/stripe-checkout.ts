@@ -56,7 +56,7 @@ export function buildCheckoutSessionParams(opts: {
     metadata: { ...metadata },
     integration_identifier: `togethr_${randomSuffix}`,
     success_url: `${appUrl}/subscription/confirmation?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appUrl}/subscription/upgrade?tier=${encodeURIComponent(tier)}`,
+    cancel_url: `${appUrl}/subscription/upgrade?tier=${encodeURIComponent(tier)}&billing=${billingCycle === "annual" ? "annual" : "monthly"}`,
     ...checkoutTaxParams(),
   }
 }
