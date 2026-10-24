@@ -13,6 +13,7 @@ import { ArrowLeft, HelpCircle, Mail } from 'lucide-react'
 import { SUBSCRIPTION_TIERS, annualSavingsPercent, centsToDisplay, TRIAL_DAYS } from '@/lib/subscription-tiers'
 
 // Plan names, prices and text-alert allowances come from lib/subscription-tiers.ts.
+const FREE = SUBSCRIPTION_TIERS.FREE
 const PLUS = SUBSCRIPTION_TIERS.PREMIUM
 const PREMIUM = SUBSCRIPTION_TIERS.PREMIUM_PLUS
 
@@ -77,7 +78,7 @@ const faqs = [
     questions: [
       {
         question: 'How do I enable location sharing?',
-        answer: `Go to the Location page and click "Enable Location Sharing". You'll need to grant location permissions in your browser or mobile app. Live location is included on every plan and can be turned off at any time. Free includes 2 saved places with no arrival/departure alerts; ${PLUS.name} includes ${PLUS.limits.maxSavedPlaces} saved places; ${PREMIUM.name} includes ${PREMIUM.limits.maxSavedPlaces} saved places plus arrival and departure alerts.`
+        answer: `Go to the Location page and click "Enable Location Sharing". You'll need to grant location permissions in your browser or mobile app. Live location is included on every plan and can be turned off at any time. Free includes 2 saved places with no arrival/departure alerts; ${PLUS.name} includes ${PLUS.limits.maxSavedPlaces} saved places with arrival and departure alerts on ${PLUS.limits.maxAlertPlaces} of them; ${PREMIUM.name} includes ${PREMIUM.limits.maxSavedPlaces} saved places with alerts on every one.`
       },
       {
         question: 'Who can see my location?',
@@ -85,7 +86,7 @@ const faqs = [
       },
       {
         question: 'How do geofences work?',
-        answer: 'Geofences are virtual boundaries around saved places such as home, school, or work. When a family member arrives at or leaves a geofenced place, designated family members receive an alert. Add places and turn on geofence alerts from the Places page. Plus includes alerts on 3 places; Premium includes them on every saved place.'
+        answer: `Geofences are virtual boundaries around saved places such as home, school, or work. When a family member arrives at or leaves a geofenced place, designated family members receive an alert. Add places and turn on geofence alerts from the Places page. ${PLUS.name} includes alerts on ${PLUS.limits.maxAlertPlaces} places; ${PREMIUM.name} includes them on every saved place.`
       },
     ]
   },
@@ -94,7 +95,7 @@ const faqs = [
     questions: [
       {
         question: 'What features are included in each plan?',
-        answer: `Free: shared family calendar and tasks, live family location with 2 saved places (no arrival/departure alerts), up to 4 members, 30 days of history. ${PLUS.name} ($${centsToDisplay(PLUS.priceMonthlyCents)}/month or $${centsToDisplay(PLUS.priceAnnualCents)}/year): up to 6 members, 15 saved places, ${PLUS.limits.smsMonthlyQuota} text alerts a month, custom reminder times, advanced recurring events, calendar export, 90 days of history. ${PREMIUM.name} ($${centsToDisplay(PREMIUM.priceMonthlyCents)}/month or $${centsToDisplay(PREMIUM.priceAnnualCents)}/year): up to 12 members, 50 saved places, geofence arrival and departure alerts, ${PREMIUM.limits.smsMonthlyQuota} text alerts a month, and ${PREMIUM.limits.historyDays} days of history. Annual billing saves ${annualSavingsPercent(PLUS)}% (about 2 months free). New members get a ${TRIAL_DAYS}-day free Premium trial.`
+        answer: `Free: shared family calendar and tasks, live family location with ${FREE.limits.maxSavedPlaces} saved places (no arrival/departure alerts), up to ${FREE.limits.maxFamilyMembers} members and ${FREE.limits.maxChildren} children, ${FREE.limits.historyDays} days of history. ${PLUS.name} ($${centsToDisplay(PLUS.priceMonthlyCents)}/month or $${centsToDisplay(PLUS.priceAnnualCents)}/year): up to ${PLUS.limits.maxFamilyMembers} members and ${PLUS.limits.maxChildren} children, ${PLUS.limits.maxSavedPlaces} saved places, arrival and departure alerts on ${PLUS.limits.maxAlertPlaces} places, ${PLUS.limits.smsMonthlyQuota} text alerts a month, custom reminder times, advanced recurring events, calendar export, priority support, ${PLUS.limits.historyDays} days of history. ${PREMIUM.name} ($${centsToDisplay(PREMIUM.priceMonthlyCents)}/month or $${centsToDisplay(PREMIUM.priceAnnualCents)}/year): everything in ${PLUS.name}, plus up to ${PREMIUM.limits.maxFamilyMembers} members, unlimited children, ${PREMIUM.limits.maxSavedPlaces} saved places, arrival and departure alerts on every place, emergency alerts to your child, and ${PREMIUM.limits.smsMonthlyQuota} text alerts a month. Annual billing saves ${annualSavingsPercent(PLUS)}% (about 2 months free). New members get a ${TRIAL_DAYS}-day free Premium trial.`
       },
       {
         question: 'How do I upgrade my subscription?',

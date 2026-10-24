@@ -58,7 +58,7 @@ export function DashboardMiniMap({ familyId }: { familyId: string }) {
         ) : error ? (
           <p className="px-4 pb-1 text-sm text-muted-foreground">
             {error.code === 'SUBSCRIPTION_REQUIRED'
-              ? 'Live location is a Premium feature.'
+              ? "Live location isn't included in your plan."
               : 'Locations are unavailable right now.'}
           </p>
         ) : withFix.length === 0 ? (

@@ -325,9 +325,9 @@ export default function DashboardPage() {
                 <Crown className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
-                <h3 className="font-semibold text-foreground text-sm sm:text-base">Upgrade to Premium</h3>
+                <h3 className="font-semibold text-foreground text-sm sm:text-base">Upgrade to Plus or Premium</h3>
                 <p className="text-xs sm:text-sm text-muted-foreground">
-                  Unlock geofence alerts, more places and more
+                  Unlock arrival alerts, text alerts, more places and more
                 </p>
               </div>
             </div>

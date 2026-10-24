@@ -148,7 +148,7 @@ const fetcher = async (url: string): Promise<{ subscription: Subscription | null
       limits: {
         maxChildren: (tierFeatures.maxChildren as number) ?? 2,
         historyDays: (tierFeatures.historyDays as number) ?? 30,
-        maxSavedPlaces: (tierFeatures.maxSavedPlaces as number) || 5,
+        maxSavedPlaces: (tierFeatures.maxSavedPlaces as number) || 2,
         maxFamilyMembers: (tierFeatures.maxFamilyMembers as number) || 4,
         maxCalendars: (tierFeatures.maxCalendars as number) || 2,
       },

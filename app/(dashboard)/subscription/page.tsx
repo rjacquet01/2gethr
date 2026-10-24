@@ -163,6 +163,7 @@ export default function SubscriptionPage() {
       label: alertPlaceLimit(currentTier) ? `Arrival & departure alerts (${alertPlaceLimit(currentTier)} places)` : 'Arrival & departure alerts',
     },
     { key: 'smsNotifications' as const, label: 'SMS notifications' },
+    { key: 'phoneAlerts' as const, label: 'Emergency alerts to your child' },
     { key: 'customReminderTimes' as const, label: 'Custom reminder times' },
     { key: 'advancedRecurrence' as const, label: 'Advanced recurring events' },
     { key: 'exportCalendar' as const, label: 'Calendar export' },
