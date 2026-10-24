@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Logo } from '@/components/logo'
+import { Logo, BRAND_MOTTO } from '@/components/brand/logo'
 import { SignedInRedirect } from '@/components/signed-in-redirect'
 import { listTierDefinitions, centsToDisplay, TRIAL_DAYS } from '@/lib/subscription-tiers'
 import { 
@@ -134,7 +134,11 @@ export default function HomePage() {
       {/* Header */}
       <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur-sm z-50">
         <div className="container mx-auto px-4 h-14 sm:h-16 flex items-center justify-between">
-          <Logo size="sm" />
+          <Link href="/" className="flex items-center">
+            {/* Phones: the T-mark alone; the logotype from 640px. */}
+            <span className="flex sm:hidden"><Logo variant="mark" height={30} priority /></span>
+            <span className="hidden sm:flex"><Logo height={36} priority /></span>
+          </Link>
           <div className="hidden sm:flex items-center gap-3">
             <Button variant="ghost" asChild>
               <Link href="/pricing">Pricing</Link>
@@ -163,7 +167,7 @@ export default function HomePage() {
           <div className="text-center lg:text-left">
             <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-medium text-foreground">
               <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-              Calendar, tasks and location for the whole family
+              {BRAND_MOTTO}
             </span>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-foreground mb-5 text-balance">
               Family coordination
@@ -324,7 +328,10 @@ export default function HomePage() {
       <footer className="border-t border-border py-6 sm:py-8">
         <div className="container mx-auto px-4">
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
-            <Logo size="xs" />
+            <div className="flex flex-col items-center gap-1 sm:items-start">
+              <Logo height={28} />
+              <p className="text-xs text-muted-foreground">{BRAND_MOTTO}</p>
+            </div>
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 sm:gap-x-6 text-sm text-muted-foreground">
               <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
               <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { LogoIcon } from '@/components/logo'
+import { Logo } from '@/components/brand/logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -60,7 +60,7 @@ export default function AdminLoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4">
-            <LogoIcon size="lg" />
+            <Logo height={36} priority />
           </div>
           <CardTitle className="text-2xl">Admin Portal</CardTitle>
           <CardDescription>Sign in to access the Togethr admin dashboard</CardDescription>

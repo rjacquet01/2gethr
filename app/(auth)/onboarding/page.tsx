@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 import { Users, UserPlus, ArrowRight } from 'lucide-react'
-import { LogoIcon } from '@/components/logo'
+import { Logo } from '@/components/brand/logo'
 
 type OnboardingStep = 'welcome' | 'create' | 'join' | 'pending'
 
@@ -116,9 +116,9 @@ export default function OnboardingPage() {
       <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
         <div className="w-full max-w-md">
           <div className="flex flex-col items-center gap-3 mb-8">
-            <LogoIcon size="xl" />
+            <Logo height={44} priority />
             <div className="text-center">
-              <h1 className="text-2xl font-bold text-foreground">Welcome to Togethr</h1>
+              <h1 className="text-2xl font-bold text-foreground">Welcome</h1>
               <p className="text-sm text-muted-foreground">
                 {"Let's get your family set up"}
               </p>

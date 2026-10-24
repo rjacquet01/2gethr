@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ArrowLeft, Phone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Logo } from '@/components/logo'
+import { Logo } from '@/components/brand/logo'
 import { SmsConsentText } from '@/components/sms-consent-text'
 import { SMS_HELP_REPLY } from '@/lib/sms-consent-text'
 import { formatSmsBody } from '@/lib/sms-consent'
@@ -29,7 +29,7 @@ export default function SmsConsentPage() {
       <header className="border-b">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/">
-            <Logo size="sm" />
+            <Logo height={36} priority />
           </Link>
           <Button variant="ghost" asChild>
             <Link href="/">

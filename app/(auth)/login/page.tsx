@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 import { Eye, EyeOff } from 'lucide-react'
-import { LogoIcon } from '@/components/logo'
+import { Logo, BRAND_MOTTO } from '@/components/brand/logo'
 import { SignedInRedirect } from '@/components/signed-in-redirect'
 
 export default function LoginPage() {
@@ -76,11 +76,8 @@ export default function LoginPage() {
       <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
         <div className="w-full max-w-md">
           <div className="flex flex-col items-center gap-3 mb-8">
-            <LogoIcon size="lg" />
-            <div className="text-center">
-              <h1 className="text-2xl font-bold text-foreground">Togethr</h1>
-              <p className="text-sm text-muted-foreground">Family coordination made simple</p>
-            </div>
+            <h1><Logo height={44} priority /></h1>
+            <p className="text-center text-sm text-muted-foreground">{BRAND_MOTTO}</p>
           </div>
 
           <Card className="border-border/50 shadow-lg">
@@ -130,11 +127,8 @@ export default function LoginPage() {
       <SignedInRedirect to={getRedirectTarget} />
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center gap-3 mb-8">
-          <LogoIcon size="lg" />
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-foreground">Togethr</h1>
-            <p className="text-sm text-muted-foreground">Family coordination made simple</p>
-          </div>
+          <h1><Logo height={44} priority /></h1>
+          <p className="text-center text-sm text-muted-foreground">{BRAND_MOTTO}</p>
         </div>
 
         <Card className="border-border/50 shadow-lg">

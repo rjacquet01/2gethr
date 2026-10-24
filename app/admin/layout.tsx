@@ -9,7 +9,7 @@ import {
   Menu, X, ChevronDown, Settings, Mail, Bell,
   Scale
 } from 'lucide-react'
-import { Logo, LogoIcon } from '@/components/logo'
+import { Logo } from '@/components/brand/logo'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { getAdminAccessToken, getAdminRefreshToken, clearAdminTokens } from '@/hooks/use-admin-auth'
@@ -160,7 +160,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="flex h-16 items-center gap-2 px-4 border-b border-sidebar-border">
-          <LogoIcon size="sm" />
+          <Logo tone="reversed" height={26} priority />
           <span className="font-semibold text-lg text-sidebar-foreground">Admin</span>
           <Button
             variant="ghost"

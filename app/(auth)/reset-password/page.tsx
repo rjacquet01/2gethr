@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 import { Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react'
-import { LogoIcon } from '@/components/logo'
+import { Logo } from '@/components/brand/logo'
 
 // Next.js requires any component that calls useSearchParams() to be wrapped
 // in a Suspense boundary, or the page fails to prerender at build time
@@ -77,8 +77,7 @@ function ResetPasswordForm() {
       <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
         <div className="w-full max-w-md">
           <div className="flex flex-col items-center gap-3 mb-8">
-            <LogoIcon size="lg" />
-            <h1 className="text-2xl font-bold text-foreground">Togethr</h1>
+            <h1><Logo height={44} priority /></h1>
           </div>
           <Card className="border-border/50 shadow-lg">
             <CardHeader className="text-center">
@@ -108,8 +107,7 @@ function ResetPasswordForm() {
       <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
         <div className="w-full max-w-md">
           <div className="flex flex-col items-center gap-3 mb-8">
-            <LogoIcon size="lg" />
-            <h1 className="text-2xl font-bold text-foreground">Togethr</h1>
+            <h1><Logo height={44} priority /></h1>
           </div>
           <Card className="border-border/50 shadow-lg">
             <CardHeader className="text-center">
@@ -138,8 +136,7 @@ function ResetPasswordForm() {
     <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center gap-3 mb-8">
-          <LogoIcon size="lg" />
-          <h1 className="text-2xl font-bold text-foreground">Togethr</h1>
+          <h1><Logo height={44} priority /></h1>
         </div>
 
         <Card className="border-border/50 shadow-lg">

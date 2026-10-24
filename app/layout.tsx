@@ -9,9 +9,27 @@ import './globals.css'
 const _inter = Inter({ subsets: ["latin"], variable: '--font-inter' });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
+const SHARE_IMAGE = { url: '/og-image.png', width: 1200, height: 630, alt: 'Togethr: connect people, connect events' }
+const DESCRIPTION = 'Keep your family connected and coordinated with Togethr. Shared calendars, location sharing, and event management for busy families.'
+
 export const metadata: Metadata = {
-  title: 'Togethr - Family Coordination',
-  description: 'Keep your family connected and coordinated with Togethr. Shared calendars, location sharing, and event management for busy families.',
+  metadataBase: new URL('https://mytogethr.com'),
+  title: 'Togethr - Connect people, connect events',
+  description: DESCRIPTION,
+  openGraph: {
+    type: 'website',
+    siteName: 'Togethr',
+    title: 'Togethr - Connect people, connect events',
+    description: DESCRIPTION,
+    url: '/',
+    images: [SHARE_IMAGE],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Togethr - Connect people, connect events',
+    description: DESCRIPTION,
+    images: [SHARE_IMAGE],
+  },
   generator: 'Togethr',
   manifest: '/manifest.json',
   appleWebApp: {

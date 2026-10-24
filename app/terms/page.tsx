@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Logo } from '@/components/logo'
+import { Logo } from '@/components/brand/logo'
 
 export const metadata = {
   title: 'Terms of Service | Togethr',
@@ -14,7 +14,7 @@ export default function TermsPage() {
       <header className="border-b">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/">
-            <Logo size="sm" />
+            <Logo height={36} priority />
           </Link>
           <Button variant="ghost" asChild>
             <Link href="/login">
