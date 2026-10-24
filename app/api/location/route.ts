@@ -17,6 +17,7 @@ import { memberName, nameInFamily } from "@/lib/member-names"
 import { approvedOwnerMemberIds, needsAccessGrant, locationAudienceUserIds } from "@/lib/location-access"
 import { ensureMemberAppearanceColumns } from "@/lib/member-appearance"
 import { guestForbidden, isAdultMemberRole, isGuestInFamily, isGuestOnly } from "@/lib/permissions"
+import { alertPlaceLimit } from "@/lib/place-alerts"
 
 const pingFields = {
   latitude: z.number().min(-90).max(90),
@@ -408,7 +409,8 @@ export async function POST(request: NextRequest) {
         validatedData.latitude,
         validatedData.longitude,
         validatedData.accuracy,
-        prevPing
+        prevPing,
+        alertPlaceLimit(subscription.tier)
       )
       geofenceChanged = geo.recorded > 0
       // Only report faster near a boundary while actually moving; a phone
@@ -435,7 +437,8 @@ export async function POST(request: NextRequest) {
         validatedData.latitude,
         validatedData.longitude,
         validatedData.accuracy,
-        prevPing
+        prevPing,
+        alertPlaceLimit(otherSub.tier)
       )
       if (geo.recorded > 0) geofenceChanged = true
       const hint = suggestedIntervalForGaps(geo.gaps, moved)
@@ -577,16 +580,25 @@ async function checkGeofences(
   latitude: number,
   longitude: number,
   accuracy?: number | null,
-  prevPing?: { latitude: number; longitude: number; accuracy: number | null; ageSec: number } | null
+  prevPing?: { latitude: number; longitude: number; accuracy: number | null; ageSec: number } | null,
+  /** Places the plan allows alerts on (null = all): the family's oldest ones. */
+  alertLimit: number | null = null
 ): Promise<{ gaps: number[]; recorded: number }> {
   // Geofence-enabled places in this family that apply to this person: ones
   // assigned to nobody (everyone) or assigned to their membership here.
+  // LIMIT NULL is no limit.
   await ensurePlaceNotifyChannelsColumn()
   await ensurePlaceMembersTable()
   const places = await sql`
     SELECT sp.id, sp.name, sp.latitude, sp.longitude, sp.radius, sp.alert_on_arrival, sp.alert_on_departure, sp.notify_channels
     FROM saved_places sp
     WHERE sp.family_id = ${familyId} AND sp.geofence_enabled = true
+      AND sp.id IN (
+        SELECT id FROM saved_places
+        WHERE family_id = ${familyId} AND geofence_enabled = true
+        ORDER BY created_at ASC, id ASC
+        LIMIT ${alertLimit}
+      )
       AND (
         NOT EXISTS (SELECT 1 FROM saved_place_members spm WHERE spm.place_id = sp.id)
         OR EXISTS (

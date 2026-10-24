@@ -5,6 +5,7 @@ import { useFamilies } from '@/hooks/use-family'
 import { useMyRole } from '@/hooks/use-my-role'
 import { GuestAreaNotice } from '@/components/guest-area-notice'
 import { useSubscription } from '@/hooks/use-subscription'
+import { alertPlaceLimit } from '@/lib/subscription-tiers'
 import { authFetch, useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -277,7 +278,8 @@ function PlaceFormFields({
   onFind,
   onUseCurrent,
   photo,
-  hasPremium,
+  alertLimit,
+  alertsFull,
   canManageGeofence,
   kids,
 }: {
@@ -295,7 +297,10 @@ function PlaceFormFields({
     onPick: (file: File) => void
     onRemove: () => void
   }
-  hasPremium: boolean
+  /** Places the plan allows alerts on: null = every place, 0 = none. */
+  alertLimit: number | null
+  /** That many places already have alerts on (not counting this one). */
+  alertsFull: boolean
   canManageGeofence: boolean
   kids: { id: string; name: string }[]
 }) {
@@ -391,16 +396,21 @@ function PlaceFormFields({
         <Label>Color</Label>
         <ColorPicker value={draft.color} onChange={(color) => set({ color })} />
       </div>
-      {hasPremium && canManageGeofence && (
+      {alertLimit !== 0 && canManageGeofence && (
         <>
           <div className="flex items-center justify-between">
             <div>
               <Label htmlFor={`${idp}Geofence`}>Enable Geofence</Label>
-              <p className="text-xs text-muted-foreground">Get alerts when family members arrive or leave</p>
+              <p className="text-xs text-muted-foreground">
+                {alertsFull && !draft.geofenceEnabled
+                  ? `Your plan includes alerts on ${alertLimit} places, all in use. Turn one off or upgrade to Premium.`
+                  : 'Get alerts when family members arrive or leave'}
+              </p>
             </div>
             <Switch
               id={`${idp}Geofence`}
               checked={draft.geofenceEnabled}
+              disabled={alertsFull && !draft.geofenceEnabled}
               onCheckedChange={(checked) => set({ geofenceEnabled: checked })}
             />
           </div>
@@ -501,13 +511,13 @@ function PlaceFormFields({
           )}
         </>
       )}
-      {!hasPremium && canManageGeofence && (
+      {alertLimit === 0 && canManageGeofence && (
         <div className="p-3 rounded-lg bg-muted">
           <div className="flex items-center gap-2 text-sm font-medium">
             <Crown className="w-4 h-4 text-amber-500" />
-            Geofencing requires Premium
+            Arrival &amp; departure alerts
           </div>
-          <p className="text-xs text-muted-foreground mt-1">Upgrade to get arrival and departure alerts</p>
+          <p className="text-xs text-muted-foreground mt-1">Come with Plus (3 places) or Premium (every place)</p>
         </div>
       )}
     </div>
@@ -940,7 +950,10 @@ function PlacesPageContent() {
       return rank(a) - rank(b) || a.name.localeCompare(b.name)
     })
 
-  const canToggleGeofence = access.hasPremium && canManageGeofence
+  // Plus: alerts on up to 3 places; Premium: every place; Free: none.
+  const alertLimit = alertPlaceLimit(access.tier)
+  const alertsFull = alertLimit !== null && geofenceTotal >= alertLimit
+  const canToggleGeofence = alertLimit !== 0 && canManageGeofence
 
   const filterDefs: Array<{ key: PlaceFilter; label: string; n: number }> = [
     { key: 'all', label: 'All', n: currentCount },
@@ -956,7 +969,8 @@ function PlacesPageContent() {
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-foreground sm:text-2xl">Saved Places</h1>
           <p className="truncate text-sm text-muted-foreground">
-            {currentCount} of {maxPlaces === Infinity ? 'unlimited' : maxPlaces} places · {geofenceTotal} with geofence alerts
+            {currentCount} of {maxPlaces === Infinity ? 'unlimited' : maxPlaces} places · {geofenceTotal}
+            {alertLimit ? ` of ${alertLimit}` : ''} with geofence alerts
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -1132,8 +1146,14 @@ function PlacesPageContent() {
                           <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
                             <Switch
                               checked={place.geofenceEnabled}
+                              disabled={alertsFull && !place.geofenceEnabled}
                               onCheckedChange={(checked) => toggleGeofence(place, checked)}
                               aria-label={`Geofence alerts for ${place.name}`}
+                              title={
+                                alertsFull && !place.geofenceEnabled
+                                  ? `Your plan includes alerts on ${alertLimit} places. Turn one off or upgrade to Premium.`
+                                  : undefined
+                              }
                             />
                             Alerts
                           </label>
@@ -1211,7 +1231,8 @@ function PlacesPageContent() {
             onFind={() => geocodeAddress(newPlace.address, 'new')}
             onUseCurrent={() => fillCurrentLocation('new')}
             photo={{ file: newPhoto, onPick: setNewPhoto, onRemove: () => setNewPhoto(null) }}
-            hasPremium={access.hasPremium}
+            alertLimit={alertLimit}
+            alertsFull={alertsFull}
             canManageGeofence={canManageGeofence}
             kids={kids}
           />
@@ -1255,7 +1276,8 @@ function PlacesPageContent() {
                 setEditRemovePhoto(true)
               },
             }}
-            hasPremium={access.hasPremium}
+            alertLimit={alertLimit}
+            alertsFull={alertsFull && !editingPlace?.geofenceEnabled}
             canManageGeofence={canManageGeofence}
             kids={kids}
           />

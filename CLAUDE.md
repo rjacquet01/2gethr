@@ -39,7 +39,7 @@ real email. Read a script's header before running it.
   admin-delete-child, admin-tier-breakdown, adult-location-access, child-invite, coppa,
   dashboard-prefetch, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
   legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-link, push-ownership,
-  dictation, push-picker, quick-add, schema-snapshot, sms-consent, stillness, stripe-checkout-tax,
+  dictation, place-alerts, push-picker, quick-add, schema-snapshot, sms-consent, stillness, stripe-checkout-tax,
   stripe-webhook-events, telnyx-sms, weather-prompt, weather-route.
 - **Board suites** (board-flyer-download, board-flyers, board-limits,
   board-notify) need a disposable database in `BOARD_TEST_DATABASE_URL`.
@@ -93,6 +93,9 @@ real email. Read a script's header before running it.
   `participantName`). Don't hand-roll name fallbacks.
 - Tiers live in `lib/subscription-tiers.ts`: `FREE` = Free, `PREMIUM` = **Plus**,
   `PREMIUM_PLUS` = **Premium**. Use the display names, not the enum names.
+- Place (geofence) alerts: Free none, Plus 3 places, Premium every place (`limits.maxAlertPlaces`,
+  `alertPlaceLimit()`). Enforced when a place is created or switched on (`lib/place-alerts.ts`) and when
+  alerts fire (the family's oldest alert places), so a downgrade keeps only what the plan allows.
 - Location: adults see children without sharing their own location. Adults see
   each other only after approval (`lib/location-access.ts`).
 - Texts go only to numbers whose owner agreed (`users.sms_consent_at`, `lib/sms-consent.ts`),

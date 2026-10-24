@@ -85,7 +85,7 @@ const faqs = [
       },
       {
         question: 'How do geofences work?',
-        answer: 'Geofences are virtual boundaries around saved places such as home, school, or work. When a family member arrives at or leaves a geofenced place, designated family members receive an alert. Add places and turn on geofence alerts from the Places page. Geofence alerts are a Premium feature.'
+        answer: 'Geofences are virtual boundaries around saved places such as home, school, or work. When a family member arrives at or leaves a geofenced place, designated family members receive an alert. Add places and turn on geofence alerts from the Places page. Plus includes alerts on 3 places; Premium includes them on every saved place.'
       },
     ]
   },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ensurePlaceNotifyChannelsColumn, getPlaceAssignees, setPlaceAssignees, validatePlaceAssignees } from "@/lib/place-schema"
 import { sql } from "@/lib/db"
+import { alertLimitError, alertPlaceLimit, alertPlacesInUse } from "@/lib/place-alerts"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { guestForbidden } from "@/lib/permissions"
 import { z } from "zod"
@@ -160,15 +161,12 @@ export async function PATCH(
       delete validatedData.notifyChannels
     }
 
-    // Geofencing follows the plan tier (it was only checked when a place was created)
-    if (validatedData.geofenceEnabled) {
+    // Turning alerts on must fit the plan (Plus: 3 places, Premium: all).
+    // A place that already has them on can be edited freely.
+    if (validatedData.geofenceEnabled && places[0].geofence_enabled !== true) {
       const sub = await checkFamilySubscription(places[0].family_id)
-      if (!sub.features.geofencing) {
-        return NextResponse.json(
-          { success: false, error: "Geofencing requires a Premium subscription" },
-          { status: 403 }
-        )
-      }
+      const why = alertLimitError(alertPlaceLimit(sub.tier), await alertPlacesInUse(places[0].family_id, placeId))
+      if (why) return NextResponse.json({ success: false, error: why }, { status: 403 })
     }
 
     // Build update query dynamically

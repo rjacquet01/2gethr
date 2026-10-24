@@ -37,7 +37,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePurchaseUi } from '@/hooks/use-purchase-ui'
-import { getTierDefinition, SUBSCRIPTION_TIERS, annualSavingsPercent, TRIAL_DAYS, PRICE_TAX_NOTE } from '@/lib/subscription-tiers'
+import { alertPlaceLimit, getTierDefinition, SUBSCRIPTION_TIERS, annualSavingsPercent, TRIAL_DAYS, PRICE_TAX_NOTE } from '@/lib/subscription-tiers'
 import { FamilyNameTag } from '@/components/family-name-tag'
 
 export default function SubscriptionPage() {
@@ -158,7 +158,10 @@ export default function SubscriptionPage() {
   const daysLeft = trialEndsAt ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : 0
   const FEATURES = [
     { key: 'locationSharing' as const, label: 'Real-time location sharing' },
-    { key: 'geofencing' as const, label: 'Geofence alerts' },
+    {
+      key: 'geofencing' as const,
+      label: alertPlaceLimit(currentTier) ? `Arrival & departure alerts (${alertPlaceLimit(currentTier)} places)` : 'Arrival & departure alerts',
+    },
     { key: 'smsNotifications' as const, label: 'SMS notifications' },
     { key: 'customReminderTimes' as const, label: 'Custom reminder times' },
     { key: 'advancedRecurrence' as const, label: 'Advanced recurring events' },
