@@ -175,6 +175,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       "Unlimited children",
       "Live family location (50 saved places)",
       "Arrival & departure alerts (every place)",
+      "Emergency alerts to your child",
       "90 days history",
       "Custom reminder times",
       "100 text alerts/month",

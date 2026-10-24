@@ -23,7 +23,6 @@ import {
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { SUBSCRIPTION_TIERS, centsToDisplay } from '@/lib/subscription-tiers'
 import { BackgroundLocationCard } from '@/components/background-location-card'
 import { TrackedMap } from '@/components/tracked-map'
 import { SosButton } from '@/components/sos-button'
@@ -916,18 +915,11 @@ function LocationPageContent({ isChild, isSupervisor }: { isChild: boolean; isSu
           <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20">
             <CardContent className="py-12 text-center">
               <Crown className="mx-auto h-12 w-12 text-amber-500" />
-              <h3 className="mt-4 text-lg font-medium">Premium Feature</h3>
+              <h3 className="mt-4 text-lg font-medium">Not included in your plan</h3>
               <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-                Real-time location sharing is available exclusively with our Premium plan (${centsToDisplay(SUBSCRIPTION_TIERS.PREMIUM_PLUS.priceMonthlyCents)}/month).
-                Upgrade to track your family members&apos; locations, set up geofence alerts, and keep everyone safe.
+                Live location isn&apos;t included in your family&apos;s current plan. See the plans to turn it on.
               </p>
               <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-                <Button asChild>
-                  <Link href="/subscription/upgrade?tier=PREMIUM_PLUS">
-                    <Crown className="mr-2 h-4 w-4" />
-                    Upgrade to Premium
-                  </Link>
-                </Button>
                 <Button variant="outline" asChild>
                   <Link href="/subscription">
                     View Plans
