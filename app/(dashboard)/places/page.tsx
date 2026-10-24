@@ -903,12 +903,18 @@ function PlacesPageContent() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-32 w-full" />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Skeleton className="h-48" />
-          <Skeleton className="h-48" />
+      // Same shape as the loaded page (header row, then the list and side card),
+      // so nothing jumps when the places arrive.
+      <div className="space-y-4 pb-20 sm:space-y-5 lg:pb-0">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1.5">
+            <Skeleton className="h-7 w-40 sm:h-8" />
+            <Skeleton className="h-4 w-56" />
+          </div>
+          <Skeleton className="h-9 w-28" />
+        </div>
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Skeleton className="h-64 lg:col-span-2" />
           <Skeleton className="h-48" />
         </div>
       </div>

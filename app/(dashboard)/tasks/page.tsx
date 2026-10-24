@@ -286,7 +286,7 @@ export default function TasksPage() {
           type="button"
           disabled={busy || status === 'pending_approval' || status === 'cancelled'}
           onClick={() => handleTaskAction(task.id, status === 'completed' ? 'pending' : 'complete')}
-          className="mt-0.5 shrink-0 rounded-full sm:mt-0"
+          className="relative mt-0.5 shrink-0 rounded-full before:absolute before:-inset-2.5 sm:mt-0"
           aria-label={status === 'completed' ? 'Mark as not done' : 'Mark as done'}
           title={status === 'pending_approval' ? 'Waiting for a parent to approve' : status === 'completed' ? 'Mark as not done' : 'Mark as done'}
         >
