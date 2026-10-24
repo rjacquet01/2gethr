@@ -23,8 +23,21 @@ async function ensureTable() {
     )
   `
   await ddl`CREATE INDEX IF NOT EXISTS idx_location_device_tokens_user ON location_device_tokens(user_id, family_member_id)`
+  await ddl`
+    ALTER TABLE location_device_tokens
+      ADD COLUMN IF NOT EXISTS claim_hash TEXT,
+      ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ
+  `
   ensured = true
 }
+
+// The togethr-bg:// link that hands a token to the app can be opened by any
+// page, so someone could send a link carrying a token from their own account.
+// App 1.2.6+ claims the token first, which makes it unusable until the website
+// confirms it, signed in on that phone as the token's owner. Tokens never
+// claimed (older apps) work as before.
+export const CLAIM_MINUTES = 15
 
 const hash = (token: string) => crypto.createHash("sha256").update(token).digest("hex")
 
@@ -56,10 +69,55 @@ export async function verifyDeviceToken(token: string): Promise<DeviceTokenInfo 
     UPDATE location_device_tokens
     SET last_used_at = NOW()
     WHERE token_hash = ${hash(token)} AND revoked_at IS NULL
+      AND (claimed_at IS NULL OR confirmed_at IS NOT NULL)
     RETURNING user_id, family_member_id, family_id
   `
   if (rows.length === 0) return null
   return { userId: rows[0].user_id, memberId: rows[0].family_member_id, familyId: rows[0].family_id }
+}
+
+/** The app received this token: lock it until confirmed. Returns the one-time code for the confirm page. */
+export async function claimDeviceToken(token: string): Promise<(DeviceTokenInfo & { code: string }) | null> {
+  if (!token.startsWith("tgd_")) return null
+  await ensureTable()
+  const code = crypto.randomBytes(24).toString("hex")
+  const rows = await sql`
+    UPDATE location_device_tokens
+    SET claim_hash = ${hash(code)}, claimed_at = NOW()
+    WHERE token_hash = ${hash(token)} AND revoked_at IS NULL AND confirmed_at IS NULL
+    RETURNING user_id, family_member_id, family_id
+  `
+  if (rows.length === 0) return null
+  return { userId: rows[0].user_id, memberId: rows[0].family_member_id, familyId: rows[0].family_id, code }
+}
+
+export type ConfirmResult =
+  | { ok: true; info: DeviceTokenInfo }
+  | { ok: false; reason: "expired" | "other_account" }
+
+/**
+ * The confirm page, signed in on the phone, vouches for the claimed token.
+ * A token from another account is revoked so it can never be used.
+ */
+export async function confirmDeviceToken(code: string, userId: string): Promise<ConfirmResult> {
+  await ensureTable()
+  const rows = await sql`
+    UPDATE location_device_tokens
+    SET confirmed_at = NOW(), claim_hash = NULL
+    WHERE claim_hash = ${hash(code)} AND user_id = ${userId} AND revoked_at IS NULL
+      AND confirmed_at IS NULL AND claimed_at > NOW() - make_interval(mins => ${CLAIM_MINUTES})
+    RETURNING user_id, family_member_id, family_id
+  `
+  if (rows.length > 0) {
+    return { ok: true, info: { userId: rows[0].user_id, memberId: rows[0].family_member_id, familyId: rows[0].family_id } }
+  }
+  const other = await sql`
+    UPDATE location_device_tokens
+    SET revoked_at = NOW(), claim_hash = NULL
+    WHERE claim_hash = ${hash(code)} AND user_id <> ${userId} AND revoked_at IS NULL
+    RETURNING id
+  `
+  return { ok: false, reason: other.length > 0 ? "other_account" : "expired" }
 }
 
 export async function revokeDeviceTokens(userId: string, memberId: string): Promise<void> {
@@ -75,6 +133,7 @@ export async function getDeviceTokenStatus(userId: string, memberId: string) {
   const rows = await sql`
     SELECT created_at, last_used_at FROM location_device_tokens
     WHERE user_id = ${userId} AND family_member_id = ${memberId} AND revoked_at IS NULL
+      AND (claimed_at IS NULL OR confirmed_at IS NOT NULL)
     ORDER BY created_at DESC LIMIT 1
   `
   if (rows.length === 0) return { active: false, createdAt: null, lastSeenAt: null }
