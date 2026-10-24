@@ -32,19 +32,15 @@ const fetcher = async (url: string): Promise<ActivityResponse> => {
 }
 
 /**
- * Saved Places summary + the last 24 hours of geofence arrivals/departures.
+ * The last 24 hours of geofence arrivals/departures.
  * Parents/guardians see every member; everyone else sees only their own.
  */
 export function GeofenceActivityCard({
   familyId,
-  placeCount,
-  maxPlaces,
   geofenceCount,
   canAddMore,
 }: {
   familyId: string
-  placeCount: number
-  maxPlaces: number
   geofenceCount: number
   canAddMore: boolean
 }) {
@@ -60,13 +56,13 @@ export function GeofenceActivityCard({
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
+          {/* The page heading already shows the place counts; this card is the activity feed. */}
           <div>
-            <CardTitle className="text-base">Saved Places</CardTitle>
-            <CardDescription>
-              {placeCount} of {maxPlaces === Infinity ? 'unlimited' : maxPlaces} places
-              {' · '}
-              {geofenceCount} with geofence alerts
-            </CardDescription>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BellRing className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              {everyone ? 'Family activity' : 'Your activity'}
+            </CardTitle>
+            <CardDescription>Arrivals and departures, last 24 hours</CardDescription>
           </div>
           {!canAddMore && (
             <Badge variant="secondary" className="shrink-0">
@@ -77,14 +73,6 @@ export function GeofenceActivityCard({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center gap-2 mb-2">
-          <BellRing className="w-4 h-4 text-muted-foreground" />
-          <p className="text-sm font-medium">
-            {everyone ? 'Family activity' : 'Your activity'}
-            <span className="text-muted-foreground font-normal"> · last 24 hours</span>
-          </p>
-        </div>
-
         {isLoading ? (
           <div className="space-y-2">
             <Skeleton className="h-10" />

@@ -8,7 +8,11 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "demo:seed": "npx tsx --tsconfig tsconfig.json scripts/demo/seed-demo-family.ts",
+    "demo:reset": "npx tsx --tsconfig tsconfig.json scripts/demo/seed-demo-family.ts --reset",
+    "demo:capture": "npx tsx --tsconfig tsconfig.json scripts/demo/capture-store-screens.ts",
+    "demo:frame": "npx tsx --tsconfig tsconfig.json scripts/demo/frame-store-screens.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
