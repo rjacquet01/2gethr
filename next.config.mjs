@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Lets plan cards say "Taxes calculated at checkout" only once Stripe Tax is on
+  // (a flag, not a secret; read at build time).
+  env: {
+    NEXT_PUBLIC_STRIPE_TAX_ENABLED: process.env.STRIPE_TAX_ENABLED === "true" ? "true" : "false",
+  },
   // Type errors fail the build (there are none; `npm run typecheck` checks).
   images: {
     unoptimized: true,

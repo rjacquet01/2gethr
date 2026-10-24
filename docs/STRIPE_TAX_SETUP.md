@@ -21,7 +21,7 @@ Already done, per the status above. Kept here in case it has to be redone, for e
 1. **Business address.** Settings > Business > Business details: set the business's legal address. Stripe uses it as the origin address for tax.
 2. **Tax registration.** Tax > Registrations: add the Massachusetts registration *only after confirming with your accountant* that you are registered and should collect, plus any other states they advise. **Automatic tax calculates nothing without a registration**: with the flag on and no registration, checkout silently charges no tax.
 3. **Product tax codes.** Product catalog > each Togethr product (Basic / Premium): set the tax code your accountant chooses for the service (Stripe lists software / SaaS codes, such as "Software as a service (SaaS) - personal use"). Or set a default under Tax > Settings.
-4. **Price tax behavior: inclusive.** Togethr's prices are tax-inclusive: the advertised amount ($5.99, $9.99 and so on) is what the customer pays, and any tax comes out of it. The app shows "Price includes applicable sales tax" under paid prices. The code deliberately never sets `tax_behavior`; it is set in the Dashboard only. A price with no tax behavior can't be used with automatic tax. See **Making the prices tax-inclusive** below.
+4. **Price tax behavior: inclusive.** Togethr's prices are tax-inclusive: the advertised amount ($5.99, $9.99 and so on) is what the customer pays, and any tax comes out of it. The pricing and upgrade pages say "Taxes calculated at checkout" under paid prices, but only once `STRIPE_TAX_ENABLED` is `true` (built in at deploy time through next.config.mjs). The code deliberately never sets `tax_behavior`; it is set in the Dashboard only. A price with no tax behavior can't be used with automatic tax. See **Making the prices tax-inclusive** below.
 5. **Test it.** In test mode, run a checkout with a Massachusetts billing address and check that the session shows the tax you expect.
 
 ## Making the prices tax-inclusive
@@ -69,7 +69,7 @@ Customers outside your registered states pay no tax, and you keep the full amoun
 4. **Turn it on in Production** on or just before **2026-11-02**: Vercel > Project > Settings > Environment Variables > `STRIPE_TAX_ENABLED` = `true` (Production), then redeploy.
 5. **First live check:** make one real purchase with a Massachusetts address, confirm the tax shows as included, then refund it. The refund should arrive at the webhook: the admin gets the refund email, the family owner gets "Your Togethr refund" (sent for a full refund of their latest invoice), and the payment row records the refund.
 
-The pricing and upgrade pages show "Price includes applicable sales tax" as soon as this branch is deployed, before collection starts on 2026-11-02. If you'd rather show it only once tax is on, say so and it can be tied to a public flag.
+The pricing and upgrade pages show "Taxes calculated at checkout" only after `STRIPE_TAX_ENABLED` is set to `true` and the site is redeployed. Until then they show no tax wording.
 
 ## Environment variables
 
