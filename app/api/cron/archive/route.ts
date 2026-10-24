@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { monitorCron } from "@/lib/cron-health"
 import { sql } from "@/lib/db"
 import { purgeArchivedHistory, HISTORY_CAP_DAYS, isHistoryPurgeEnabled } from "@/lib/retention"
 
@@ -23,7 +24,7 @@ function verifyCronRequest(request: NextRequest): boolean {
   return authHeader === `Bearer ${cronSecret}`
 }
 
-export async function GET(request: NextRequest) {
+async function runJob(request: NextRequest) {
   try {
     if (!verifyCronRequest(request)) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
@@ -111,3 +112,5 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return GET(request)
 }
+
+export const GET = monitorCron("archive", runJob)

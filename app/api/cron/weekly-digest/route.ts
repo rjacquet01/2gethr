@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { monitorCron } from "@/lib/cron-health"
 import { sql, type Row } from '@/lib/db'
 import { sendEmail, EMAIL_TEMPLATES } from "@/lib/services/email"
 
@@ -15,7 +16,7 @@ function verifyCronRequest(request: NextRequest): boolean {
   return false
 }
 
-export async function GET(request: NextRequest) {
+async function runJob(request: NextRequest) {
   try {
     // Verify this is a legitimate cron request
     if (!verifyCronRequest(request)) {
@@ -242,3 +243,5 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
+export const GET = monitorCron("weekly-digest", runJob)

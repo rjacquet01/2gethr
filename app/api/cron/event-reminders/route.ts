@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { monitorCron } from "@/lib/cron-health"
 import { sql } from "@/lib/db"
 import { sendPushToUser } from "@/lib/services/push"
 import { sendEmail, isResendConfigured } from "@/lib/services/email"
@@ -13,7 +14,7 @@ import { tierHasFeature } from "@/lib/subscription-tiers"
 // and each (event, user, offset) is only ever sent once.
 const GRACE_MINUTES = 3
 
-export async function GET(request: NextRequest) {
+async function runJob(request: NextRequest) {
   try {
     const authHeader = request.headers.get("Authorization")
     if (process.env.CRON_SECRET ? authHeader !== `Bearer ${process.env.CRON_SECRET}` : process.env.NODE_ENV === "production") {
@@ -136,3 +137,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to process event reminders" }, { status: 500 })
   }
 }
+
+export const GET = monitorCron("event-reminders", runJob)

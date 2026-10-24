@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { monitorCron } from "@/lib/cron-health"
 import { sql } from "@/lib/db"
 import { ensureLocationRequestsTable } from "@/lib/location-schema"
 import { notifyRequesterExpired } from "@/lib/location-approval"
@@ -12,7 +13,7 @@ function verifyCronRequest(request: NextRequest): boolean {
   return request.headers.get("authorization") === `Bearer ${cronSecret}`
 }
 
-export async function GET(request: NextRequest) {
+async function runJob(request: NextRequest) {
   try {
     if (!verifyCronRequest(request)) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
@@ -38,3 +39,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Failed" }, { status: 500 })
   }
 }
+
+export const GET = monitorCron("location-request-expiry", runJob)

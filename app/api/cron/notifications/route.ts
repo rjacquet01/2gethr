@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { monitorCron } from "@/lib/cron-health"
 import { 
   checkAndNotifyOverdueTasks, 
   checkAndNotifyEventReminders,
@@ -12,7 +13,7 @@ import {
 // - Event reminders (short-term)
 // - Tasks and events due in the next 48 hours
 
-export async function GET(request: NextRequest) {
+async function runJob(request: NextRequest) {
   try {
     // Verify the request is from Vercel Cron (optional security)
     const authHeader = request.headers.get("authorization")
@@ -64,3 +65,5 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return GET(request)
 }
+
+export const GET = monitorCron("notifications", runJob)

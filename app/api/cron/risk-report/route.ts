@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { monitorCron } from "@/lib/cron-health"
 import { sql } from "@/lib/db"
 import { sendEmail, ADMIN_EMAIL } from "@/lib/services/email"
 
@@ -9,7 +10,7 @@ import { sendEmail, ADMIN_EMAIL } from "@/lib/services/email"
 const esc = (s: unknown) =>
   String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 
-export async function GET(request: NextRequest) {
+async function runJob(request: NextRequest) {
   const authHeader = request.headers.get("Authorization")
   if (process.env.CRON_SECRET ? authHeader !== `Bearer ${process.env.CRON_SECRET}` : process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -74,3 +75,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to send risk report" }, { status: 500 })
   }
 }
+
+export const GET = monitorCron("risk-report", runJob)
