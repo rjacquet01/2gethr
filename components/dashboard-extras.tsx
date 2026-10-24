@@ -79,9 +79,13 @@ export function DashboardMiniMap({ familyId }: { familyId: string }) {
 // (premium parents/guardians). Kids and everyone else get null.
 export function FloatingEmergencyButton({ familyId }: { familyId: string }) {
   return (
-    <div className="fixed bottom-20 right-4 z-40 rounded-full bg-background shadow-lg md:bottom-6 md:right-6 empty:hidden">
-      <EmergencyAlertButton familyId={familyId} />
-    </div>
+    <>
+      <div className="peer fixed bottom-20 right-4 z-40 rounded-full bg-background shadow-lg md:bottom-6 md:right-6 empty:hidden">
+        <EmergencyAlertButton familyId={familyId} />
+      </div>
+      {/* Room at the end of the page so the button never covers the last card. */}
+      <div aria-hidden="true" className="h-14 peer-empty:hidden md:h-10" />
+    </>
   )
 }
 

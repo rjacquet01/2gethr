@@ -1056,25 +1056,31 @@ function LocationPageContent({ isChild, isSupervisor }: { isChild: boolean; isSu
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <SosButton familyId={selectedFamily?.id} />
-            <Button size="sm" onClick={handlePingLocation}>
-              <Navigation className="mr-1.5 h-4 w-4" />
-              Share now
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                handleUpdateSettings({
-                  mode: mySettings?.mode === 'OFF' ? 'ACTIVE' : 'OFF',
-                  shareWithFamily: mySettings?.mode === 'OFF' ? true : false,
-                })
-              }
-              disabled={updatingSettings}
-            >
-              {mySettings?.mode === 'OFF' ? 'Turn on' : 'Turn off'}
-            </Button>
+          {/* Phones: SOS (and Alert child, which appears once its check returns) on
+              one row, sharing controls on the next, so nothing moves when it loads. */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex flex-wrap items-center gap-2">
+              <SosButton familyId={selectedFamily?.id} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" onClick={handlePingLocation}>
+                <Navigation className="mr-1.5 h-4 w-4" />
+                Share now
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  handleUpdateSettings({
+                    mode: mySettings?.mode === 'OFF' ? 'ACTIVE' : 'OFF',
+                    shareWithFamily: mySettings?.mode === 'OFF' ? true : false,
+                  })
+                }
+                disabled={updatingSettings}
+              >
+                {mySettings?.mode === 'OFF' ? 'Turn on' : 'Turn off'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

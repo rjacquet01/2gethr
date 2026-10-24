@@ -256,8 +256,11 @@ function FamilyBoard({ familyId }: { familyId: string }) {
           </p>
         </div>
         {canManagePins && (
-          <Button variant="ghost" onClick={() => setTakenDownOpen(true)}>
-            <Archive className="mr-1.5 h-4 w-4" /> Taken down{counts?.takenDown ? ` (${counts.takenDown})` : ''}
+          <Button variant="ghost" onClick={() => setTakenDownOpen(true)} aria-label="Taken down">
+            {/* Icon only on phones, so the buttons that appear once the board loads fit one row. */}
+            <Archive className="h-4 w-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Taken down</span>
+            {counts?.takenDown ? ` (${counts.takenDown})` : ''}
           </Button>
         )}
         <Button variant="outline" onClick={() => setNoteOpen(true)}>

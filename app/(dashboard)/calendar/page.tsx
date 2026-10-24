@@ -292,16 +292,6 @@ export default function CalendarPage() {
             </TabsList>
           </Tabs>
         </div>
-
-        <WeatherSetupPrompt status={weatherStatus} role={role} familyId={primaryFamily?.id} />
-        {weatherStatus === 'ready' && (
-          <WeatherPlaceLine
-            label={placeLabel}
-            isHomePlace={isHomePlace}
-            source={weatherSource}
-            canManagePlaces={!!role && PLACE_MANAGER_ROLES.includes(role)}
-          />
-        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -486,6 +476,19 @@ export default function CalendarPage() {
             )}
           </CardContent>
         </Card>
+      </div>
+
+      {/* Below the grid: these arrive after the weather lookup and would push the calendar down. */}
+      <div className="space-y-2 empty:hidden">
+        <WeatherSetupPrompt status={weatherStatus} role={role} familyId={primaryFamily?.id} />
+        {weatherStatus === 'ready' && (
+          <WeatherPlaceLine
+            label={placeLabel}
+            isHomePlace={isHomePlace}
+            source={weatherSource}
+            canManagePlaces={!!role && PLACE_MANAGER_ROLES.includes(role)}
+          />
+        )}
       </div>
 
       {/* Attribution for whichever provider answered, only while weather is shown (never to guests). */}

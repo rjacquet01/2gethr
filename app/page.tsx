@@ -155,12 +155,13 @@ export default function HomePage() {
               <Link href="/login">Sign in</Link>
             </Button>
             <Button size="sm" asChild>
-              <Link href="/register">Start</Link>
+              <Link href="/register">Get started</Link>
             </Button>
           </div>
         </div>
       </header>
 
+      <main>
       {/* Hero */}
       <section className="relative overflow-hidden bg-gradient-to-b from-primary/[0.06] via-background to-background">
         <div className="container mx-auto grid items-center gap-12 px-4 py-14 sm:py-20 lg:grid-cols-2 lg:gap-16 lg:py-28">
@@ -323,6 +324,7 @@ export default function HomePage() {
           </Card>
         </div>
       </section>
+      </main>
 
       {/* Footer */}
       <footer className="border-t border-border py-6 sm:py-8">
