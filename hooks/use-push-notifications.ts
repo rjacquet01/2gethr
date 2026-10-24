@@ -95,10 +95,17 @@ export function usePushNotifications() {
 
       if (vapidPublicKey) {
         const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey)
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey
-        })
+        const opts = { userVisibleOnly: true, applicationServerKey }
+        try {
+          subscription = await registration.pushManager.subscribe(opts)
+        } catch (e) {
+          // A subscription made with an older server key blocks a new one
+          // (InvalidStateError): drop it and subscribe again.
+          const old = await registration.pushManager.getSubscription()
+          if (!old) throw e
+          await old.unsubscribe()
+          subscription = await registration.pushManager.subscribe(opts)
+        }
       } else {
         // Fallback for FCM - use Firebase messaging
         subscription = await registration.pushManager.subscribe({
