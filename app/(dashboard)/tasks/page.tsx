@@ -114,7 +114,9 @@ export default function TasksPage() {
   const myChildIds = kids.filter((c) => me && c.familyMemberId === me.id).map((c) => c.id)
 
   const people: Person[] = [
-    ...members.filter((m) => m.isActive !== false).map((m) => ({
+    // Members with a login only: a child without one (Add child) has no user id
+    // to filter on and comes from kids below, so it isn't listed twice.
+    ...members.filter((m) => m.isActive !== false && !!m.userId).map((m) => ({
       key: 'u' + m.userId,
       name: m.displayName,
       userId: m.userId,

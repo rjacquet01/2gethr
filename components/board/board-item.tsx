@@ -74,7 +74,8 @@ export function BoardItem({ post, onOpen }: { post: BoardPost; onOpen: () => voi
 
 function Meta({ post }: { post: BoardPost }) {
   return (
-    <div className="mt-2 flex items-center gap-1.5 px-0.5 text-[11px] text-neutral-700">
+    // Wraps on narrow notes, so the time drops to its own line instead of cutting the name down to "S..".
+    <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-0.5 text-[11px] text-neutral-700">
       {post.pinned && (
         <span className="inline-flex items-center gap-0.5 font-semibold text-red-700">
           <Pin className="h-3 w-3" aria-hidden="true" />
@@ -87,7 +88,7 @@ function Meta({ post }: { post: BoardPost }) {
           Kept up
         </span>
       )}
-      <span className="min-w-0 truncate font-medium">{post.authorName}</span>
+      <span className="max-w-full truncate font-medium">{post.authorName}</span>
       <span className="shrink-0">· {relativeTime(post.createdAt)}</span>
       {post.commentCount > 0 && (
         <span className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-full bg-black/10 px-1.5 py-0.5 font-medium">

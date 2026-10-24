@@ -27,6 +27,12 @@ portal (support, legal requests). Preparing for a soft launch.
   Next allows one `next dev` per checkout, so if one is already running use
   `E2E_PORT=<its port> npm run test:e2e`. The first time on a machine, run
   `npx playwright install chromium`. Browsers go in the user cache, not the repo.
+- Play Store screens (scripts/demo): `npm run demo:seed` builds the fictional Rivera family on the
+  dev branch (`demo:reset` removes it; `scripts/demo/guard.ts` refuses production). Its sign-in goes
+  only to `.env.demo.local`. Then build, `next start -p 3124`, and `npm run demo:capture`: phone,
+  7-inch and 10-inch PNGs plus a 1080x1920 walkthrough in `~/Downloads/play-raw`; `npm run demo:frame`
+  adds captioned, framed copies in `play-raw/framed`. One sign-in per
+  run; the login rate limit allows only a few runs per 15 minutes. Reseed after a capture (it checks a task off).
 
 ## Tests (scripts/test-*.ts)
 
@@ -37,7 +43,7 @@ real email. Read a script's header before running it.
 - **Safe, with no database and no network.** These use pure logic, or the
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
   admin-delete-child, admin-tier-breakdown, adult-location-access, brand-logo, child-invite, coppa,
-  dashboard-prefetch, device-token-claim, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
+  dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
   legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-link, push-ownership,
   dictation, place-alerts, push-picker, quick-add, schema-snapshot, sms-allowance, sms-consent, stillness, stripe-checkout-tax,
   stripe-webhook-events, telnyx-sms, upgrade-order, weather-prompt, weather-route.

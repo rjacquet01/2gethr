@@ -1213,8 +1213,6 @@ function PlacesPageContent() {
         <div className="lg:sticky lg:top-4 lg:self-start">
           <GeofenceActivityCard
             familyId={primaryFamily.id}
-            placeCount={currentCount}
-            maxPlaces={maxPlaces}
             geofenceCount={geofenceTotal}
             canAddMore={canAddMore}
           />
