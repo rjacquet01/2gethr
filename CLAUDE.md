@@ -37,7 +37,7 @@ real email. Read a script's header before running it.
 - **Safe, with no database and no network.** These use pure logic, or the
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
   admin-delete-child, admin-tier-breakdown, adult-location-access, child-invite, coppa,
-  dashboard-prefetch, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
+  dashboard-prefetch, device-token-claim, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
   legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-link, push-ownership,
   dictation, place-alerts, push-picker, quick-add, schema-snapshot, sms-consent, stillness, stripe-checkout-tax,
   stripe-webhook-events, telnyx-sms, weather-prompt, weather-route.
@@ -98,6 +98,10 @@ real email. Read a script's header before running it.
   alerts fire (the family's oldest alert places), so a downgrade keeps only what the plan allows.
 - Location: adults see children without sharing their own location. Adults see
   each other only after approval (`lib/location-access.ts`).
+- Android background sharing uses device tokens (`lib/device-token.ts`), handed over by a
+  togethr-bg:// link any page can open. App 1.2.6+ claims the token, which locks it until
+  `/location/confirm-device` confirms it, signed in on the phone as the token's owner. A token
+  from another account is revoked. Unclaimed tokens (older apps) work as before.
 - Texts go only to numbers whose owner agreed (`users.sms_consent_at`, `lib/sms-consent.ts`),
   urgent alerts included; `lib/services/sms.ts` enforces it. Turning SMS on in Settings is the
   opt-in; a new number needs it again. Bodies start with "Togethr:". Inbound STOP/HELP:
