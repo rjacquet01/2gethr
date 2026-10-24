@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ensurePlaceNotifyChannelsColumn, getPlaceAssignees, setPlaceAssignees, validatePlaceAssignees } from "@/lib/place-schema"
 import { sql } from "@/lib/db"
+import { alertLimitError, alertPlaceLimit, alertPlacesInUse } from "@/lib/place-alerts"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { guestForbidden } from "@/lib/permissions"
 import { z } from "zod"
@@ -181,12 +182,10 @@ export async function POST(request: NextRequest) {
       if (invalid) return NextResponse.json({ success: false, error: invalid }, { status: 400 })
     }
 
-    // Check if geofencing is allowed
-    if (validatedData.geofenceEnabled && !subscription.features.geofencing) {
-      return NextResponse.json(
-        { success: false, error: "Geofencing requires a Premium subscription" },
-        { status: 403 }
-      )
+    // Alerts on this place must fit the plan (Plus: 3 places, Premium: all)
+    if (validatedData.geofenceEnabled) {
+      const why = alertLimitError(alertPlaceLimit(subscription.tier), await alertPlacesInUse(validatedData.familyId))
+      if (why) return NextResponse.json({ success: false, error: why }, { status: 403 })
     }
 
     const placeId = crypto.randomUUID()

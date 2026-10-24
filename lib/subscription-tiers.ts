@@ -32,6 +32,8 @@ export interface TierLimits {
   maxFamilyMembers: number
   maxChildren: number // -1 = unlimited
   maxSavedPlaces: number
+  /** Saved places that can have arrival/departure alerts on (-1 = all of them). */
+  maxAlertPlaces: number
   maxCalendars: number
   historyDays: number
   /** Text messages per family per calendar month (urgent safety alerts are exempt). */
@@ -84,6 +86,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       maxFamilyMembers: 4,
       maxChildren: 2,
       maxSavedPlaces: 2,
+      maxAlertPlaces: 0,
       maxCalendars: 2,
       historyDays: 30,
       smsMonthlyQuota: 0,
@@ -117,13 +120,14 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       maxFamilyMembers: 6,
       maxChildren: 5,
       maxSavedPlaces: 15,
+      maxAlertPlaces: 3,
       maxCalendars: 5,
       historyDays: 90,
       smsMonthlyQuota: 25,
     },
     features: {
       locationSharing: true,
-      geofencing: false,
+      geofencing: true, // on up to maxAlertPlaces places
       advancedRecurrence: true,
       exportCalendar: true,
       prioritySupport: true,
@@ -134,6 +138,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
     featureList: [
       "Up to 5 children",
       "Live family location (15 saved places)",
+      "Arrival & departure alerts (3 places)",
       "Custom reminder times",
       "Complex recurring events",
       "90 days history",
@@ -151,6 +156,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       maxFamilyMembers: 12,
       maxChildren: -1, // Unlimited
       maxSavedPlaces: 50,
+      maxAlertPlaces: -1, // every saved place
       maxCalendars: 20,
       historyDays: 90, // every plan is capped at 90 days (lib/retention.ts)
       smsMonthlyQuota: 100,
@@ -168,7 +174,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
     featureList: [
       "Unlimited children",
       "Live family location (50 saved places)",
-      "Geofence arrival & departure alerts",
+      "Arrival & departure alerts (every place)",
       "90 days history",
       "Custom reminder times",
       "100 text alerts/month",
@@ -180,6 +186,14 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
 export function getTierDefinition(tier: string | null | undefined): TierDefinition {
   const key = (tier || "FREE").toUpperCase() as SubscriptionTierKey
   return SUBSCRIPTION_TIERS[key] || SUBSCRIPTION_TIERS.FREE
+}
+
+/** How many saved places may have arrival/departure alerts on: null = every place, 0 = none. */
+export function alertPlaceLimit(tier: string | null | undefined): number | null {
+  const def = getTierDefinition(tier)
+  if (!def.features.geofencing) return 0
+  const n = def.limits.maxAlertPlaces
+  return n < 0 ? null : n
 }
 
 /** Cents -> display dollars, e.g. 599 -> "5.99". */
