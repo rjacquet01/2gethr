@@ -4,27 +4,28 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Check, Sparkles } from 'lucide-react'
 import { Logo, BRAND_MOTTO } from '@/components/brand/logo'
+import { BillingToggle } from '@/components/billing-toggle'
 import { cn } from '@/lib/utils'
-import { listTierDefinitions, annualSavingsPercent, SUBSCRIPTION_TIERS, TRIAL_DAYS, priceTaxNote } from '@/lib/subscription-tiers'
+import { listTierDefinitions, annualSavingsPercent, displayPrice, SUBSCRIPTION_TIERS, TRIAL_DAYS, priceTaxNote } from '@/lib/subscription-tiers'
 
 // Pulled from lib/subscription-tiers.ts (the same data the in-app
 // /subscription page reads) so this public page can't drift out of sync
 // with what members actually see - and are actually charged - once signed in.
 const ANNUAL_SAVINGS = annualSavingsPercent(SUBSCRIPTION_TIERS.PREMIUM)
 const tiers = listTierDefinitions().map((def) => ({
+  def,
   name: def.name,
   description: def.description,
-  price: { monthly: def.priceMonthlyCents / 100, annual: def.priceAnnualCents / 100 },
   features: def.featureList,
   cta: def.key === 'FREE' ? 'Get Started' : 'Start Free Trial',
   popular: def.key === 'PREMIUM_PLUS',
 }))
 
 export default function PricingPage() {
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual')
+  // Monthly first, so the first price people see matches the home page and checkout.
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly')
 
   return (
     <div className="min-h-screen bg-background">
@@ -58,41 +59,15 @@ export default function PricingPage() {
 
         {/* Billing Toggle */}
         <div className="flex justify-center mb-12">
-          <div className="inline-flex items-center gap-2 p-1 rounded-lg bg-muted">
-            <button
-              className={cn(
-                "px-4 py-2 rounded-md text-sm font-medium transition-colors",
-                billingCycle === 'monthly' 
-                  ? "bg-background shadow-sm" 
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              onClick={() => setBillingCycle('monthly')}
-            >
-              Monthly
-            </button>
-            <button
-              className={cn(
-                "px-4 py-2 rounded-md text-sm font-medium transition-colors",
-                billingCycle === 'annual' 
-                  ? "bg-background shadow-sm" 
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              onClick={() => setBillingCycle('annual')}
-            >
-              Annual
-              <Badge variant="secondary" className="ml-2 text-xs">Save {ANNUAL_SAVINGS}%</Badge>
-            </button>
-          </div>
+          <BillingToggle value={billingCycle} onChange={setBillingCycle} savingsPercent={ANNUAL_SAVINGS} />
         </div>
 
         {/* Pricing Cards */}
         <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           {tiers.map((tier) => {
-            const price = billingCycle === 'monthly' ? tier.price.monthly : tier.price.annual
-            const monthlyPrice = billingCycle === 'annual' && price > 0 
-              ? (price / 12).toFixed(2) 
-              : price.toFixed(2)
-            
+            const shown = displayPrice(tier.def, billingCycle)
+            const paid = tier.def.priceMonthlyCents > 0
+
             return (
               <Card 
                 key={tier.name}
@@ -116,17 +91,13 @@ export default function PricingPage() {
                 
                 <CardContent className="space-y-4">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-4xl font-bold">
-                      ${monthlyPrice}
-                    </span>
-                    <span className="text-muted-foreground">/month</span>
+                    <span className="text-4xl font-bold">{shown.main}</span>
+                    <span className="text-muted-foreground">{shown.unit}</span>
                   </div>
-                  {price > 0 && priceTaxNote() && <p className="-mt-3 text-xs text-muted-foreground">{priceTaxNote()}</p>}
+                  {paid && priceTaxNote() && <p className="-mt-3 text-xs text-muted-foreground">{priceTaxNote()}</p>}
 
-                  {billingCycle === 'annual' && price > 0 && (
-                    <p className="text-sm text-muted-foreground">
-                      ${price.toFixed(2)}/year billed annually · about 2 months free
-                    </p>
+                  {shown.sub && (
+                    <p className="text-sm text-muted-foreground">{shown.sub} · about 2 months free</p>
                   )}
                   
                   <ul className="space-y-2">
@@ -146,7 +117,7 @@ export default function PricingPage() {
                     asChild
                   >
                     <Link href="/register">
-                      {tier.price.monthly === 0 ? null : <Sparkles className="h-4 w-4 mr-2" />}
+                      {!paid ? null : <Sparkles className="h-4 w-4 mr-2" />}
                       {tier.cta}
                     </Link>
                   </Button>

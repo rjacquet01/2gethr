@@ -35,6 +35,20 @@ async function main() {
   }
   ok("monthly: no discount line; list - discount = total for all four")
 
+  // --- displayPrice: what /pricing, /subscription and the home page show ---
+  const { displayPrice } = await import("../lib/subscription-tiers")
+  const d = (t: keyof typeof SUBSCRIPTION_TIERS, c: "monthly" | "annual") => {
+    const r = displayPrice(SUBSCRIPTION_TIERS[t], c)
+    return [r.main, r.unit, r.sub].join("|")
+  }
+  assert.equal(d("PREMIUM", "monthly"), "$5.99|/month|")
+  assert.equal(d("PREMIUM_PLUS", "monthly"), "$9.99|/month|")
+  assert.equal(d("PREMIUM", "annual"), "$59.90|/year|about $4.99/month, billed annually")
+  assert.equal(d("PREMIUM_PLUS", "annual"), "$99.90|/year|about $8.33/month, billed annually")
+  assert.equal(d("FREE", "monthly"), "$0|/month|")
+  assert.equal(d("FREE", "annual"), "$0|/month|")
+  ok("displayPrice: monthly $5.99/$9.99; annual $59.90/$99.90 with the per-month line; Free $0")
+
   // --- ?tier= / &billing= ---
   const p = (t: string | null, b: string | null) => { const r = parseUpgradeParams(t, b); return `${r.tier}/${r.billing}` }
   assert.equal(p("PREMIUM_PLUS", "annual"), "PREMIUM_PLUS/annual")

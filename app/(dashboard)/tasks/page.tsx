@@ -58,8 +58,9 @@ import {
 } from '@/components/tasks-extras'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { format, parseISO, isPast } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { isTaskOverdue } from '@/lib/task-due'
 import { FamilyNameTag } from '@/components/family-name-tag'
 
 type TaskT = ReturnType<typeof useTasks>['tasks'][number]
@@ -153,7 +154,7 @@ export default function TasksPage() {
     tab === 'mine' ? isMine(t) : tab === 'approval' ? norm(t.status) === 'pending_approval' : matchesPerson(t)
   )
 
-  const overdueOf = (t: TaskT) => !!t.due_date && ACTIVE.includes(norm(t.status)) && isPast(parseISO(t.due_date))
+  const overdueOf = (t: TaskT) => isTaskOverdue(t)
   const count = {
     overdue: scoped.filter(overdueOf).length,
     in_progress: scoped.filter((t) => norm(t.status) === 'in_progress').length,

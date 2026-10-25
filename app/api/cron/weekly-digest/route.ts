@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { monitorCron } from "@/lib/cron-health"
 import { sql, type Row } from '@/lib/db'
 import { sendEmail, EMAIL_TEMPLATES } from "@/lib/services/email"
+import { ACTIVE_TASK_STATUSES_DB } from "@/lib/task-due"
 
 // Verify the request is from Vercel Cron
 function verifyCronRequest(request: NextRequest): boolean {
@@ -142,7 +143,7 @@ async function runJob(request: NextRequest) {
           SELECT
             COALESCE(COUNT(*) FILTER (WHERE status = 'COMPLETED'), 0)::int as completed,
             COALESCE(COUNT(*) FILTER (WHERE status = 'PENDING'), 0)::int as pending,
-            COALESCE(COUNT(*) FILTER (WHERE status = 'OVERDUE' OR (status = 'PENDING' AND due_date < NOW())), 0)::int as overdue
+            COALESCE(COUNT(*) FILTER (WHERE UPPER(status) = ANY(${ACTIVE_TASK_STATUSES_DB}) AND due_date < NOW()), 0)::int as overdue
           FROM tasks
           WHERE family_id = ${user.family_id}
           AND (assignment_status IS NULL OR assignment_status = 'ACCEPTED')

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Logo, BRAND_MOTTO } from '@/components/brand/logo'
 import { SignedInRedirect } from '@/components/signed-in-redirect'
-import { listTierDefinitions, centsToDisplay, TRIAL_DAYS } from '@/lib/subscription-tiers'
+import { listTierDefinitions, displayPrice, TRIAL_DAYS } from '@/lib/subscription-tiers'
 import { 
   Calendar, 
   MapPin, 
@@ -277,9 +277,9 @@ export default function HomePage() {
                     <p className="text-sm text-muted-foreground mb-4">{tier.description}</p>
                     <p className="mb-5">
                       <span className="text-4xl font-bold text-foreground">
-                        {tier.priceMonthlyCents === 0 ? 'Free' : `$${centsToDisplay(tier.priceMonthlyCents)}`}
+                        {tier.priceMonthlyCents === 0 ? 'Free' : displayPrice(tier, 'monthly').main}
                       </span>
-                      {tier.priceMonthlyCents > 0 && <span className="text-muted-foreground">/month</span>}
+                      {tier.priceMonthlyCents > 0 && <span className="text-muted-foreground">{displayPrice(tier, 'monthly').unit}</span>}
                     </p>
                     <ul className="space-y-2.5 mb-6">
                       {tier.featureList.slice(0, 5).map((f) => (
