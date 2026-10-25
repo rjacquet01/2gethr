@@ -309,7 +309,7 @@ export default function HomePage() {
           <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/20">
             <CardContent className="p-8 lg:p-12 text-center">
               <h2 className="text-2xl lg:text-3xl font-bold text-foreground mb-4">
-                Ready to get your family organized?
+                Connect people, connect events, get organized.
               </h2>
               <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
                 Bring your calendar, chores and reminders together in one place. Try every Premium feature free for {TRIAL_DAYS} days.
