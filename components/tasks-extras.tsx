@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
+import { ACTIVE_TASK_STATUSES, isTaskOverdue, normTaskStatus } from '@/lib/task-due'
 import {
   SUGGESTION_CATEGORIES,
   SUGGESTION_CATEGORY_LABELS,
@@ -380,12 +381,9 @@ function SuggestionItem({ s, onPick }: { s: QuickAddSuggestion; onPick: (s: Quic
 
 /* ------------------------------ Grouping ------------------------------ */
 
-export const ACTIVE = ['pending', 'in_progress', 'pending_approval']
+export const ACTIVE = ACTIVE_TASK_STATUSES
 // An approved task (parent signed off) is a finished task.
-export const norm = (s?: string | null) => {
-  const v = (s || '').toLowerCase()
-  return v === 'approved' ? 'completed' : v
-}
+export const norm = normTaskStatus
 
 export type GroupKey = 'overdue' | 'today' | 'week' | 'later' | 'nodate' | 'closed'
 
@@ -404,7 +402,7 @@ export function groupTasks<T extends { status: string; priority: string; due_dat
       continue
     }
     const d = parseISO(t.due_date)
-    if (isPast(d)) groups.overdue.push(t)
+    if (isTaskOverdue(t)) groups.overdue.push(t)
     else if (isToday(d)) groups.today.push(t)
     else if (d <= weekEnd) groups.week.push(t)
     else groups.later.push(t)

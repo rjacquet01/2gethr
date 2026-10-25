@@ -17,6 +17,7 @@ import {
   Navigation,
 } from 'lucide-react'
 import { authFetch } from '@/hooks/use-auth'
+import { isTaskActive, isTaskOverdue, taskDueAt } from '@/lib/task-due'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -353,18 +354,13 @@ export function TodayTimeline({
   let overdueShown = 0
   let overdueHidden = 0
   for (const t of tasks) {
-    const s = t.status?.toLowerCase()
-    if (s === 'completed' || s === 'cancelled') continue
-    const raw = t.dueDate || t.due_date
-    if (!raw) continue
-    const d = new Date(raw)
-    const endOfDay = new Date(d)
-    endOfDay.setHours(23, 59, 59, 999)
-    const overdue = endOfDay < now
+    if (!isTaskActive(t.status)) continue
+    const d = taskDueAt(t.dueDate || t.due_date)
+    if (!d) continue
+    const overdue = isTaskOverdue(t, now)
     if (!isToday(d) && !overdue) continue
     if (overdue) {
-      // Keep Today focused: only active overdue tasks, capped at three.
-      if (s !== 'pending' && s !== 'in_progress') continue
+      // Keep Today focused: overdue tasks capped at three.
       if (overdueShown >= 3) {
         overdueHidden += 1
         continue
@@ -377,7 +373,7 @@ export function TodayTimeline({
       title: t.title,
       href: `/tasks/${t.id}`,
       when: null,
-      sub: overdue ? `Overdue · was due ${format(d, 'MMM d')}` : 'Due today',
+      sub: overdue ? (isToday(d) ? 'Overdue · due earlier today' : `Overdue · was due ${format(d, 'MMM d')}`) : 'Due today',
       overdue,
     })
   }

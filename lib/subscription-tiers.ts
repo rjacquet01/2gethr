@@ -207,6 +207,24 @@ export function centsToDisplay(cents: number): string {
   return (cents / 100).toFixed(2)
 }
 
+/**
+ * How a plan's price is shown on the home page, /pricing, /subscription and the
+ * upgrade page. Annual shows the yearly amount; the per-month figure only ever
+ * appears as "about $X/month, billed annually", never as a bare monthly price.
+ */
+export function displayPrice(
+  def: Pick<TierDefinition, "priceMonthlyCents" | "priceAnnualCents">,
+  cycle: "monthly" | "annual"
+): { main: string; unit: string; sub: string } {
+  if (def.priceMonthlyCents <= 0) return { main: "$0", unit: "/month", sub: "" }
+  if (cycle === "monthly") return { main: `$${centsToDisplay(def.priceMonthlyCents)}`, unit: "/month", sub: "" }
+  return {
+    main: `$${centsToDisplay(def.priceAnnualCents)}`,
+    unit: "/year",
+    sub: `about $${centsToDisplay(Math.round(def.priceAnnualCents / 12))}/month, billed annually`,
+  }
+}
+
 /** Ordered list of tiers, Free -> Plus -> Premium, for rendering pricing grids. */
 export function listTierDefinitions(): TierDefinition[] {
   return SUBSCRIPTION_TIER_KEYS.map((key) => SUBSCRIPTION_TIERS[key])

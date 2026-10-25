@@ -51,6 +51,7 @@ import {
   DashboardShortcuts,
 } from '@/components/dashboard-widgets'
 import { FamilyNameTag } from '@/components/family-name-tag'
+import { isTaskOverdue, taskDueAt } from '@/lib/task-due'
 
 export default function DashboardPage() {
   const { families, isLoading: familiesLoading } = useFamilies()
@@ -83,12 +84,10 @@ export default function DashboardPage() {
 
   // Helper to check if a task is past due
   // The tasks API returns rows as stored (due_date); there is no dueDate.
+  // Same due time the Tasks page uses (lib/task-due.ts), so the counts agree.
   const isPastDue = (t: { due_date?: string | null }) => {
-    const dueDateStr = t.due_date
-    if (!dueDateStr) return false
-    const dueDate = new Date(dueDateStr)
-    dueDate.setHours(23, 59, 59, 999) // End of due date day
-    return dueDate < new Date()
+    const due = taskDueAt(t.due_date)
+    return !!due && due < new Date()
   }
 
   // Get pending/in-progress tasks including overdue ones
@@ -114,10 +113,7 @@ export default function DashboardPage() {
     .slice(0, 5)
   
   // Count overdue tasks
-  const overdueCount = tasks.filter(t => {
-    const isPendingOrInProgress = t.status?.toLowerCase() === 'pending' || t.status?.toLowerCase() === 'in_progress'
-    return isPendingOrInProgress && isPastDue(t)
-  }).length
+  const overdueCount = tasks.filter((t) => isTaskOverdue(t)).length
   
   // Get tasks pending approval (for parents) - exclude past due
   const pendingApprovalTasks = tasks.filter(t => {

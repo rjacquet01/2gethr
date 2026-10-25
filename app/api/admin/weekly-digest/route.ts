@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql, type Row } from '@/lib/db'
 import { getAdminFromRequest, hasPermission, logAdminAction } from "@/lib/admin-auth"
 import { sendEmail, EMAIL_TEMPLATES } from "@/lib/services/email"
+import { ACTIVE_TASK_STATUSES_DB } from "@/lib/task-due"
 
 // GET - Retrieves users eligible for weekly digest and preview stats
 export async function GET(request: NextRequest) {
@@ -189,7 +190,7 @@ export async function POST(request: NextRequest) {
             SELECT
               COUNT(*) FILTER (WHERE status = 'COMPLETED') as completed,
               COUNT(*) FILTER (WHERE status = 'PENDING') as pending,
-              COUNT(*) FILTER (WHERE status = 'OVERDUE') as overdue
+              COUNT(*) FILTER (WHERE UPPER(status) = ANY(${ACTIVE_TASK_STATUSES_DB}) AND due_date < NOW()) as overdue
             FROM tasks
             WHERE family_id = ${user.family_id}
             AND created_at >= NOW() - INTERVAL '7 days'

@@ -37,7 +37,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePurchaseUi } from '@/hooks/use-purchase-ui'
-import { alertPlaceLimit, getTierDefinition, SUBSCRIPTION_TIERS, annualSavingsPercent, TRIAL_DAYS, priceTaxNote } from '@/lib/subscription-tiers'
+import { alertPlaceLimit, getTierDefinition, SUBSCRIPTION_TIERS, annualSavingsPercent, displayPrice, TRIAL_DAYS, priceTaxNote, type SubscriptionTierKey } from '@/lib/subscription-tiers'
+import { BillingToggle } from '@/components/billing-toggle'
 import { FamilyNameTag } from '@/components/family-name-tag'
 
 export default function SubscriptionPage() {
@@ -45,7 +46,7 @@ export default function SubscriptionPage() {
   const { canPurchase } = usePurchaseUi()
   const { user, isLoading: authLoading } = useAuth()
   const { families, isLoading: familiesLoading } = useFamilies()
-  const [selectedBilling, setSelectedBilling] = useState<'monthly' | 'annual'>('annual')
+  const [selectedBilling, setSelectedBilling] = useState<'monthly' | 'annual'>('monthly')
   const [selectedTierIndex, setSelectedTierIndex] = useState<number | null>(null)
 
   const primaryFamily = families?.[0]
@@ -292,27 +293,7 @@ export default function SubscriptionPage() {
         <>
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold">Plans</h2>
-            <div className="inline-flex rounded-lg bg-muted p-1">
-              {(
-                [
-                  ['monthly', 'Monthly'],
-                  ['annual', 'Annual'],
-                ] as const
-              ).map(([k, label]) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setSelectedBilling(k)}
-                  className={cn(
-                    'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                    selectedBilling === k ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {label}
-                  {k === 'annual' && <span className="ml-1.5 text-xs text-green-600">Save {annualSavingsPercent(SUBSCRIPTION_TIERS.PREMIUM)}%</span>}
-                </button>
-              ))}
-            </div>
+            <BillingToggle value={selectedBilling} onChange={setSelectedBilling} savingsPercent={annualSavingsPercent(SUBSCRIPTION_TIERS.PREMIUM)} />
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
@@ -321,6 +302,7 @@ export default function SubscriptionPage() {
               const isCurrentTier = tierKey === access.tier
               const isPopular = tier.name === 'Premium'
               const price = selectedBilling === 'monthly' ? tier.price.monthly : tier.price.annual
+              const shown = displayPrice(SUBSCRIPTION_TIERS[tierKey as SubscriptionTierKey] ?? SUBSCRIPTION_TIERS.FREE, selectedBilling)
               const go = () => router.push(`/subscription/upgrade?tier=${tierKey}&billing=${selectedBilling}`)
 
               return (
@@ -354,12 +336,10 @@ export default function SubscriptionPage() {
                     </div>
                     <div>
                       <p className="flex items-baseline gap-1">
-                        <span className="text-3xl font-bold">${selectedBilling === 'monthly' ? (price > 0 ? price.toFixed(2) : price) : (price / 12).toFixed(2)}</span>
-                        <span className="text-sm text-muted-foreground">/month</span>
+                        <span className="text-3xl font-bold">{shown.main}</span>
+                        <span className="text-sm text-muted-foreground">{shown.unit}</span>
                       </p>
-                      <p className="h-4 text-xs text-muted-foreground">
-                        {selectedBilling === 'annual' && price > 0 ? `$${price.toFixed(2)}/year billed annually · about 2 months free` : ''}
-                      </p>
+                      <p className="h-4 text-xs text-muted-foreground">{shown.sub}</p>
                       {/* Same fixed height on every card; empty on Free so the cards line up. */}
                       <p className="h-4 text-xs text-muted-foreground">{price > 0 ? priceTaxNote() : ''}</p>
                     </div>

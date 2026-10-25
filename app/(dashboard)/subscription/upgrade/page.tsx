@@ -21,7 +21,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { SUBSCRIPTION_TIERS, annualSavingsPercent, priceTaxNote } from '@/lib/subscription-tiers'
+import { SUBSCRIPTION_TIERS, annualSavingsPercent, displayPrice, priceTaxNote } from '@/lib/subscription-tiers'
 import { parseUpgradeParams, orderSummaryCents, centsToDollars, type PaidTierKey, type BillingCycle } from '@/lib/upgrade-order'
 import { FamilyNameTag } from '@/components/family-name-tag'
 
@@ -124,7 +124,6 @@ function UpgradeForm() {
 
   const summary = orderSummaryCents(selectedTier, billingCycle)
   const taxNote = priceTaxNote()
-  const monthlyEquivalent = billingCycle === 'annual' ? (tier.price.annual / 12).toFixed(2) : tier.price.monthly
 
   // Redirects to Stripe Checkout. Stripe collects and stores the card
   // details directly on its hosted page — no payment data is ever
@@ -205,8 +204,8 @@ function UpgradeForm() {
                       </div>
                       <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{t.description}</p>
                       <p className="mt-2 text-lg font-bold">
-                        ${billingCycle === 'annual' ? (t.price.annual / 12).toFixed(2) : t.price.monthly.toFixed(2)}
-                        <span className="text-xs font-normal text-muted-foreground">/mo</span>
+                        {displayPrice(SUBSCRIPTION_TIERS[key], billingCycle).main}
+                        <span className="text-xs font-normal text-muted-foreground">{billingCycle === 'annual' ? '/yr' : '/mo'}</span>
                       </p>
                     </button>
                   ))}
@@ -234,7 +233,7 @@ function UpgradeForm() {
                       )}
                     </div>
                     <p className="mt-1 text-xl font-bold">${tier.price.annual.toFixed(2)}</p>
-                    <p className="text-xs text-muted-foreground">${(tier.price.annual / 12).toFixed(2)}/mo billed yearly · about 2 months free</p>
+                    <p className="text-xs text-muted-foreground">{displayPrice(SUBSCRIPTION_TIERS[selectedTier], 'annual').sub}</p>
                   </button>
                 </div>
               </div>
@@ -287,7 +286,7 @@ function UpgradeForm() {
               </div>
               {taxNote && <p className="-mt-2 text-right text-xs text-muted-foreground">{taxNote}</p>}
               {billingCycle === 'annual' && (
-                <p className="text-center text-xs text-muted-foreground">That&apos;s just ${monthlyEquivalent}/month</p>
+                <p className="text-center text-xs text-muted-foreground">That&apos;s {displayPrice(SUBSCRIPTION_TIERS[selectedTier], 'annual').sub}</p>
               )}
 
               <Button className="w-full" size="lg" onClick={handleCheckout} disabled={isSubmitting}>
