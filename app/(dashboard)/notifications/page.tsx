@@ -45,8 +45,14 @@ const notificationIcons: Record<string, React.ElementType> = {
   DEFAULT: Bell,
 }
 
-// Types that should be flagged as urgent/overdue
-const urgentTypes = ['TASK_OVERDUE', 'GEOFENCE_ALERT']
+// Red styling is for what needs action now: overdue tasks, an SOS, or someone
+// turning off sharing. Routine arrivals and departures (GEOFENCE_ALERT) stay calm.
+const URGENT_LOCATION_SUBTYPES = ['SOS', 'SHARING_OFF']
+
+function isUrgentNotification(n: Notification): boolean {
+  if (n.type === 'TASK_OVERDUE') return true
+  return n.type === 'LOCATION_ALERT' && URGENT_LOCATION_SUBTYPES.includes(String(n.data?.subType ?? ''))
+}
 
 export default function NotificationsPage() {
   const { user } = useAuth()
@@ -224,7 +230,7 @@ export default function NotificationsPage() {
         <div className="space-y-3">
           {notifications.map((notification) => {
             const Icon = notificationIcons[notification.type] || notificationIcons.DEFAULT
-            const isUrgent = urgentTypes.includes(notification.type)
+            const isUrgent = isUrgentNotification(notification)
             const isOverdue = notification.type === 'TASK_OVERDUE'
             const href = notificationHref(notification.type, notification.data)
 
@@ -279,9 +285,11 @@ export default function NotificationsPage() {
                               </Badge>
                             )}
                           </div>
-                          <p className={`text-sm mt-0.5 ${isUrgent && !notification.isRead ? 'text-red-600/80 dark:text-red-400/80' : 'text-muted-foreground'}`}>
-                            {notification.body}
-                          </p>
+                          {notification.body && notification.body.trim() !== notification.title.trim() && (
+                            <p className={`text-sm mt-0.5 ${isUrgent && !notification.isRead ? 'text-red-600/80 dark:text-red-400/80' : 'text-muted-foreground'}`}>
+                              {notification.body}
+                            </p>
+                          )}
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
                           {!notification.isRead && !isOverdue && (

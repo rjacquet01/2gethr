@@ -260,28 +260,29 @@ export default function DashboardPage() {
           <FamilyNameTag name={primaryFamily.name} className="mt-1" />
         </div>
         <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 py-1">
-          <Button variant="outline" size="sm" asChild className="shrink-0">
+          {/* Phones show labels too (icons alone were guesswork); Calendar is already in the bottom bar. */}
+          <Button variant="outline" size="sm" asChild className="hidden shrink-0 sm:inline-flex">
             <Link href="/calendar">
-              <Calendar className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Calendar</span>
+              <Calendar className="w-4 h-4 mr-2" />
+              Calendar
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild className="shrink-0">
             <Link href="/calendar/new">
-              <Plus className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Event</span>
+              <Plus className="w-4 h-4 mr-1.5 sm:mr-2" />
+              Event
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild className="shrink-0">
             <Link href="/dashboard/reminders?new=1">
-              <Bell className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Reminder</span>
+              <Bell className="w-4 h-4 mr-1.5 sm:mr-2" />
+              Reminder
             </Link>
           </Button>
           <Button size="sm" asChild className="shrink-0">
             <Link href="/tasks/new">
-              <ListTodo className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">New Task</span>
+              <ListTodo className="w-4 h-4 mr-1.5 sm:mr-2" />
+              New Task
             </Link>
           </Button>
         </div>

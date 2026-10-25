@@ -509,26 +509,23 @@ export default function SettingsPage() {
       </Link>
 
       {/* Tabs */}
-      <div className="-mx-1 overflow-x-auto px-1">
-        <div className="inline-flex rounded-lg bg-muted p-1">
-          {TABS.map(([key, label, Icon]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setTab(key)}
-              // On phones the other tabs show only their icon: keep the name for screen readers.
-              aria-label={label}
-              aria-pressed={tab === key}
-              className={cn(
-                'flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                tab === key ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              <span className={cn(tab === key ? '' : 'hidden sm:inline')}>{label}</span>
-            </button>
-          ))}
-        </div>
+      {/* Phones: icon over a small label, all five in one row so every tab is named. */}
+      <div className="grid grid-cols-5 rounded-lg bg-muted p-1 sm:inline-flex">
+        {TABS.map(([key, label, Icon]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            aria-pressed={tab === key}
+            className={cn(
+              'flex min-w-0 flex-col items-center gap-0.5 rounded-md px-0.5 py-1.5 text-[11px] font-medium transition-colors sm:flex-row sm:gap-1.5 sm:whitespace-nowrap sm:px-3 sm:text-sm',
+              tab === key ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Icon className="h-4 w-4 shrink-0" />
+            <span className="max-w-full truncate">{label}</span>
+          </button>
+        ))}
       </div>
 
       {tab === 'profile' && (
