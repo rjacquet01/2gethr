@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, Home, CreditCard,
   TicketIcon, AlertTriangle, LogOut,
   Menu, X, ChevronDown, Settings, Mail, Bell,
-  Scale
+  Scale, Activity
 } from 'lucide-react'
 import { Logo } from '@/components/brand/logo'
 import { Button } from '@/components/ui/button'
@@ -36,6 +36,7 @@ const navigation = [
   { name: 'Legal Requests', href: '/admin/legal', icon: Scale, permission: 'legal.manage', explicit: true },
   { name: 'Weekly Digest', href: '/admin/digest', icon: Mail, permission: null },
   { name: 'Notifications', href: '/admin/notifications', icon: Bell, permission: null },
+  { name: 'System Health', href: '/admin/health', icon: Activity, permission: null },
   { name: 'Settings', href: '/admin/settings', icon: Settings, permission: null },
 ]
 

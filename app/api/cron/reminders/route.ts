@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { monitorCron } from "@/lib/cron-health"
 import { sql } from "@/lib/db"
 import { sendPushToUser } from "@/lib/services/push"
 import { sendEmail, isResendConfigured } from "@/lib/services/email"
@@ -18,7 +19,7 @@ import { tierHasFeature } from "@/lib/subscription-tiers"
 // combined with the dedicated cron, meant the digest logic fired twice
 // every Sunday, 5 hours apart. Removed that internal trigger so there is
 // exactly one scheduled source of truth for sending the digest.
-export async function GET(request: NextRequest) {
+async function runJob(request: NextRequest) {
   try {
     // Verify cron secret in production
     const authHeader = request.headers.get("Authorization")
@@ -316,3 +317,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to process reminders" }, { status: 500 })
   }
 }
+
+export const GET = monitorCron("reminders", runJob)

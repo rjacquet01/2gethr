@@ -4,6 +4,7 @@ import { getUserFromRequest, checkFamilySubscription } from '@/lib/auth'
 import { getTierDefinition } from '@/lib/subscription-tiers'
 import { nanoid } from 'nanoid'
 import { notifyAdmin, EMAIL_TEMPLATES } from '@/lib/services/email'
+import { hitRateLimit, tooManyRequests } from '@/lib/rate-limit'
 
 // GET - List user's support tickets
 export async function GET(request: NextRequest) {
@@ -55,6 +56,13 @@ export async function POST(request: NextRequest) {
     if (!subject || !description || !category) {
       return NextResponse.json({ error: 'Subject, description, and category are required' }, { status: 400 })
     }
+    if (String(subject).length > 200 || String(description).length > 10000) {
+      return NextResponse.json({ error: 'Message is too long' }, { status: 400 })
+    }
+
+    // Each ticket emails the admin; feedback is one tap away in the app menu.
+    const limit = await hitRateLimit(`support-ticket:${user.id}`, 10, 60 * 60)
+    if (!limit.allowed) return tooManyRequests(limit.retryAfterSec, 'messages')
 
     // The support_tickets.priority column has a CHECK constraint allowing
     // only LOW/NORMAL/HIGH/URGENT, but the "new ticket" form (and this

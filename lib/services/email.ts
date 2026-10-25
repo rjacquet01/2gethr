@@ -613,14 +613,38 @@ export const EMAIL_TEMPLATES = {
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px;">
         <h2 style="color: #3b4563;">New support ticket</h2>
-        <p><strong>Ticket ID:</strong> ${ticketId}</p>
-        <p><strong>From:</strong> ${userEmail}</p>
-        <p><strong>Subject:</strong> ${subject}</p>
-        <p style="white-space: pre-wrap; background:#f9fafb; border-radius:8px; padding:12px;">${message}</p>
+        <p><strong>Ticket ID:</strong> ${escapeHtml(ticketId)}</p>
+        <p><strong>From:</strong> ${escapeHtml(userEmail)}</p>
+        <p><strong>Subject:</strong> ${escapeHtml(subject)}</p>
+        <p style="white-space: pre-wrap; background:#f9fafb; border-radius:8px; padding:12px;">${escapeHtml(message)}</p>
       </div>
     `,
     text: `New support ticket ${ticketId} from ${userEmail}\nSubject: ${subject}\n\n${message}`,
   }),
+
+  ADMIN_CRON_ALERT: (
+    bad: { name: string; state: string; lastOkAt: string | null; lastError: string | null }[],
+    recovered: string[]
+  ) => {
+    const when = (v: string | null) => (v ? new Date(v).toUTCString() : 'never since monitoring started')
+    const lines = bad.map(
+      (j) => `${j.name}: ${j.state === 'failing' ? 'failing' : 'has not run on time'} (last success: ${when(j.lastOkAt)})${j.lastError && j.state === 'failing' ? ` - ${j.lastError}` : ''}`
+    )
+    const back = recovered.map((n) => `${n}: back to normal`)
+    return {
+      subject: bad.length
+        ? `Scheduled job problem: ${bad.map((j) => j.name).join(', ')}`
+        : `Scheduled jobs back to normal: ${recovered.join(', ')}`,
+      html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px;">
+        <h2 style="color: ${bad.length ? '#ef4444' : '#16a34a'};">${bad.length ? 'Scheduled job problem' : 'Scheduled jobs recovered'}</h2>
+        <ul>${[...lines, ...back].map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
+        <p>Details: Admin portal, System Health.</p>
+      </div>
+    `,
+      text: [...lines, ...back, '', 'Details: Admin portal, System Health.'].join('\n'),
+    }
+  },
 
   ADMIN_SUBSCRIPTION_CANCELLED: (userEmail: string, familyName: string, previousTier: string) => ({
     subject: `Subscription cancelled: ${familyName}`,

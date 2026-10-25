@@ -27,6 +27,7 @@ import { NotificationBell } from '@/components/notification-bell'
 import { ExistingUserConfirmations } from '@/components/existing-user-confirmations'
 import { Logo } from '@/components/brand/logo'
 import { FamilySwitcher } from '@/components/family-switcher'
+import { FeedbackDialog } from '@/components/feedback-dialog'
 import { 
   Home, 
   Calendar, 
@@ -43,6 +44,7 @@ import {
   HelpCircle,
   Archive,
   MessagesSquare,
+  MessageSquarePlus,
   Inbox
 } from 'lucide-react'
 import { useState } from 'react'
@@ -89,6 +91,7 @@ export default function DashboardLayout({
   const pathname = usePathname()
   const { user, isLoading, isAuthenticated, logout } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const { isGuest, isChild, role } = useMyRole()
   const visibleNavItems = isGuest ? navItems.filter((item) => !GUEST_HIDDEN_HREFS.has(item.href)) : navItems
 
@@ -144,6 +147,7 @@ export default function DashboardLayout({
       <PresenceHeartbeat />
       <PingAnswerer />
       <ExistingUserConfirmations />
+      {!isChild && <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />}
       {/* Desktop Sidebar */}
       <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 border-r border-sidebar-border bg-sidebar lg:block">
         <div className="flex h-full flex-col">
@@ -221,6 +225,12 @@ export default function DashboardLayout({
                     Subscription
                   </Link>
                 </DropdownMenuItem>
+                {!isChild && (
+                  <DropdownMenuItem onClick={() => setFeedbackOpen(true)}>
+                    <MessageSquarePlus className="mr-2 h-4 w-4" />
+                    Send feedback
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={logout} className="text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
@@ -291,6 +301,18 @@ export default function DashboardLayout({
               )
             })}
             <div className="pt-4 border-t border-border mt-4">
+              {!isChild && (
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    setFeedbackOpen(true)
+                  }}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-foreground/70 hover:bg-muted"
+                >
+                  <MessageSquarePlus className="w-5 h-5" />
+                  Send feedback
+                </button>
+              )}
               <Link
                 href="/settings"
                 onClick={() => setMobileMenuOpen(false)}
