@@ -455,14 +455,18 @@ export default function CalendarPage() {
                             </p>
                           )}
                           <ParticipantDots participants={event.participants as any} members={primaryFamily?.members} />
-                          <div className="mt-2">
-                            <Badge variant="secondary" className="text-xs">
-                              {CATEGORIES.find(c => c.value === event.category)?.label || event.category}
-                            </Badge>
-                            {event.allDay && (
-                              <Badge variant="outline" className="text-xs ml-1">All day</Badge>
-                            )}
-                          </div>
+                          {(event.category || event.allDay) && (
+                            <div className="mt-2">
+                              {event.category && (
+                                <Badge variant="secondary" className="text-xs mr-1">
+                                  {CATEGORIES.find(c => c.value === event.category)?.label || event.category}
+                                </Badge>
+                              )}
+                              {event.allDay && (
+                                <Badge variant="outline" className="text-xs">All day</Badge>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </Link>
@@ -559,14 +563,18 @@ export default function CalendarPage() {
                           </p>
                         )}
                         <ParticipantDots participants={event.participants as any} members={primaryFamily?.members} />
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <Badge variant="secondary">
-                            {CATEGORIES.find(c => c.value === event.category)?.label || event.category}
-                          </Badge>
-                          {event.allDay && (
-                            <Badge variant="outline">All day</Badge>
-                          )}
-                        </div>
+                        {(event.category || event.allDay) && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {event.category && (
+                              <Badge variant="secondary">
+                                {CATEGORIES.find(c => c.value === event.category)?.label || event.category}
+                              </Badge>
+                            )}
+                            {event.allDay && (
+                              <Badge variant="outline">All day</Badge>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </Link>
