@@ -112,7 +112,7 @@ async function main() {
   const env = {
     STRIPE_SECRET_KEY: secret, STRIPE_WEBHOOK_SECRET: "whsec_hidden", STRIPE_PRICE_BASIC_MONTHLY: "p1",
     STRIPE_PRICE_BASIC_ANNUAL: "p2", STRIPE_PRICE_PREMIUM_MONTHLY: "p3", STRIPE_PRICE_PREMIUM_ANNUAL: "p4",
-    RESEND_API_KEY: "re_hidden", NEXT_PUBLIC_VAPID_PUBLIC_KEY: "pub", VAPID_PRIVATE_KEY: "priv_hidden",
+    RESEND_API_KEY: "re_hidden", NEXT_PUBLIC_VAPID_PUBLIC_KEY: "vapid_pub_hidden", VAPID_PRIVATE_KEY: "priv_hidden",
     SMS_PROVIDER: "telnyx", TELNYX_API_KEY: "KEY_hidden", TELNYX_FROM_NUMBER: "+15550000000",
     CRON_SECRET: "cron_hidden", BLOB_READ_WRITE_TOKEN: "blob_hidden", ENCRYPTION_KEY: "enc_hidden",
     GOOGLE_MAPS_API_KEY: "maps_hidden",
@@ -127,6 +127,10 @@ async function main() {
   const empty = serviceChecks({})
   assert.equal(empty.find((c) => c.name === "Texts")?.detail, "Twilio: not configured")
   assert.ok(empty.filter((c) => c.name !== "Maps").every((c) => c.state === "off"))
+  const maps = empty.find((c) => c.name === "Maps")!
+  assert.equal(maps.state, "ok", "no Google key is normal: OpenStreetMap is the provider")
+  assert.ok(maps.detail.includes("Address lookup: OpenStreetMap (Nominatim)"))
+  assert.ok(checks.find((c) => c.name === "Maps")!.detail.includes("Address lookup: Google"))
   ok("settings checks report presence and Stripe mode, never values")
 
   console.log(`\n${passed} checks passed`)

@@ -63,10 +63,14 @@ export function serviceChecks(env: Env): ServiceCheck[] {
     state: set(env.ENCRYPTION_KEY) ? "ok" : "off",
     detail: set(env.ENCRYPTION_KEY) ? "Set" : "ENCRYPTION_KEY missing",
   })
+  // The map is always OpenStreetMap (components/family-live-map.tsx); address
+  // lookup uses Google only when a key is set, otherwise Nominatim
+  // (app/api/places/geocode/route.ts). Both OSM services are free with no uptime promise.
+  const googleGeocode = set(env.GOOGLE_MAPS_API_KEY) || set(env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)
   checks.push({
     name: "Maps",
-    state: set(env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) || set(env.GOOGLE_MAPS_API_KEY) ? "ok" : "warn",
-    detail: set(env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) || set(env.GOOGLE_MAPS_API_KEY) ? "Configured" : "No Google Maps key",
+    state: "ok",
+    detail: `Map: OpenStreetMap. Address lookup: ${googleGeocode ? "Google" : "OpenStreetMap (Nominatim)"}. Free public services, no uptime promise`,
   })
   if (env.ADMIN_MFA_OPTIONAL === "true") {
     checks.push({ name: "Admin two-step sign-in", state: "warn", detail: "ADMIN_MFA_OPTIONAL is on" })
