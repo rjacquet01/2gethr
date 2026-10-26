@@ -113,7 +113,8 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
       medium: 'bg-yellow-500 text-white',
       low: 'bg-green-500 text-white',
     }
-    return <Badge className={styles[priority] || styles.medium}>{priority}</Badge>
+    const p = (priority || 'medium').toLowerCase()
+    return <Badge className={styles[p] || styles.medium}>{p.charAt(0).toUpperCase() + p.slice(1)}</Badge>
   }
 
   const getStatusBadge = (status: string) => {
@@ -139,7 +140,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
       updated: 'Updated task',
       commented: 'Added a comment',
     }
-    return labels[action] || action
+    return labels[action?.toLowerCase()] || action
   }
 
   if (isLoading) {

@@ -42,6 +42,9 @@ export function CategoryPicker({ value, onChange, options, placeholder = 'Select
       <Select
         value={selectValue}
         onValueChange={(v) => {
+          // Radix can report "" when the value changes after mount (an edit
+          // form filling in); taking it would wipe the saved category.
+          if (!v) return
           if (v === CUSTOM_SENTINEL) {
             setCustomMode(true)
             if (!valueIsCustom) onChange('')

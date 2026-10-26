@@ -6,6 +6,7 @@ import { ensureMemberAppearanceColumns } from '@/lib/member-appearance'
 import { ensureAgeColumns } from '@/lib/age-schema'
 import { ageFromDob, dobError, childAgeInfo } from '@/lib/age'
 import { setChildName } from '@/lib/member-names'
+import { ACTIVE_TASK_STATUSES_DB } from '@/lib/task-due'
 
 const updateChildSchema = z.object({
   displayName: z.string().min(1).max(100).optional(),
@@ -82,7 +83,8 @@ export async function GET(
       return NextResponse.json({ error: 'Not authorized to view this child' }, { status: 403 })
     }
 
-    // Get tasks assigned to this child
+    // Active tasks for this child: given to the child profile, or to the
+    // child's own login.
     const tasks = await sql`
       SELECT 
         id,
@@ -92,8 +94,10 @@ export async function GET(
         due_date,
         category
       FROM tasks
-      WHERE child_profile_id = ${childId}
-      AND status NOT IN ('COMPLETED', 'CANCELLED')
+      WHERE (child_profile_id = ${childId}
+             OR (${child.member_user_id ?? null}::text IS NOT NULL AND assigned_to_id = ${child.member_user_id ?? null}))
+      AND family_id = ${child.family_id}
+      AND UPPER(status) = ANY(${ACTIVE_TASK_STATUSES_DB})
       ORDER BY due_date ASC NULLS LAST, priority DESC
       LIMIT 20
     `
@@ -116,6 +120,10 @@ export async function GET(
       AND e.start_time >= NOW()
       AND e.start_time <= NOW() + INTERVAL '7 days'
       AND e.status != 'CANCELLED'
+      -- PRIVATE / SELECTED_MEMBERS events only for their creator and participants
+      AND (e.visibility IS NULL OR e.visibility = 'FAMILY' OR e.created_by_id = ${user.id}
+           OR (e.visibility = 'SELECTED_MEMBERS' AND EXISTS (
+                 SELECT 1 FROM event_participants me WHERE me.event_id = e.id AND me.user_id = ${user.id})))
       ORDER BY e.start_time ASC
       LIMIT 20
     `
