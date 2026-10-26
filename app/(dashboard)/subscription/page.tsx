@@ -60,7 +60,7 @@ export default function SubscriptionPage() {
     toast.info(`Only the account holder${ownerName ? ` (${ownerName})` : ''} can change this family's plan. Since you were invited to this family, please ask them to upgrade or downgrade.`)
     return true
   }
-  const { subscription, access, isLoading: subLoading, startTrial, cancelTrial } = useSubscription(primaryFamily?.id || null)
+  const { subscription, access, trial, isLoading: subLoading, startTrial, cancelTrial } = useSubscription(primaryFamily?.id || null)
   const tiers = useSubscriptionTiers()
 
   const [isStartingTrial, setIsStartingTrial] = useState(false)
@@ -225,7 +225,7 @@ export default function SubscriptionPage() {
                     <AlertDialogDescription>
                       Your family will move to the Free plan right away and lose the premium
                       features. You won&apos;t be charged, and you can subscribe at any time.
-                      The free trial can only be used once.
+                      You get one free trial a year, so you won&apos;t be able to start another until a year after this one began.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -253,6 +253,13 @@ export default function SubscriptionPage() {
                 . You keep premium features until then.
               </span>
             </div>
+          )}
+
+          {!access.hasPremium && trial && !trial.available && trial.availableAt && (
+            <p className="text-sm text-muted-foreground">
+              You&apos;ve used your free trial. You can start another on{' '}
+              {new Date(trial.availableAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}.
+            </p>
           )}
 
           <div className="flex flex-wrap gap-2">
@@ -360,18 +367,20 @@ export default function SubscriptionPage() {
                       <Button className="w-full" variant="outline" disabled>Included</Button>
                     ) : !access.hasPremium && index > 0 ? (
                       <div className="w-full space-y-2">
-                        <Button
-                          className="w-full"
-                          variant="outline"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleStartTrial(tierKey as 'PREMIUM' | 'PREMIUM_PLUS')
-                          }}
-                          disabled={isStartingTrial}
-                        >
-                          {isStartingTrial ? <Spinner className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                          Start {TRIAL_DAYS}-day trial
-                        </Button>
+                        {trial?.available && (
+                          <Button
+                            className="w-full"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleStartTrial(tierKey as 'PREMIUM' | 'PREMIUM_PLUS')
+                            }}
+                            disabled={isStartingTrial}
+                          >
+                            {isStartingTrial ? <Spinner className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                            Start {TRIAL_DAYS}-day trial
+                          </Button>
+                        )}
                         <Button
                           className="w-full"
                           variant={isPopular ? 'default' : 'outline'}

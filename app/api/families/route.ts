@@ -5,6 +5,7 @@ import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 // Note: users table uses profile_photo_url column, not avatar_url
 import { z } from "zod"
 import { TRIAL_DAYS } from "@/lib/subscription-tiers"
+import { getTrialEligibility } from "@/lib/trial-eligibility"
 import { memberName } from "@/lib/member-names"
 
 const createFamilySchema = z.object({
@@ -155,7 +156,7 @@ export async function POST(request: NextRequest) {
 
     // Check if user already owns a family. Deleting a family is a soft delete
     // (memberships deactivated, the families row kept), so only a family the
-    // owner is still an active member of counts. The one-trial-per-owner
+    // owner is still an active member of counts. The one-trial-a-year
     // check below still looks at every family they ever owned.
     const existingFamilies = await sql`
       SELECT f.id FROM families f
@@ -221,19 +222,14 @@ export async function POST(request: NextRequest) {
     // Every new family starts on a TRIAL_DAYS-day free Premium trial, no card needed.
     // When it ends the cron job (app/api/cron/reminders) drops the family to
     // Free, and the owner can subscribe from the Subscription page. A user can
-    // only own one family, so this is one trial per owner. If the insert
-    // fails the family is still created on the Free plan.
+    // only own one family, and an owner gets one trial a year
+    // (lib/trial-eligibility.ts). If the insert fails the family is still
+    // created on the Free plan.
     const subscriptionId = crypto.randomUUID()
     const trialEnd = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000)
     let trialStarted = false
     try {
-      const priorTrial = await sql`
-        SELECT 1 FROM subscriptions s
-        JOIN families f ON f.id = s.family_id
-        WHERE f.owner_id = ${user.id} AND s.trial_ends_at IS NOT NULL
-        LIMIT 1
-      `
-      if (priorTrial.length === 0) {
+      if ((await getTrialEligibility(user.id)).eligible) {
         await sql`
           INSERT INTO subscriptions (
             id, family_id, tier, status, trial_ends_at,

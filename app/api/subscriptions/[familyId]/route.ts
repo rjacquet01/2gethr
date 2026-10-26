@@ -4,6 +4,7 @@ import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { SUBSCRIPTION_TIERS } from "../route"
 import { TRIAL_DAYS } from "@/lib/subscription-tiers"
+import { getTrialEligibility, formatTrialDate } from "@/lib/trial-eligibility"
 
 const updateSubscriptionSchema = z.object({
   tier: z.enum(["FREE", "PREMIUM", "PREMIUM_PLUS"]),
@@ -53,7 +54,7 @@ export async function POST(
     // fix below rejects any paid tier, every trial attempt failed with a
     // "must go through Stripe Checkout" error. A trial is a time-limited,
     // no-payment grant, so it is handled explicitly here instead: owner only,
-    // once per person, and only from the Free plan.
+    // once a year per owner and family (lib/trial-eligibility.ts), and only from the Free plan.
     if (body?.action === "start_trial") {
       // Default to Plus (PREMIUM) if the client doesn't say which plan to try.
       const requestedTier = body.tier ?? "PREMIUM"
@@ -65,15 +66,13 @@ export async function POST(
         )
       }
 
-      const priorTrial = await sql`
-        SELECT 1 FROM subscriptions s
-        JOIN families f ON f.id = s.family_id
-        WHERE f.owner_id = ${user.id} AND s.trial_ends_at IS NOT NULL
-        LIMIT 1
-      `
-      if (priorTrial.length > 0) {
+      const trial = await getTrialEligibility(user.id, familyId)
+      if (!trial.eligible) {
         return NextResponse.json(
-          { success: false, error: "Your free trial has already been used" },
+          {
+            success: false,
+            error: `Your free trial has already been used. You can start another on ${formatTrialDate(trial.nextAvailableAt!)}.`,
+          },
           { status: 400 }
         )
       }

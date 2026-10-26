@@ -19,6 +19,12 @@ export interface Subscription {
   cancelAtPeriodEnd: boolean
 }
 
+/** Whether the owner may start a free trial now (one a year), or when they next can. */
+export interface TrialAvailability {
+  available: boolean
+  availableAt: string | null
+}
+
 export interface PremiumAccess {
   hasPremium: boolean
   tier: string
@@ -69,6 +75,8 @@ interface APISubscriptionResponse {
     currentPeriodEnd?: string
     cancelAtPeriodEnd?: boolean
     trialEndsAt?: string
+    /** Only for the owner of a family on Free. */
+    trial?: TrialAvailability | null
     tierInfo: {
       features: {
         maxFamilyMembers: number
@@ -98,7 +106,9 @@ const FREE_ACCESS_FALLBACK: PremiumAccess = {
   limits: { maxChildren: 2, historyDays: 30, maxSavedPlaces: 2, maxFamilyMembers: 4, maxCalendars: 2 },
 }
 
-const fetcher = async (url: string): Promise<{ subscription: Subscription | null; access: PremiumAccess }> => {
+type SubscriptionData = { subscription: Subscription | null; access: PremiumAccess; trial?: TrialAvailability | null }
+
+const fetcher = async (url: string): Promise<SubscriptionData> => {
   const res = await authFetch(url, { credentials: 'include' })
   if (!res.ok) {
     if (res.status === 401) throw new Error('Unauthorized')
@@ -127,6 +137,7 @@ const fetcher = async (url: string): Promise<{ subscription: Subscription | null
       trialEnd: data.trialEndsAt || null,
       cancelAtPeriodEnd: data.cancelAtPeriodEnd || false,
     } : null,
+    trial: data.trial ?? null,
     access: {
       hasPremium,
       tier: data.tier,
@@ -164,10 +175,7 @@ export function subscriptionKey(familyId: string | null): string | null {
 export { fetcher as subscriptionFetcher }
 
 export function useSubscription(familyId: string | null) {
-  const { data, error, isLoading, mutate } = useSWR<{
-    subscription: Subscription | null
-    access: PremiumAccess
-  }>(
+  const { data, error, isLoading, mutate } = useSWR<SubscriptionData>(
     subscriptionKey(familyId),
     fetcher
   )
@@ -227,6 +235,7 @@ export function useSubscription(familyId: string | null) {
   return {
     subscription: data?.subscription || null,
     access: data?.access || FREE_ACCESS_FALLBACK,
+    trial: data?.trial ?? null,
     isLoading,
     error,
     startTrial,

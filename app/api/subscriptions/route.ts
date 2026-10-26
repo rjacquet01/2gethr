@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { SUBSCRIPTION_TIERS as TIER_DEFINITIONS } from "@/lib/subscription-tiers"
+import { getTrialEligibility } from "@/lib/trial-eligibility"
 
 // Subscription tier definitions now live in lib/subscription-tiers.ts (the
 // single shared source for pricing/limits/features used by this route, the
@@ -72,6 +73,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Whether the owner may start a free trial (one a year), for a family on Free.
+    const trialFor = async (isOwner: boolean) => {
+      if (!isOwner) return null
+      const t = await getTrialEligibility(user.id, familyId)
+      return { available: t.eligible, availableAt: t.nextAvailableAt?.toISOString() ?? null }
+    }
+
     // Get subscription
     const subscriptions = await sql`
       SELECT 
@@ -95,6 +103,7 @@ export async function GET(request: NextRequest) {
           familyId,
           // Owner of THIS family (a guest here may own a different family).
           isOwner: membership[0].owner_id === user.id,
+          trial: await trialFor(membership[0].owner_id === user.id),
         },
       })
     }
@@ -116,6 +125,7 @@ export async function GET(request: NextRequest) {
           tierInfo: SUBSCRIPTION_TIERS.FREE,
           familyId,
           isOwner: subscription.owner_id === user.id,
+          trial: await trialFor(subscription.owner_id === user.id),
         },
       })
     }
@@ -137,6 +147,7 @@ export async function GET(request: NextRequest) {
         familyName: subscription.family_name,
         isOwner: subscription.owner_id === user.id,
         stripeCustomerId: membership[0].role === "PARENT" ? subscription.stripe_customer_id : null,
+        trial: subscription.tier === "FREE" ? await trialFor(subscription.owner_id === user.id) : null,
       },
     })
   } catch (error) {
