@@ -960,6 +960,15 @@ function PlacesPageContent() {
   const alertLimit = alertPlaceLimit(access.tier)
   const alertsFull = alertLimit !== null && geofenceTotal >= alertLimit
   const canToggleGeofence = alertLimit !== 0 && canManageGeofence
+  // Over the limit (e.g. after a trial or downgrade) only the oldest alert
+  // places still alert, as in checkGeofences (app/api/location/route.ts).
+  const alertingIds = new Set(
+    (places || [])
+      .filter((p) => p.geofenceEnabled)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+      .slice(0, alertLimit ?? undefined)
+      .map((p) => p.id)
+  )
 
   const filterDefs: Array<{ key: PlaceFilter; label: string; n: number }> = [
     { key: 'all', label: 'All', n: currentCount },
@@ -975,8 +984,13 @@ function PlacesPageContent() {
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-foreground sm:text-2xl">Saved Places</h1>
           <p className="truncate text-sm text-muted-foreground">
-            {currentCount} of {maxPlaces === Infinity ? 'unlimited' : maxPlaces} places · {geofenceTotal}
-            {alertLimit ? ` of ${alertLimit}` : ''} with geofence alerts
+            {currentCount > maxPlaces
+              ? `${currentCount} places (your plan includes ${maxPlaces})`
+              : `${currentCount} of ${maxPlaces === Infinity ? 'unlimited' : maxPlaces} places`}
+            {' · '}
+            {alertLimit === 0
+              ? 'alerts come with Plus'
+              : `${alertingIds.size}${alertLimit ? ` of ${alertLimit}` : ''} with geofence alerts`}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -1103,7 +1117,14 @@ function PlacesPageContent() {
                       </div>
 
                       <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                        {place.geofenceEnabled ? (
+                        {place.geofenceEnabled && !alertingIds.has(place.id) ? (
+                          <Link href="/subscription" title="Your plan doesn't include alerts for this place">
+                            <Badge variant="outline" className="text-xs text-amber-600">
+                              <BellOff className="w-3 h-3 mr-1" />
+                              Alerts paused · upgrade to resume
+                            </Badge>
+                          </Link>
+                        ) : place.geofenceEnabled ? (
                           <>
                             <Badge variant="outline" className="text-xs">
                               <Bell className="w-3 h-3 mr-1" />

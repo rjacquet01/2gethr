@@ -337,7 +337,7 @@ export default function EventDetailPage() {
           {/* Metadata */}
           <div className="pt-4 border-t text-sm text-muted-foreground">
             <p>Created: {format(parseISO(event.createdAt), 'MMM d, yyyy h:mm a')}</p>
-            <p>Visibility: {event.visibility?.replace('_', ' ') || 'Family'}</p>
+            <p>Visibility: {event.visibility === 'PRIVATE' ? 'Only me' : event.visibility === 'FAMILY' || !event.visibility ? 'Entire family' : 'Selected members'}</p>
           </div>
         </CardContent>
       </Card>

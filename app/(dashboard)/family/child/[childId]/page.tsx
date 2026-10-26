@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button'
 import { MemberAvatar, AppearanceButton } from '@/components/member-avatar'
 import { AccountStatusBadge } from '@/components/account-status-badge'
 import { useMyRole } from '@/hooks/use-my-role'
+import { formatCategory } from '@/lib/categories'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Empty } from '@/components/ui/empty'
@@ -94,6 +95,12 @@ const fetcher = async (url: string) => {
   if (!res.ok) throw new Error('Failed to fetch')
   const data = await res.json()
   return data.data
+}
+
+const TASK_STATUS_LABEL: Record<string, string> = {
+  PENDING: 'Pending',
+  IN_PROGRESS: 'In progress',
+  PENDING_APPROVAL: 'Awaiting approval',
 }
 
 function getPriorityColor(priority: string) {
@@ -375,7 +382,7 @@ export default function ChildProfilePage({
                           {formatDueDate(task.due_date)}
                           {task.category && (
                             <Badge variant="outline" className="text-[10px] px-1 py-0">
-                              {task.category}
+                              {formatCategory(task.category)}
                             </Badge>
                           )}
                         </div>
@@ -384,7 +391,7 @@ export default function ChildProfilePage({
                         variant={task.status === 'IN_PROGRESS' ? 'default' : 'secondary'}
                         className="text-xs flex-shrink-0"
                       >
-                        {task.status.replace('_', ' ')}
+                        {TASK_STATUS_LABEL[task.status.toUpperCase()] ?? formatCategory(task.status)}
                       </Badge>
                     </Link>
                   ))}
