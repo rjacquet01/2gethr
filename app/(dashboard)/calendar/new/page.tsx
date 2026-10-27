@@ -16,6 +16,7 @@ import { cleanCustomCategory } from '@/lib/categories'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PlanLimitNotice, refreshPlanUsage } from '@/components/plan-limit-notice'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useSubscription } from '@/hooks/use-subscription'
 import { Switch } from '@/components/ui/switch'
@@ -353,6 +354,7 @@ function NewEventForm() {
       
       const data = await res.json()
       
+      refreshPlanUsage(formData.familyId)
       if (!res.ok) {
         toast.error(data.error || 'Failed to create event')
         return
@@ -402,6 +404,7 @@ function NewEventForm() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <PlanLimitNotice familyId={formData.familyId || null} kind="eventsPerMonth" className="mb-6" />
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Family Selection */}
             {families.length > 1 && (

@@ -108,7 +108,7 @@ async function runJob(request: NextRequest) {
 
         if (channels.includes("push") && us.push_enabled) {
           try {
-            await sendPushToUser(p.id, { title: "Upcoming: " + event.title, body, data: { type: "EVENT_REMINDER", eventId: event.id }, clickAction: `/calendar/event/${event.id}` })
+            await sendPushToUser(p.id, { title: "Upcoming: " + event.title, body, data: { type: "EVENT_REMINDER", eventId: event.id }, clickAction: `/calendar/event/${event.id}`, routineFamilyId: event.family_id })
           } catch (e) {
             console.error("[EventReminder] push failed (non-fatal):", e)
           }

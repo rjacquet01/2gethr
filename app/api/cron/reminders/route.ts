@@ -173,6 +173,7 @@ async function runJob(request: NextRequest) {
               body: `${event.title} starts ${timeText}${event.location ? ` at ${event.location}` : ''}`,
               data: { type: 'EVENT_REMINDER', eventId: event.id },
               clickAction: `/calendar/event/${event.id}`,
+              routineFamilyId: event.family_id,
             })
           } catch (pushError) {
             console.error('[Reminder] Push send failed (non-fatal):', pushError)

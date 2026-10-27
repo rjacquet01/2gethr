@@ -64,6 +64,7 @@ import {
 } from '@/components/reminders-extras'
 import { DictateField } from '@/components/dictate-button'
 import { appendDictation } from '@/lib/dictation'
+import { PlanLimitNotice, refreshPlanUsage } from '@/components/plan-limit-notice'
 
 interface Reminder {
   id: string
@@ -187,6 +188,7 @@ function RemindersPageContent() {
       return
     }
     if (!silent) setIsLoading(true)
+    refreshPlanUsage(activeFamilyId)
     try {
       const res = await authFetch(`/api/reminders?familyId=${encodeURIComponent(activeFamilyId)}`)
       if (res.ok) {
@@ -666,6 +668,7 @@ function RemindersPageContent() {
       </div>
 
       <ReminderQuickAdd members={familyMembers} familyId={activeFamily?.id} onCreated={() => fetchReminders(true)} />
+      <PlanLimitNotice familyId={activeFamilyId} kind="activeReminders" />
 
       {/* Who */}
       {familyCount > 0 && (

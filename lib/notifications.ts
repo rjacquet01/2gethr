@@ -1,6 +1,7 @@
 import { sql, type Row } from '@/lib/db'
 import { sendPushToUser, isFirebaseConfigured, notificationDedupeKey } from "@/lib/services/push"
 import { notificationHref } from "@/lib/notification-link"
+import { isRoutinePush } from "@/lib/plan-limits"
 import { sendEmail, isResendConfigured, EMAIL_TEMPLATES } from "@/lib/services/email"
 import { sendSMSMetered, isSmsConfigured } from "@/lib/services/sms"
 
@@ -162,7 +163,9 @@ export async function createNotification({
           pushData.dedupeKey = dedupeKey
           pushData.notificationId = notificationId
 
-          await sendPushToUser(userId, { title, body, data: pushData, clickAction, topic: dedupeKey })
+          // Routine types count toward the family's monthly push quota; safety ones never do.
+          const routineFamilyId = isRoutinePush(type, data) && typeof data.familyId === 'string' ? data.familyId : null
+          await sendPushToUser(userId, { title, body, data: pushData, clickAction, topic: dedupeKey, routineFamilyId })
         }
       } catch (pushError) {
         console.error('[Notification] Push send failed (non-fatal):', pushError)

@@ -5,6 +5,7 @@ import { boardAccess, notifyNewPost, shapePosts } from "@/lib/board"
 import { deleteBlobUrls, processFlyerImage, readFlyerUpload, storeFlyer } from "@/lib/board-flyers"
 import { ensureBoardLimitColumns, expiryFromDate, placePin } from "@/lib/board-limits"
 import { POST_MAX, RATE_LIMIT_MESSAGE, ensureSocialTables, overRateLimit } from "@/lib/social"
+import { checkLimit, planLimitResponse } from "@/lib/tier-limits"
 
 export const runtime = "nodejs"
 
@@ -28,6 +29,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (await overRateLimit(user.id, "board")) {
       return NextResponse.json({ success: false, error: RATE_LIMIT_MESSAGE }, { status: 429 })
     }
+    // Plan cap: photo uploads kept on the board (checked before anything is stored).
+    const uploadLimit = await checkLimit(familyId, "boardUploads")
+    if (!uploadLimit.allowed) return planLimitResponse(uploadLimit, request)
 
     const form = await request.formData().catch(() => null)
     if (!form) return NextResponse.json({ success: false, error: "Choose a photo first" }, { status: 400 })

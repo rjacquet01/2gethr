@@ -38,7 +38,28 @@ export interface TierLimits {
   historyDays: number
   /** Text messages per family per calendar month (urgent safety alerts are exempt). */
   smsMonthlyQuota: number
+  /** Family members sharing live location at the same time (-1 = everyone). */
+  maxLocationSharers: number
+  /** Upcoming reminders (not yet fired) per family (-1 = unlimited). */
+  maxActiveReminders: number
+  /** Calendar events created per family per calendar month (-1 = unlimited). */
+  maxEventsPerMonth: number
+  /** Photo/flyer uploads kept on the family board, including restorable taken-down ones. */
+  maxBoardUploads: number
+  /** Routine push notifications per family per calendar month (-1 = unlimited; safety alerts never count). */
+  pushMonthlyQuota: number
 }
+
+// Plan caps for Free / Plus / Premium, kept here so they can be tuned in one
+// place. -1 means unlimited. Enforced server-side by lib/tier-limits.ts.
+export const LOCATION_SHARERS = { FREE: 2, PLUS: 4, PREMIUM: -1 } as const
+export const ACTIVE_REMINDERS = { FREE: 5, PLUS: 30, PREMIUM: -1 } as const
+export const EVENTS_PER_MONTH = { FREE: 15, PLUS: 100, PREMIUM: -1 } as const
+export const BOARD_UPLOADS = { FREE: 3, PLUS: 25, PREMIUM: 100 } as const
+export const ROUTINE_PUSH_PER_MONTH = { FREE: 100, PLUS: 1000, PREMIUM: -1 } as const
+export const HISTORY_DAYS = { FREE: 7, PLUS: 90, PREMIUM: 90 } as const
+/** Show a soft "nearly at your limit" nudge from this share of a cap. */
+export const NEAR_LIMIT_RATIO = 0.8
 
 /**
  * Length of the free Premium trial for new families, in days. Every trial
@@ -93,8 +114,13 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       maxSavedPlaces: 2,
       maxAlertPlaces: 0,
       maxCalendars: 2,
-      historyDays: 30,
+      historyDays: HISTORY_DAYS.FREE,
       smsMonthlyQuota: 0,
+      maxLocationSharers: LOCATION_SHARERS.FREE,
+      maxActiveReminders: ACTIVE_REMINDERS.FREE,
+      maxEventsPerMonth: EVENTS_PER_MONTH.FREE,
+      maxBoardUploads: BOARD_UPLOADS.FREE,
+      pushMonthlyQuota: ROUTINE_PUSH_PER_MONTH.FREE,
     },
     features: {
       locationSharing: true,
@@ -108,10 +134,12 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
     },
     featureList: [
       "Up to 2 children",
-      "Shared family calendar",
-      "Live family location (2 saved places)",
-      "Basic event notifications",
-      "30 days history",
+      `Shared family calendar (${EVENTS_PER_MONTH.FREE} new events a month)`,
+      `Live location for ${LOCATION_SHARERS.FREE} family members (2 saved places)`,
+      `${ACTIVE_REMINDERS.FREE} active reminders`,
+      `${BOARD_UPLOADS.FREE} photo uploads on the family board`,
+      `${ROUTINE_PUSH_PER_MONTH.FREE} notifications a month (safety alerts always arrive)`,
+      `${HISTORY_DAYS.FREE} days history`,
       "Email support",
     ],
   },
@@ -127,8 +155,13 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       maxSavedPlaces: 15,
       maxAlertPlaces: 3,
       maxCalendars: 5,
-      historyDays: 90,
+      historyDays: HISTORY_DAYS.PLUS,
       smsMonthlyQuota: 25,
+      maxLocationSharers: LOCATION_SHARERS.PLUS,
+      maxActiveReminders: ACTIVE_REMINDERS.PLUS,
+      maxEventsPerMonth: EVENTS_PER_MONTH.PLUS,
+      maxBoardUploads: BOARD_UPLOADS.PLUS,
+      pushMonthlyQuota: ROUTINE_PUSH_PER_MONTH.PLUS,
     },
     features: {
       locationSharing: true,
@@ -142,11 +175,14 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
     },
     featureList: [
       "Up to 5 children",
-      "Live family location (15 saved places)",
+      `Live location for ${LOCATION_SHARERS.PLUS} family members (15 saved places)`,
       "Arrival & departure alerts (3 places)",
+      `${EVENTS_PER_MONTH.PLUS} new events a month, ${ACTIVE_REMINDERS.PLUS} active reminders`,
+      `${BOARD_UPLOADS.PLUS} photo uploads on the family board`,
+      `${ROUTINE_PUSH_PER_MONTH.PLUS.toLocaleString("en-US")} notifications a month (safety alerts always arrive)`,
       "Custom reminder times",
       "Complex recurring events",
-      "90 days history",
+      `${HISTORY_DAYS.PLUS} days history`,
       TEXT_ALERTS_SOON,
       "Priority support",
     ],
@@ -163,8 +199,13 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       maxSavedPlaces: 50,
       maxAlertPlaces: -1, // every saved place
       maxCalendars: 20,
-      historyDays: 90, // every plan is capped at 90 days (lib/retention.ts)
+      historyDays: HISTORY_DAYS.PREMIUM, // every plan is capped at 90 days (lib/retention.ts)
       smsMonthlyQuota: 100,
+      maxLocationSharers: LOCATION_SHARERS.PREMIUM,
+      maxActiveReminders: ACTIVE_REMINDERS.PREMIUM,
+      maxEventsPerMonth: EVENTS_PER_MONTH.PREMIUM,
+      maxBoardUploads: BOARD_UPLOADS.PREMIUM,
+      pushMonthlyQuota: ROUTINE_PUSH_PER_MONTH.PREMIUM,
     },
     features: {
       locationSharing: true,
@@ -178,10 +219,12 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
     },
     featureList: [
       "Unlimited children",
-      "Live family location (50 saved places)",
+      "Live location for the whole family (50 saved places)",
       "Arrival & departure alerts (every place)",
+      "Unlimited events, reminders and notifications",
+      `${BOARD_UPLOADS.PREMIUM} photo uploads on the family board`,
       "Emergency alerts to your child",
-      "90 days history",
+      `${HISTORY_DAYS.PREMIUM} days history`,
       "Custom reminder times",
       TEXT_ALERTS_SOON,
       "Priority support",

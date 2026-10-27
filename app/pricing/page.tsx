@@ -7,6 +7,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Check, Sparkles } from 'lucide-react'
 import { Logo, BRAND_MOTTO } from '@/components/brand/logo'
 import { BillingToggle } from '@/components/billing-toggle'
+import { PlanComparisonTable } from '@/components/plan-comparison-table'
+import { usePurchaseUi } from '@/hooks/use-purchase-ui'
+import { IN_APP_PLANS_COPY } from '@/lib/plan-limits'
 import { cn } from '@/lib/utils'
 import { listTierDefinitions, annualSavingsPercent, displayPrice, SUBSCRIPTION_TIERS, TRIAL_DAYS, priceTaxNote } from '@/lib/subscription-tiers'
 
@@ -26,6 +29,9 @@ const tiers = listTierDefinitions().map((def) => ({
 export default function PricingPage() {
   // Monthly first, so the first price people see matches the home page and checkout.
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly')
+  // Google Play: no prices or plan comparison inside the Android app.
+  const { ready, canPurchase } = usePurchaseUi()
+  const hidePlans = ready && !canPurchase
 
   return (
     <div className="min-h-screen bg-background">
@@ -46,6 +52,11 @@ export default function PricingPage() {
         </div>
       </header>
 
+      {hidePlans ? (
+      <main className="container mx-auto px-4 py-16">
+        <p className="mx-auto max-w-xl text-center text-lg text-muted-foreground">{IN_APP_PLANS_COPY}</p>
+      </main>
+      ) : (
       <main className="container mx-auto px-4 py-16">
         {/* Header */}
         <div className="text-center mb-12">
@@ -127,6 +138,12 @@ export default function PricingPage() {
           })}
         </div>
 
+        {/* Limits comparison */}
+        <div className="mt-16 max-w-5xl mx-auto">
+          <h2 className="text-2xl font-bold text-center mb-6">Compare plan limits</h2>
+          <PlanComparisonTable />
+        </div>
+
         {/* FAQ Section */}
         <div className="mt-20 max-w-3xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-8">Frequently Asked Questions</h2>
@@ -158,6 +175,7 @@ export default function PricingPage() {
           </div>
         </div>
       </main>
+      )}
 
       {/* Footer */}
       <footer className="border-t border-border py-6 sm:py-8 mt-12 sm:mt-20">

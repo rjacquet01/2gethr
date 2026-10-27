@@ -161,6 +161,8 @@ async function main() {
     }
     const fam = async (Fid: string, owner: string, members: [string, string][]) => {
       await sql`INSERT INTO families (id, name, owner_id, created_at, updated_at) VALUES (${Fid}, ${`${tag} family`}, ${owner}, NOW(), NOW())`
+      // Premium, so the plan's photo-upload cap (lib/tier-limits.ts) stays out of the way of the board limits tested here.
+      await sql`INSERT INTO subscriptions (id, family_id, tier, status, created_at, updated_at) VALUES (${id()}, ${Fid}, 'PREMIUM_PLUS', 'ACTIVE', NOW(), NOW())`
       for (const [uid, role] of members) {
         await sql`INSERT INTO family_members (id, family_id, user_id, role, is_active, joined_at, created_at, updated_at)
                   VALUES (${id()}, ${Fid}, ${uid}, ${role}, true, NOW(), NOW(), NOW())`

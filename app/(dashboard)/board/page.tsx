@@ -25,6 +25,7 @@ import { rolledOffMessage, type BoardPage, type BoardPost, type RolledOff } from
 import { BOARD_LIMITS } from '@/lib/constants'
 import { DictateField } from '@/components/dictate-button'
 import { appendDictation } from '@/lib/dictation'
+import { PlanLimitNotice, refreshPlanUsage } from '@/components/plan-limit-notice'
 
 const POST_MAX = 500
 const POLL_MS = 45_000
@@ -95,6 +96,9 @@ function FamilyBoard({ familyId }: { familyId: string }) {
   useEffect(() => {
     if (fresh && fresh.posts.length > 0) mutate()
   }, [fresh, mutate])
+
+  // The upload meter follows the board: posts, deletes and restores.
+  useEffect(() => { refreshPlanUsage(familyId) }, [data, familyId])
 
   // Opening the board (and seeing new posts arrive) clears the unread count.
   const lastSeenFor = useRef<string | null>(null)
@@ -295,6 +299,8 @@ function FamilyBoard({ familyId }: { familyId: string }) {
       {/* Hidden pickers: one opens the camera, the other the gallery. */}
       <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPicked} />
       <input ref={galleryInput} type="file" accept="image/*" className="hidden" onChange={onPicked} />
+
+      {canPinFlyers && <PlanLimitNotice familyId={familyId} kind="boardUploads" className="mb-3" />}
 
       <BoardSurface>
         {isLoading ? (

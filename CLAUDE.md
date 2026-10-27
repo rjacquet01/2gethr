@@ -43,7 +43,7 @@ real email. Read a script's header before running it.
 - **Safe, with no database and no network.** These use pure logic, or the
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
   admin-delete-child, admin-tier-breakdown, admin-token-refresh, adult-location-access, brand-logo, child-invite, coppa, cron-health,
-  dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
+  dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, free-tier-limits, geofence, kid-ping, launch-security,
   legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-link, push-ownership,
   dictation, place-alerts, push-picker, quick-add, schema-snapshot, sms-allowance, sms-consent, stillness, stripe-checkout-tax, task-due, trial-eligibility,
   stripe-webhook-events, telnyx-sms, upgrade-order, weather-prompt, weather-route.
@@ -102,6 +102,15 @@ real email. Read a script's header before running it.
 - Place (geofence) alerts: Free none, Plus 3 places, Premium every place (`limits.maxAlertPlaces`,
   `alertPlaceLimit()`). Enforced when a place is created or switched on (`lib/place-alerts.ts`) and when
   alerts fire (the family's oldest alert places), so a downgrade keeps only what the plan allows.
+- Plan caps (Free / Plus / Premium, constants at the top of `lib/subscription-tiers.ts`): live location
+  sharers at once 2 / 4 / all; active reminders 5 / 30 / unlimited; new events a month 15 / 100 /
+  unlimited (a repeating series counts once; imports and calendar sync don't count); board photo uploads
+  kept 3 / 25 / 100; routine pushes a month 100 / 1000 / unlimited; history 7 / 90 / 90 days. Trials get
+  Premium's caps. Enforced server-side by `lib/tier-limits.ts` (`checkLimit`, `claimMonthly`), which
+  answers 402 `{ code: "PLAN_LIMIT", limit: {...} }`; rules and wording in `lib/plan-limits.ts`. Over a cap
+  nothing is deleted or hidden, adding more is refused. Safety is never capped: only pushes marked
+  `routineFamilyId` (`isRoutinePush` types) count; SOS, emergency, geofence, location and approval
+  requests never do. Inside the Android app the limit copy is neutral, with no prices or upgrade links.
 - Location: adults see children without sharing their own location. Adults see
   each other only after approval (`lib/location-access.ts`).
 - Android background sharing uses device tokens (`lib/device-token.ts`), handed over by a

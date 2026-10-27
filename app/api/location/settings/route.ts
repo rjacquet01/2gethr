@@ -4,6 +4,7 @@ import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/li
 import { z } from "zod"
 import { notifyChildStoppedSharing } from "@/lib/family-alerts"
 import { guestForbidden, isGuestOnly } from "@/lib/permissions"
+import { checkLimit, planLimitResponse } from "@/lib/tier-limits"
 
 const updateSettingsSchema = z.object({
   memberId: z.string().min(1, "Member ID is required"),
@@ -213,6 +214,15 @@ export async function PATCH(request: NextRequest) {
       SELECT id, mode, share_with_family FROM location_settings WHERE family_member_id = ${validatedData.memberId}
     `
     const wasSharing = existing.length > 0 && existing[0].mode === "ACTIVE" && existing[0].share_with_family === true
+
+    // Plan cap: members sharing live location at once. Only switching a
+    // member on is checked; anyone already sharing keeps sharing.
+    const nextMode = validatedData.mode ?? (existing[0]?.mode as string | undefined) ?? "OFF"
+    const nextShare = validatedData.shareWithFamily ?? (existing[0]?.share_with_family === true)
+    if (!wasSharing && nextMode === "ACTIVE" && nextShare) {
+      const sharerLimit = await checkLimit(membership[0].family_id, "locationSharers", { exceptMemberId: validatedData.memberId })
+      if (!sharerLimit.allowed) return planLimitResponse(sharerLimit, request)
+    }
 
     if (existing.length === 0) {
       // Create settings - generate a text-based ID to match the column type

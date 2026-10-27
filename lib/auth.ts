@@ -609,6 +609,8 @@ export async function logAuditEvent(
 export async function checkFamilySubscription(familyId: string): Promise<{
   tier: string
   isActive: boolean
+  /** On an unexpired free trial (plan limits then follow Premium). */
+  trial?: boolean
   features: {
     maxFamilyMembers: number
     maxChildren: number
@@ -668,6 +670,7 @@ export async function checkFamilySubscription(familyId: string): Promise<{
   return {
     tier: sub.tier,
     isActive: true,
+    trial: sub.status === "TRIALING",
     features: toFeatures(sub.tier),
   }
 }

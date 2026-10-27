@@ -218,7 +218,8 @@ export async function notifySocial(opts: {
         if (await claimSlot(p.id as string, opts.scope)) {
           const pushData: Record<string, string> = { type: opts.type }
           for (const [k, v] of Object.entries(opts.data)) if (v !== undefined && v !== null) pushData[k] = String(v)
-          await socialTransport.push(p.id as string, { title: opts.title, body: opts.pushBody ?? opts.body, data: pushData, clickAction: opts.clickAction })
+          const routineFamilyId = typeof opts.data.familyId === "string" ? opts.data.familyId : null
+          await socialTransport.push(p.id as string, { title: opts.title, body: opts.pushBody ?? opts.body, data: pushData, clickAction: opts.clickAction, routineFamilyId })
         }
       } catch (e) {
         console.error("social push failed (non-fatal):", e)
