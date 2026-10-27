@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { getAdminAccessToken } from '@/hooks/use-admin-auth'
+import { getAdminAccessToken, refreshAdminTokenIfNeeded } from '@/hooks/use-admin-auth'
 import { 
   ArrowLeft, 
   Send, 
@@ -102,7 +102,7 @@ export default function AdminTicketDetailPage() {
 
   const loadTicket = useCallback(async () => {
     try {
-      const token = getAdminAccessToken()
+      const token = (await refreshAdminTokenIfNeeded()) ?? getAdminAccessToken()
       const res = await fetch(`/api/admin/tickets/${ticketId}`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       })
@@ -132,7 +132,7 @@ export default function AdminTicketDetailPage() {
     
     setSending(true)
     try {
-      const token = getAdminAccessToken()
+      const token = (await refreshAdminTokenIfNeeded()) ?? getAdminAccessToken()
       const res = await fetch(`/api/admin/tickets/${ticketId}`, {
         method: 'PATCH',
         headers: {
@@ -165,7 +165,7 @@ export default function AdminTicketDetailPage() {
   const handleUpdateStatus = async (newStatus: string) => {
     setUpdatingStatus(true)
     try {
-      const token = getAdminAccessToken()
+      const token = (await refreshAdminTokenIfNeeded()) ?? getAdminAccessToken()
       const res = await fetch(`/api/admin/tickets/${ticketId}`, {
         method: 'PATCH',
         headers: {
@@ -191,7 +191,7 @@ export default function AdminTicketDetailPage() {
 
   const handleUpdatePriority = async (newPriority: string) => {
     try {
-      const token = getAdminAccessToken()
+      const token = (await refreshAdminTokenIfNeeded()) ?? getAdminAccessToken()
       const res = await fetch(`/api/admin/tickets/${ticketId}`, {
         method: 'PATCH',
         headers: {
@@ -212,7 +212,7 @@ export default function AdminTicketDetailPage() {
 
   const handleAssignToMe = async () => {
     try {
-      const token = getAdminAccessToken()
+      const token = (await refreshAdminTokenIfNeeded()) ?? getAdminAccessToken()
       const res = await fetch(`/api/admin/tickets/${ticketId}`, {
         method: 'PATCH',
         headers: {

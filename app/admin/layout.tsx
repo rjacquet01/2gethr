@@ -12,7 +12,7 @@ import {
 import { Logo } from '@/components/brand/logo'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { getAdminAccessToken, getAdminRefreshToken, clearAdminTokens } from '@/hooks/use-admin-auth'
+import { getAdminAccessToken, getAdminRefreshToken, clearAdminTokens, refreshAdminTokenIfNeeded } from '@/hooks/use-admin-auth'
 import { AdminMfaCard } from '@/components/admin-mfa-card'
 
 interface AdminUser {
@@ -50,7 +50,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     async function checkAuth() {
       try {
-        const token = getAdminAccessToken()
+        const token = (await refreshAdminTokenIfNeeded()) ?? getAdminAccessToken()
         if (!token) {
           // Check if setup is needed
           const setupRes = await fetch('/api/admin/auth/setup')
@@ -89,6 +89,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     
     checkAuth()
   }, [pathname, router])
+
+  // Pages read the access token directly, so renew it before it expires
+  // (every minute, and when the tab comes back after sleep or switching away).
+  useEffect(() => {
+    if (!admin) return
+    const keepFresh = () => { void refreshAdminTokenIfNeeded() }
+    const onVisible = () => { if (document.visibilityState === 'visible') keepFresh() }
+    const timer = setInterval(keepFresh, 60 * 1000)
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', keepFresh)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', keepFresh)
+    }
+  }, [admin])
 
   const handleLogout = async () => {
     const token = getAdminAccessToken()
