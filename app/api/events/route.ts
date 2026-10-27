@@ -264,7 +264,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Apply history limit based on subscription (for past events)
-    // (lib/subscription-tiers.ts HISTORY_DAYS: Free 7, Plus 90, Premium 90)
+    // (lib/subscription-tiers.ts HISTORY_DAYS: Free 30, Plus 90, Premium 90)
     const effectiveFamilyId = familyId || (events[0]?.family_id ? events[0].family_id : null)
     const freeHistoryDays = SUBSCRIPTION_TIERS.FREE.limits.historyDays
     let historyDays = freeHistoryDays

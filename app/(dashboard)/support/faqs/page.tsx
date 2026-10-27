@@ -10,6 +10,8 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 import { ArrowLeft, HelpCircle, Mail } from 'lucide-react'
+import { useUpgradeWording } from '@/components/upgrade-gate'
+import { IN_APP_PLANS_COPY } from '@/lib/plan-limits'
 import { SUBSCRIPTION_TIERS, annualSavingsPercent, centsToDisplay, TRIAL_DAYS } from '@/lib/subscription-tiers'
 
 // Plan names, prices and text-alert allowances come from lib/subscription-tiers.ts.
@@ -95,7 +97,7 @@ const faqs = [
     questions: [
       {
         question: 'What features are included in each plan?',
-        answer: `Free: shared family calendar and tasks (${FREE.limits.maxEventsPerMonth} new events a month, ${FREE.limits.maxActiveReminders} active reminders), live location for ${FREE.limits.maxLocationSharers} family members with ${FREE.limits.maxSavedPlaces} saved places (no arrival/departure alerts), ${FREE.limits.maxBoardUploads} photo uploads on the family board, ${FREE.limits.pushMonthlyQuota} notifications a month, up to ${FREE.limits.maxFamilyMembers} members and ${FREE.limits.maxChildren} children, ${FREE.limits.historyDays} days of history. ${PLUS.name} ($${centsToDisplay(PLUS.priceMonthlyCents)}/month or $${centsToDisplay(PLUS.priceAnnualCents)}/year): up to ${PLUS.limits.maxFamilyMembers} members and ${PLUS.limits.maxChildren} children, live location for ${PLUS.limits.maxLocationSharers} members, ${PLUS.limits.maxSavedPlaces} saved places, ${PLUS.limits.maxEventsPerMonth} new events a month, ${PLUS.limits.maxActiveReminders} active reminders, ${PLUS.limits.maxBoardUploads} board photo uploads, ${PLUS.limits.pushMonthlyQuota.toLocaleString("en-US")} notifications a month, arrival and departure alerts on ${PLUS.limits.maxAlertPlaces} places, text alerts (coming soon), custom reminder times, advanced recurring events, calendar export, priority support, ${PLUS.limits.historyDays} days of history. ${PREMIUM.name} ($${centsToDisplay(PREMIUM.priceMonthlyCents)}/month or $${centsToDisplay(PREMIUM.priceAnnualCents)}/year): everything in ${PLUS.name}, plus up to ${PREMIUM.limits.maxFamilyMembers} members, unlimited children, ${PREMIUM.limits.maxSavedPlaces} saved places, live location for the whole family, unlimited events, reminders and notifications, ${PREMIUM.limits.maxBoardUploads} board photo uploads, arrival and departure alerts on every place, and emergency alerts to your child. Safety alerts (arrivals, departures, SOS and emergencies) are never limited on any plan. Annual billing saves ${annualSavingsPercent(PLUS)}% (about 2 months free). New members get a ${TRIAL_DAYS}-day free Premium trial.`
+        answer: `Free: shared family calendar and tasks (${FREE.limits.maxEventsPerMonth} new events a month, ${FREE.limits.maxActiveReminders} active reminders), live location for ${FREE.limits.maxLocationSharers} family members with ${FREE.limits.maxSavedPlaces} saved places (no arrival/departure alerts), ${FREE.limits.maxBoardUploads} photo uploads on the family board, ${FREE.limits.pushMonthlyQuota} notifications a month, up to ${FREE.limits.maxFamilyMembers} members and ${FREE.limits.maxChildren} children, a ${FREE.limits.locationTrailDays}-day location trail and ${FREE.limits.historyDays} days of past events. ${PLUS.name} ($${centsToDisplay(PLUS.priceMonthlyCents)}/month or $${centsToDisplay(PLUS.priceAnnualCents)}/year): up to ${PLUS.limits.maxFamilyMembers} members and ${PLUS.limits.maxChildren} children, live location for ${PLUS.limits.maxLocationSharers} members, ${PLUS.limits.maxSavedPlaces} saved places, ${PLUS.limits.maxEventsPerMonth} new events a month, ${PLUS.limits.maxActiveReminders} active reminders, ${PLUS.limits.maxBoardUploads} board photo uploads, ${PLUS.limits.pushMonthlyQuota.toLocaleString("en-US")} notifications a month, arrival and departure alerts on ${PLUS.limits.maxAlertPlaces} places, text alerts (coming soon), custom reminder times, advanced recurring events, calendar export, priority support, a ${PLUS.limits.locationTrailDays}-day location trail and ${PLUS.limits.historyDays} days of past events. ${PREMIUM.name} ($${centsToDisplay(PREMIUM.priceMonthlyCents)}/month or $${centsToDisplay(PREMIUM.priceAnnualCents)}/year): everything in ${PLUS.name}, plus up to ${PREMIUM.limits.maxFamilyMembers} members, unlimited children, ${PREMIUM.limits.maxSavedPlaces} saved places, live location for the whole family, unlimited events, reminders and notifications, ${PREMIUM.limits.maxBoardUploads} board photo uploads, arrival and departure alerts on every place, and emergency alerts to your child. Safety alerts (arrivals, departures, SOS and emergencies) are never limited on any plan. Annual billing saves ${annualSavingsPercent(PLUS)}% (about 2 months free). New members get a ${TRIAL_DAYS}-day free Premium trial.`
       },
       {
         question: 'How do I upgrade my subscription?',
@@ -134,7 +136,15 @@ const faqs = [
   },
 ]
 
+// Inside the Android app: no prices, upgrade steps or billing links (Google Play rules).
+const IN_APP_BILLING = {
+  category: 'Subscription & Billing',
+  questions: [{ question: 'How do I manage my plan?', answer: IN_APP_PLANS_COPY }],
+}
+
 export default function FAQsPage() {
+  const { inApp } = useUpgradeWording()
+  const shown = inApp ? faqs.map((c) => (c.category === IN_APP_BILLING.category ? IN_APP_BILLING : c)) : faqs
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -152,7 +162,7 @@ export default function FAQsPage() {
 
       {/* FAQ Categories */}
       <div className="space-y-6">
-        {faqs.map((category) => (
+        {shown.map((category) => (
           <Card key={category.category}>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">

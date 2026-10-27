@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from 'sonner'
 import { BellRing, Loader2 } from 'lucide-react'
 import { AccountStatusBadge, NO_ACCOUNT_HINT } from '@/components/account-status-badge'
+import { useUpgradeWording } from '@/components/upgrade-gate'
 
 interface Child { memberId: string; name: string; hasAccount?: boolean }
 
@@ -15,6 +16,7 @@ interface Child { memberId: string; name: string; hasAccount?: boolean }
  * a parent or guardian whose family has at least one child with an account.
  */
 export function EmergencyAlertButton({ familyId }: { familyId?: string }) {
+  const { inApp } = useUpgradeWording()
   const [state, setState] = useState<{ eligible: boolean; reason?: string; children: Child[] } | null>(null)
   const [open, setOpen] = useState(false)
   const [sendingTo, setSendingTo] = useState<string | null>(null)
@@ -77,7 +79,9 @@ export function EmergencyAlertButton({ familyId }: { familyId?: string }) {
             <DialogDescription>
               {state.eligible
                 ? 'Your child gets an urgent push and a text asking them to call or reply right now. Use this only in an emergency.'
-                : 'Emergency alerts to your child are part of the Premium plan. Upgrade your family plan to use them.'}
+                : inApp
+                  ? 'Emergency alerts to your child are part of a higher plan. Manage your plan at mytogethr.com'
+                  : 'Emergency alerts to your child are part of the Premium plan. Upgrade your family plan to use them.'}
             </DialogDescription>
           </DialogHeader>
           {state.eligible && (

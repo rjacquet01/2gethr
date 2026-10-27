@@ -56,6 +56,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { ColorPicker, IconPicker, getPlaceIcon } from '@/components/customization'
 import { GeofenceActivityCard } from '@/components/geofence-activity'
+import { UpgradeGate, useUpgradeWording } from '@/components/upgrade-gate'
 
 // ---- Saved place photos ----
 // Phone photos are big and serverless requests are limited to ~4.5MB, so shrink
@@ -304,6 +305,7 @@ function PlaceFormFields({
   canManageGeofence: boolean
   kids: { id: string; name: string }[]
 }) {
+  const { inApp } = useUpgradeWording()
   const set = (patch: Partial<PlaceDraft>) => setDraft((d) => ({ ...d, ...patch }))
   const toggleChannel = (channel: NotifyChannel) =>
     setDraft((d) => ({
@@ -403,7 +405,7 @@ function PlaceFormFields({
               <Label htmlFor={`${idp}Geofence`}>Enable Geofence</Label>
               <p className="text-xs text-muted-foreground">
                 {alertsFull && !draft.geofenceEnabled
-                  ? `Your plan includes alerts on ${alertLimit} places, all in use. Turn one off or upgrade to Premium.`
+                  ? `Your plan includes alerts on ${alertLimit} places, all in use. Turn one off${inApp ? '.' : ' or upgrade to Premium.'}`
                   : 'Get alerts when family members arrive or leave'}
               </p>
             </div>
@@ -541,6 +543,7 @@ export default function PlacesPage() {
 }
 
 function PlacesPageContent() {
+  const { inApp } = useUpgradeWording()
   const { families, isLoading: familiesLoading } = useFamilies()
   const primaryFamily = families[0]
   const { user } = useAuth()
@@ -989,18 +992,20 @@ function PlacesPageContent() {
               : `${currentCount} of ${maxPlaces === Infinity ? 'unlimited' : maxPlaces} places`}
             {' · '}
             {alertLimit === 0
-              ? 'alerts come with Plus'
+              ? (inApp ? "alerts aren't part of your plan" : 'alerts come with Plus')
               : `${alertingIds.size}${alertLimit ? ` of ${alertLimit}` : ''} with geofence alerts`}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {!canAddMore && (
-            <Button size="sm" variant="outline" asChild>
-              <Link href="/subscription">
-                <Crown className="mr-1.5 h-4 w-4 text-amber-500" />
-                Upgrade
-              </Link>
-            </Button>
+            <UpgradeGate inApp={<span className="max-w-[14rem] text-xs text-muted-foreground">This is part of a higher plan. Manage your plan at mytogethr.com</span>}>
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/subscription">
+                  <Crown className="mr-1.5 h-4 w-4 text-amber-500" />
+                  Upgrade
+                </Link>
+              </Button>
+            </UpgradeGate>
           )}
           <Button size="sm" disabled={!canAddMore} onClick={() => setAddPlaceOpen(true)}>
             <Plus className="mr-1.5 h-4 w-4" />
@@ -1118,12 +1123,21 @@ function PlacesPageContent() {
 
                       <div className="mt-3 flex flex-wrap items-center gap-1.5">
                         {place.geofenceEnabled && !alertingIds.has(place.id) ? (
-                          <Link href="/subscription" title="Your plan doesn't include alerts for this place">
-                            <Badge variant="outline" className="text-xs text-amber-600">
-                              <BellOff className="w-3 h-3 mr-1" />
-                              Alerts paused · upgrade to resume
-                            </Badge>
-                          </Link>
+                          <UpgradeGate
+                            inApp={
+                              <Badge variant="outline" className="text-xs text-amber-600" title="Your plan doesn't include alerts for this place">
+                                <BellOff className="w-3 h-3 mr-1" />
+                                Alerts paused
+                              </Badge>
+                            }
+                          >
+                            <Link href="/subscription" title="Your plan doesn't include alerts for this place">
+                              <Badge variant="outline" className="text-xs text-amber-600">
+                                <BellOff className="w-3 h-3 mr-1" />
+                                Alerts paused · upgrade to resume
+                              </Badge>
+                            </Link>
+                          </UpgradeGate>
                         ) : place.geofenceEnabled ? (
                           <>
                             <Badge variant="outline" className="text-xs">
@@ -1178,7 +1192,7 @@ function PlacesPageContent() {
                               aria-label={`Geofence alerts for ${place.name}`}
                               title={
                                 alertsFull && !place.geofenceEnabled
-                                  ? `Your plan includes alerts on ${alertLimit} places. Turn one off or upgrade to Premium.`
+                                  ? `Your plan includes alerts on ${alertLimit} places. Turn one off${inApp ? '.' : ' or upgrade to Premium.'}`
                                   : undefined
                               }
                             />

@@ -152,3 +152,6 @@ export function isRoutinePush(type: string, data?: Record<string, unknown> | nul
   if (type === "SYSTEM") return data?.subType === "BOARD_POST"
   return ROUTINE_PUSH_TYPES.has(type)
 }
+
+/** Inside the Android app, in place of an upgrade link or button. */
+export const IN_APP_UPGRADE_COPY = "This is part of a higher plan. Manage your plan at mytogethr.com"

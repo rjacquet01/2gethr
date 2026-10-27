@@ -7,6 +7,7 @@ import { authFetch } from '@/hooks/use-auth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { UpgradeGate } from '@/components/upgrade-gate'
 
 interface ActivityEvent {
   id: string
@@ -65,10 +66,12 @@ export function GeofenceActivityCard({
             <CardDescription>Arrivals and departures, last 24 hours</CardDescription>
           </div>
           {!canAddMore && (
-            <Badge variant="secondary" className="shrink-0">
-              <Crown className="w-3 h-3 mr-1" />
-              Upgrade for more
-            </Badge>
+            <UpgradeGate inApp={<Badge variant="secondary" className="shrink-0">Plan limit reached</Badge>}>
+              <Badge variant="secondary" className="shrink-0">
+                <Crown className="w-3 h-3 mr-1" />
+                Upgrade for more
+              </Badge>
+            </UpgradeGate>
           )}
         </div>
       </CardHeader>

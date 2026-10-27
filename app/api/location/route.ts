@@ -499,8 +499,8 @@ export async function POST(request: NextRequest) {
         )
       `
 
-      // Free tier gets live location only, not history: keep just the latest
-      // ping. Pings belong to the person, not a family, so this only applies
+      // Free keeps a short location trail (locationTrailDays, 7): older pings
+      // go. Pings belong to the person, not a family, so this only applies
       // when none of their families has a paid plan (a child in a Free and a
       // Premium family keeps the Premium family's history).
       const inPaidFamily = subscription.tier === "FREE" && (await sql`
@@ -511,7 +511,11 @@ export async function POST(request: NextRequest) {
         LIMIT 1
       `).length > 0
       if (subscription.tier === "FREE" && !inPaidFamily && !(await isUnderLegalHold(user.id))) {
-        await sql`DELETE FROM location_pings WHERE user_id = ${user.id} AND id != ${pingId}`
+        await sql`
+          DELETE FROM location_pings
+          WHERE user_id = ${user.id} AND id != ${pingId}
+            AND timestamp < NOW() - make_interval(days => ${subscription.features.locationTrailDays})
+        `
       }
     }
 
@@ -550,7 +554,7 @@ export async function POST(request: NextRequest) {
       await sql`
         DELETE FROM location_pings
         WHERE user_id = ${user.id}
-          AND timestamp < NOW() - make_interval(days => ${subscription.features.historyDays})
+          AND timestamp < NOW() - make_interval(days => ${subscription.features.locationTrailDays})
       `
     }
 

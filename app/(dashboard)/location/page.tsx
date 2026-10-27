@@ -31,6 +31,7 @@ import { AccountStatusBadge } from '@/components/account-status-badge'
 import { cn } from '@/lib/utils'
 import { StillnessTracker, MAX_QUIET_MS } from '@/lib/stillness'
 import { getPositionWithFallback } from '@/lib/geo-position'
+import { UpgradeGate } from '@/components/upgrade-gate'
 
 interface FamilyMemberLocation {
   memberId: string
@@ -917,14 +918,16 @@ function LocationPageContent({ isChild, isSupervisor }: { isChild: boolean; isSu
               <Crown className="mx-auto h-12 w-12 text-amber-500" />
               <h3 className="mt-4 text-lg font-medium">Not included in your plan</h3>
               <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-                Live location isn&apos;t included in your family&apos;s current plan. See the plans to turn it on.
+                Live location isn&apos;t included in your family&apos;s current plan.
               </p>
               <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-                <Button variant="outline" asChild>
-                  <Link href="/subscription">
-                    View Plans
-                  </Link>
-                </Button>
+                <UpgradeGate>
+                  <Button variant="outline" asChild>
+                    <Link href="/subscription">
+                      View Plans
+                    </Link>
+                  </Button>
+                </UpgradeGate>
               </div>
               <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4 text-left max-w-lg mx-auto">
                 <div className="flex items-start gap-2">

@@ -98,12 +98,13 @@ async function main() {
 
   // 1. The numbers asked for, from the one source of truth.
   const table: [keyof typeof tiers.SUBSCRIPTION_TIERS.FREE.limits, number, number, number][] = [
-    ["maxLocationSharers", 2, 4, -1],
+    ["maxLocationSharers", 3, 4, -1],
     ["maxActiveReminders", 5, 30, -1],
     ["maxEventsPerMonth", 15, 100, -1],
     ["maxBoardUploads", 3, 25, 100],
     ["pushMonthlyQuota", 100, 1000, -1],
-    ["historyDays", 7, 90, 90],
+    ["historyDays", 30, 90, 90],
+    ["locationTrailDays", 7, 90, 90],
   ]
   for (const [field, f, p, pr] of table) {
     assert.deepStrictEqual(
@@ -112,7 +113,8 @@ async function main() {
       field
     )
   }
-  assert.ok(tiers.SUBSCRIPTION_TIERS.FREE.featureList.includes("7 days history"))
+  assert.ok(tiers.SUBSCRIPTION_TIERS.FREE.featureList.includes("7-day location trail, 30 days of past events"))
+  assert.ok(tiers.SUBSCRIPTION_TIERS.FREE.featureList.some((b) => b.startsWith("Live location for 3 family members")))
   assert.ok(tiers.SUBSCRIPTION_TIERS.FREE.featureList.some((b) => b.includes("15 new events a month")))
   ok("caps: Free / Plus / Premium numbers, and the Free plan bullets quote them")
 
@@ -120,7 +122,7 @@ async function main() {
   const counted: [("activeReminders" | "boardUploads" | "locationSharers"), number, string][] = [
     ["activeReminders", 5, "Plus adds up to 30."],
     ["boardUploads", 3, "Plus adds 25 uploads."],
-    ["locationSharers", 2, "Plus adds 4 at once."],
+    ["locationSharers", 3, "Plus adds 4 at once."],
   ]
   for (const [kind, cap, more] of counted) {
     reset(FREE)
@@ -184,6 +186,30 @@ async function main() {
   assert.strictEqual(ended.allowed, false)
   ok("trial uses Premium caps until it ends, then Free")
 
+  // 5b. The trial ends at its end time: a minute before, Premium caps; a minute after, Free.
+  const minute = 60_000
+  reset({ tier: "PREMIUM_PLUS", status: "TRIALING", trial_ends_at: new Date(Date.now() + minute).toISOString() })
+  db.counts.activeReminders = 6
+  assert.strictEqual((await limits.checkLimit(FAMILY, "activeReminders")).allowed, true, "last minute of the trial")
+  reset({ tier: "PREMIUM_PLUS", status: "TRIALING", trial_ends_at: new Date(Date.now() - minute).toISOString() })
+  db.counts.activeReminders = 6
+  const after = await limits.checkLimit(FAMILY, "activeReminders")
+  assert.deepStrictEqual([after.tier, after.allowed, after.limit], ["FREE", false, 5], "a minute after the trial")
+  ok("trial: Premium caps until trial_ends_at, Free caps from then")
+
+  // 5c. Plus and Premium keep every limit they had before this change.
+  const before = {
+    PREMIUM: { maxFamilyMembers: 6, maxChildren: 5, maxSavedPlaces: 15, maxAlertPlaces: 3, maxCalendars: 5, historyDays: 90, smsMonthlyQuota: 25 },
+    PREMIUM_PLUS: { maxFamilyMembers: 12, maxChildren: -1, maxSavedPlaces: 50, maxAlertPlaces: -1, maxCalendars: 20, historyDays: 90, smsMonthlyQuota: 100 },
+  } as const
+  for (const key of ["PREMIUM", "PREMIUM_PLUS"] as const) {
+    for (const [field, value] of Object.entries(before[key])) {
+      assert.strictEqual(tiers.SUBSCRIPTION_TIERS[key].limits[field as keyof typeof before.PREMIUM], value, `${key}.${field}`)
+    }
+    assert.ok(Object.values(tiers.SUBSCRIPTION_TIERS[key].features).filter(Boolean).length >= 7, `${key} features`)
+  }
+  ok("Plus and Premium: earlier limits unchanged")
+
   // 6. Over the cap after a downgrade: refused, and nothing is deleted or changed.
   reset(FREE)
   db.counts.activeReminders = 12
@@ -207,13 +233,13 @@ async function main() {
       body: JSON.stringify(body),
     })
   reset(FREE)
-  db.counts.locationSharers = 2
+  db.counts.locationSharers = 3
   let res = await settingsRoute.PATCH(patch({ memberId: "m-owner", mode: "ACTIVE", shareWithFamily: true }))
   assert.strictEqual(res.status, 402)
   const body = await res.json()
   assert.strictEqual(body.code, "PLAN_LIMIT")
   assert.deepStrictEqual({ kind: body.limit.kind, used: body.limit.used, limit: body.limit.limit, up: body.limit.upgradeTo?.name },
-    { kind: "locationSharers", used: 2, limit: 2, up: "Plus" })
+    { kind: "locationSharers", used: 3, limit: 3, up: "Plus" })
   assert.deepStrictEqual(db.writes, [], "a refused switch-on writes nothing")
   reset(FREE)
   db.counts.locationSharers = 5
@@ -225,7 +251,7 @@ async function main() {
 
   // 8. Inside the Android app: neutral copy, no plan to buy, no price, no upgrade link.
   reset(FREE)
-  db.counts.locationSharers = 2
+  db.counts.locationSharers = 3
   res = await settingsRoute.PATCH(patch({ memberId: "m-owner", mode: "ACTIVE", shareWithFamily: true }, "togethr_android=1"))
   const appBody = await res.json()
   assert.strictEqual(res.status, 402)
@@ -258,6 +284,22 @@ async function main() {
   sent = await sendPushToUser(OWNER, { title: "Board", body: "New flyer", routineFamilyId: FAMILY })
   assert.strictEqual(db.usage.get("routinePush"), 0, "a routine push no device got is given back")
   ok("push quota: routine capped; SOS, arrival and urgent pushes never counted")
+
+  // 9b. Safety senders never pass a quota family and never call the plan caps.
+  const fs = await import("node:fs")
+  const SAFETY_FILES = [
+    "lib/sos.ts", "lib/emergency-alert.ts", "lib/location-approval.ts", "lib/family-alerts.ts",
+    "app/api/location/sos/route.ts", "app/api/location/emergency-alert/route.ts", "app/api/location/access/route.ts",
+    "app/api/cron/location-stale/route.ts",
+  ]
+  for (const f of SAFETY_FILES) {
+    const src = fs.readFileSync(f, "utf8")
+    assert.ok(!/routineFamilyId|tier-limits|claimMonthly|checkLimit/.test(src), `${f} touches the plan caps`)
+  }
+  const geofence = fs.readFileSync("app/api/location/route.ts", "utf8")
+  const geoFn = geofence.slice(geofence.indexOf("createGeofenceNotification"))
+  assert.ok(!/routineFamilyId/.test(geoFn.slice(0, 4000)), "arrival/departure push is not routine")
+  ok("SOS, emergency, geofence, location and approval senders never touch the caps")
 
   // 10. Which notification types count.
   for (const t of ["EVENT_REMINDER", "REMINDER", "TASK_ASSIGNED", "TASK_COMMENT", "EVENT_CREATED", "APPROVAL_RESPONSE"]) {

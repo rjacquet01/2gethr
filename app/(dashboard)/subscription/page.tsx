@@ -267,7 +267,7 @@ export default function SubscriptionPage() {
           <div className="flex flex-wrap gap-2">
             {[
               [access.limits.maxChildren === -1 ? 'Unlimited' : String(access.limits.maxChildren), 'children'],
-              [String(access.limits.historyDays), 'days history'],
+              [String(access.limits.historyDays), 'days of past events'],
               [String(access.features.length), 'features'],
             ].map(([v, l]) => (
               <span key={l} className="rounded-full bg-muted px-3 py-1 text-xs">
