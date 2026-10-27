@@ -6,7 +6,8 @@ import { childAgeInfo, GUEST_AGE_INFO } from "@/lib/age"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { removeFamilyFlyers } from "@/lib/board-flyers"
-import { deleteFamilyChildren } from "@/lib/parental-consent"
+import { deleteFamilyChildren, familyChildAccountUnderHold } from "@/lib/parental-consent"
+import { FAMILY_DELETION_BLOCKED_MESSAGE } from "@/lib/account-closure"
 import { memberName } from "@/lib/member-names"
 
 const updateFamilySchema = z.object({
@@ -307,6 +308,15 @@ export async function DELETE(
           error:
             "This family has an active paid subscription. Cancel it first under Subscription > Manage Billing, then delete the family.",
         },
+        { status: 409 }
+      )
+    }
+
+    // Deleting the family closes child logins with no other family; a legal
+    // hold on one of them refuses the whole deletion before anything changes.
+    if (await familyChildAccountUnderHold(familyId)) {
+      return NextResponse.json(
+        { success: false, error: FAMILY_DELETION_BLOCKED_MESSAGE },
         { status: 409 }
       )
     }

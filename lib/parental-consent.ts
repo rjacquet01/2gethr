@@ -1,5 +1,6 @@
 import { sql } from "./db"
-import { closeUserAccount } from "./account-closure"
+import { assertAccountCanBeClosed, closeUserAccount } from "./account-closure"
+import { isUnderLegalHold } from "./legal"
 import { ensureConsentSchema } from "./consent-schema"
 import { CHILD_CONSENT_VERSION, CHILD_CONSENT_TEXT } from "./consent-text"
 
@@ -73,9 +74,6 @@ export async function deleteChildData(opts: {
   const child = rows[0]
   if (!child) return { deleted: false, closedUserId: null }
 
-  // Unused account codes for this child can no longer be used.
-  await sql`UPDATE family_invites SET revoked_at = NOW() WHERE child_member_id = ${opts.childMemberId} AND used_at IS NULL AND revoked_at IS NULL`
-
   let closedUserId: string | null = null
   let close = opts.closeAccount === "always"
   if (child.user_id && !close) {
@@ -86,6 +84,12 @@ export async function deleteChildData(opts: {
     `
     close = other.length === 0
   }
+  // A legal hold on the child stops this before anything changes (LegalHoldError).
+  if (child.user_id && close) await assertAccountCanBeClosed(child.user_id as string)
+
+  // Unused account codes for this child can no longer be used.
+  await sql`UPDATE family_invites SET revoked_at = NOW() WHERE child_member_id = ${opts.childMemberId} AND used_at IS NULL AND revoked_at IS NULL`
+
   if (child.user_id && close) {
     // Removes their memberships (and so this child profile), sessions,
     // location history and personal fields, and blocks the login.
@@ -115,6 +119,9 @@ export async function withdrawChildConsent(opts: {
   recordIfNone?: { parentUserId: string; request: Request }
 }) {
   await ensureConsentSchema()
+  // The child's login is closed below; under a legal hold nothing changes (LegalHoldError).
+  const login = await sql`SELECT user_id FROM family_members WHERE id = ${opts.childMemberId} AND family_id = ${opts.familyId} AND role = 'CHILD' LIMIT 1`
+  if (login[0]?.user_id) await assertAccountCanBeClosed(login[0].user_id as string)
   if (opts.recordIfNone) {
     if (!(await hasParentalConsentRecord(opts.familyId, opts.childMemberId))) {
       const child = await sql`SELECT user_id FROM family_members WHERE id = ${opts.childMemberId} AND family_id = ${opts.familyId} AND role = 'CHILD' LIMIT 1`
@@ -143,6 +150,24 @@ export async function withdrawChildConsent(opts: {
 /** Stored ahead of the consent text when a parent withdraws for a child with no earlier record. */
 export const NO_PRIOR_CONSENT_NOTE =
   "No consent was on record: this profile was created before consent was recorded. The parent withdrew instead of confirming."
+
+/**
+ * Before a family is deleted: whether a legal hold covers a child login that
+ * the deletion would close (one with no other family). Checked first, so the
+ * family is refused whole instead of being half deleted.
+ */
+export async function familyChildAccountUnderHold(familyId: string): Promise<boolean> {
+  const kids = await sql`
+    SELECT fm.user_id FROM family_members fm
+    WHERE fm.family_id = ${familyId} AND fm.role = 'CHILD' AND fm.user_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM family_members o
+        WHERE o.user_id = fm.user_id AND o.family_id <> ${familyId} AND o.is_active = true
+      )
+  `
+  for (const k of kids) if (await isUnderLegalHold(k.user_id as string)) return true
+  return false
+}
 
 /** A family is deleted: delete every child's data in it (logins only if they have no other family). */
 export async function deleteFamilyChildren(familyId: string): Promise<number> {

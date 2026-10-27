@@ -6,7 +6,7 @@ import {
   revokeAllUserTokens,
   logAuditEvent,
 } from '@/lib/auth'
-import { closeUserAccount } from '@/lib/account-closure'
+import { ACCOUNT_CLOSURE_BLOCKED_MESSAGE, LegalHoldError, closeUserAccount } from '@/lib/account-closure'
 
 // Real account deletion, required by Google Play's Data Safety policy (the
 // "Delete account URL" declared in the Play Console must lead to a working
@@ -51,6 +51,9 @@ export async function POST(request: Request) {
       message: 'Your account has been permanently deleted.',
     })
   } catch (error) {
+    if (error instanceof LegalHoldError) {
+      return NextResponse.json({ error: ACCOUNT_CLOSURE_BLOCKED_MESSAGE }, { status: 409 })
+    }
     console.error('Account deletion error:', error)
     return NextResponse.json({ error: 'Failed to delete account' }, { status: 500 })
   }
