@@ -3,6 +3,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Logo, BRAND_MOTTO } from '@/components/brand/logo'
 import { SignedInRedirect } from '@/components/signed-in-redirect'
+import { HideInAndroidApp } from '@/components/hide-in-android-app'
+import { purchaseBlockedForPage } from '@/lib/android-app'
+import { AndroidAvailableNote, PlayStoreBadge } from '@/components/play-store-badge'
 import { listTierDefinitions, displayPrice, TRIAL_DAYS } from '@/lib/subscription-tiers'
 import { 
   Calendar, 
@@ -125,7 +128,11 @@ function ProductPreview() {
   )
 }
 
-export default function HomePage() {
+export default async function HomePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  // Decided per request: for the Android app the priced parts are left out of
+  // the page entirely (lib/android-app.ts); HideInAndroidApp covers visits the
+  // server could not recognise.
+  const inApp = await purchaseBlockedForPage((await searchParams).source)
   const tiers = listTierDefinitions()
 
   return (
@@ -140,9 +147,11 @@ export default function HomePage() {
             <span className="hidden sm:flex"><Logo height={36} priority /></span>
           </Link>
           <div className="hidden sm:flex items-center gap-3">
-            <Button variant="ghost" asChild>
-              <Link href="/pricing">Pricing</Link>
-            </Button>
+            {!inApp && (<HideInAndroidApp>
+              <Button variant="ghost" asChild>
+                <Link href="/pricing">Pricing</Link>
+              </Button>
+            </HideInAndroidApp>)}
             <Button variant="ghost" asChild>
               <Link href="/login">Sign in</Link>
             </Button>
@@ -184,15 +193,20 @@ export default function HomePage() {
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Link>
               </Button>
-              <Button size="lg" variant="outline" asChild className="h-12 px-8">
-                <Link href="/pricing">See pricing</Link>
-              </Button>
+              {!inApp && (<HideInAndroidApp>
+                <Button size="lg" variant="outline" asChild className="h-12 px-8">
+                  <Link href="/pricing">See pricing</Link>
+                </Button>
+              </HideInAndroidApp>)}
             </div>
             <ul className="mt-6 flex flex-wrap items-center justify-center lg:justify-start gap-x-5 gap-y-2 text-sm text-muted-foreground">
               <li className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" />{TRIAL_DAYS}-day free trial</li>
               <li className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" />No credit card required</li>
               <li className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" />Cancel anytime</li>
             </ul>
+            <div className="mt-6 flex justify-center lg:justify-start">
+              <PlayStoreBadge />
+            </div>
           </div>
           <ProductPreview />
         </div>
@@ -252,7 +266,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Pricing teaser */}
+      {/* Pricing teaser (not inside the Android app: Google Play rules) */}
+      {!inApp && (<HideInAndroidApp>
       <section className="py-16 sm:py-20">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
@@ -302,6 +317,7 @@ export default function HomePage() {
           </p>
         </div>
       </section>
+      </HideInAndroidApp>)}
 
       {/* CTA */}
       <section className="py-20">
@@ -320,6 +336,7 @@ export default function HomePage() {
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Link>
               </Button>
+              <AndroidAvailableNote className="mt-6" />
             </CardContent>
           </Card>
         </div>
@@ -340,6 +357,7 @@ export default function HomePage() {
               <Link href="/sms-consent" className="hover:text-foreground transition-colors">SMS</Link>
               <a href="mailto:admin@mytogethr.com" className="hover:text-foreground transition-colors">Contact</a>
             </div>
+            <PlayStoreBadge />
             <p className="text-xs sm:text-sm text-muted-foreground">
               &copy; {new Date().getFullYear()} Togethr
             </p>

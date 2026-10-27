@@ -110,6 +110,7 @@ async function runJob(request: NextRequest) {
             body: reminder.description || 'Reminder',
             data: { type: 'REMINDER', reminderId: reminder.id },
             clickAction: '/dashboard/reminders',
+            routineFamilyId: reminder.family_id,
           })
         } catch (pushError) {
           console.error('[Reminder] Push send failed (non-fatal):', pushError)

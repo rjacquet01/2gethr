@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth, clearTokens, authFetch } from '@/hooks/use-auth'
 import { useFamilies } from '@/hooks/use-family'
 import { useSubscription } from '@/hooks/use-subscription'
+import { UpgradeGate, useUpgradeWording } from '@/components/upgrade-gate'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -59,6 +60,7 @@ export default function SettingsPage() {
   const { families } = useFamilies()
   const primaryFamily = families[0] || null
   const { access, isLoading: tierLoading } = useSubscription(primaryFamily?.id || null)
+  const { inApp } = useUpgradeWording()
   const { theme, setTheme, resolvedTheme } = useTheme()
   const pushNotifications = usePushNotifications()
   // A child's name is set by a parent (the server refuses changes).
@@ -593,7 +595,7 @@ export default function SettingsPage() {
                       SMS enabled
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="text-xs">Upgrade for SMS</Badge>
+                    <Badge variant="outline" className="text-xs">{inApp ? 'SMS not in your plan' : 'Upgrade for SMS'}</Badge>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -650,7 +652,7 @@ export default function SettingsPage() {
               badge={!hasSmsFeature ? <Badge variant="outline" className="text-xs">Plus+</Badge> : undefined}
               hint={
                 !hasSmsFeature ? (
-                  'Upgrade to Plus or Premium for text alerts'
+                  inApp ? 'Text alerts are part of a higher plan' : 'Upgrade to Plus or Premium for text alerts'
                 ) : !user?.phone ? (
                   <span className="text-amber-600">Add a phone number in Profile first</span>
                 ) : smsConsentNeeded ? (
@@ -666,9 +668,11 @@ export default function SettingsPage() {
               }
             >
               {!hasSmsFeature ? (
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/subscription">Upgrade</Link>
-                </Button>
+                <UpgradeGate inApp={null}>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/subscription">Upgrade</Link>
+                  </Button>
+                </UpgradeGate>
               ) : (
                 <Switch id="sms-notifications" checked={settings.smsNotifications} onCheckedChange={() => handleToggle('smsNotifications')} disabled={!user?.phone} aria-describedby="sms-consent-notifications-text" />
               )}
@@ -681,9 +685,11 @@ export default function SettingsPage() {
                 <AlertDescription className="text-amber-900/90 dark:text-amber-200/90">
                   <p>{smsAllowance.body}</p>
                   {smsAllowance.canUpgrade && (
-                    <Link href="/subscription" className="font-medium underline underline-offset-2">
-                      See plans with more texts
-                    </Link>
+                    <UpgradeGate>
+                      <Link href="/subscription" className="font-medium underline underline-offset-2">
+                        See plans with more texts
+                      </Link>
+                    </UpgradeGate>
                   )}
                 </AlertDescription>
               </Alert>

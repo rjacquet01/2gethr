@@ -49,6 +49,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { useUpgradeWording } from '@/components/upgrade-gate'
 
 // '/dashboard' is both the Home route AND the prefix every other dashboard
 // route is nested under (/dashboard/reminders, /dashboard/archive, ...), so
@@ -93,7 +94,12 @@ export default function DashboardLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const { isGuest, isChild, role } = useMyRole()
-  const visibleNavItems = isGuest ? navItems.filter((item) => !GUEST_HIDDEN_HREFS.has(item.href)) : navItems
+  // Inside the Android app the plan page is plan info only (no prices or
+  // upgrades), so the menu calls it "My plan".
+  const { inApp } = useUpgradeWording()
+  const planLabel = inApp ? 'My plan' : 'Subscription'
+  const visibleNavItems = (isGuest ? navItems.filter((item) => !GUEST_HIDDEN_HREFS.has(item.href)) : navItems)
+    .map((item) => (item.href === '/subscription' ? { ...item, label: planLabel } : item))
 
   // Landing on the dashboard: start its data for the last family seen here
   // while sign-in is still being checked, instead of after it (one wait
@@ -222,7 +228,7 @@ export default function DashboardLayout({
                 <DropdownMenuItem asChild>
                   <Link href="/subscription">
                     <Crown className="mr-2 h-4 w-4" />
-                    Subscription
+                    {planLabel}
                   </Link>
                 </DropdownMenuItem>
                 {!isChild && (

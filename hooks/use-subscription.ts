@@ -5,6 +5,7 @@ import { useCallback } from 'react'
 import { authFetch } from './use-auth'
 import {
   listTierDefinitions,
+  SUBSCRIPTION_TIERS,
   type TierFeatureFlags,
 } from '@/lib/subscription-tiers'
 
@@ -106,7 +107,13 @@ const FREE_ACCESS_FALLBACK: PremiumAccess = {
   tier: 'FREE',
   features: [],
   featureFlags: { ...DEFAULT_FEATURE_FLAGS, locationSharing: true },
-  limits: { maxChildren: 2, historyDays: 30, maxSavedPlaces: 2, maxFamilyMembers: 4, maxCalendars: 2 },
+  limits: {
+    maxChildren: SUBSCRIPTION_TIERS.FREE.limits.maxChildren,
+    historyDays: SUBSCRIPTION_TIERS.FREE.limits.historyDays,
+    maxSavedPlaces: SUBSCRIPTION_TIERS.FREE.limits.maxSavedPlaces,
+    maxFamilyMembers: SUBSCRIPTION_TIERS.FREE.limits.maxFamilyMembers,
+    maxCalendars: SUBSCRIPTION_TIERS.FREE.limits.maxCalendars,
+  },
 }
 
 type SubscriptionData = { subscription: Subscription | null; access: PremiumAccess; trial?: TrialAvailability | null }
@@ -162,7 +169,7 @@ const fetcher = async (url: string): Promise<SubscriptionData> => {
       },
       limits: {
         maxChildren: (tierFeatures.maxChildren as number) ?? 2,
-        historyDays: (tierFeatures.historyDays as number) ?? 30,
+        historyDays: (tierFeatures.historyDays as number) ?? SUBSCRIPTION_TIERS.FREE.limits.historyDays,
         maxSavedPlaces: (tierFeatures.maxSavedPlaces as number) || 2,
         maxFamilyMembers: (tierFeatures.maxFamilyMembers as number) || 4,
         maxCalendars: (tierFeatures.maxCalendars as number) || 2,

@@ -4,6 +4,7 @@ import { getUserFromRequest } from '@/lib/auth'
 import { createNotification, type NotificationChannel } from '@/lib/notifications'
 import { actorNameInFamily } from '@/lib/member-names'
 import { ensureReminderChildColumn } from '@/lib/reminder-schema'
+import { checkLimit, planLimitResponse } from '@/lib/tier-limits'
 
 const VALID_NOTIFY_CHANNELS: NotificationChannel[] = ['in_app', 'push', 'email', 'sms']
 const VALID_STATUSES = ['PENDING', 'COMPLETED', 'DISMISSED', 'ARCHIVED']
@@ -155,6 +156,15 @@ export async function PATCH(
     // as-is" fragment landing in a timestamp column, verbatim. `reminder`
     // (loaded above) already has the current row, so compute the fallback
     // in JS and bind it as a plain value - no nested sql`` involved.
+    // Plan cap: restoring or re-timing a fired reminder makes it upcoming again.
+    const declined = reminder.approval_status === 'DECLINED'
+    const wasActive = reminder.status === 'PENDING' && !reminder.sent_at && !declined
+    const willBeActive = (nextStatus ?? reminder.status) === 'PENDING' && (remindAtIso !== undefined || !reminder.sent_at) && !declined
+    if (!wasActive && willBeActive) {
+      const reminderLimit = await checkLimit(reminder.family_id, 'activeReminders')
+      if (!reminderLimit.allowed) return planLimitResponse(reminderLimit, request)
+    }
+
     const updated = await sql`
       UPDATE reminders SET
         title = ${title ?? reminder.title},

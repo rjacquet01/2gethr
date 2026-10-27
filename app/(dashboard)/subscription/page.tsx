@@ -40,10 +40,12 @@ import { usePurchaseUi } from '@/hooks/use-purchase-ui'
 import { alertPlaceLimit, getTierDefinition, SUBSCRIPTION_TIERS, annualSavingsPercent, displayPrice, TRIAL_DAYS, priceTaxNote, type SubscriptionTierKey } from '@/lib/subscription-tiers'
 import { BillingToggle } from '@/components/billing-toggle'
 import { FamilyNameTag } from '@/components/family-name-tag'
+import { PlanLimitNotice } from '@/components/plan-limit-notice'
+import { IN_APP_PLANS_COPY } from '@/lib/plan-limits'
 
 export default function SubscriptionPage() {
   const router = useRouter()
-  const { canPurchase } = usePurchaseUi()
+  const { ready: purchaseUiReady, canPurchase } = usePurchaseUi()
   const { user, isLoading: authLoading } = useAuth()
   const { families, isLoading: familiesLoading } = useFamilies()
   const [selectedBilling, setSelectedBilling] = useState<'monthly' | 'annual'>('monthly')
@@ -203,7 +205,7 @@ export default function SubscriptionPage() {
   return (
     <div className="space-y-4 pb-20 sm:space-y-5 lg:pb-0">
       <div>
-        <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Subscription</h1>
+        <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{purchaseUiReady && !canPurchase ? 'My plan' : 'Subscription'}</h1>
         <FamilyNameTag name={primaryFamily.name} className="mt-1" />
       </div>
 
@@ -300,7 +302,7 @@ export default function SubscriptionPage() {
           <div className="flex flex-wrap gap-2">
             {[
               [access.limits.maxChildren === -1 ? 'Unlimited' : String(access.limits.maxChildren), 'children'],
-              [String(access.limits.historyDays), 'days history'],
+              [String(access.limits.historyDays), 'days of past events'],
               [String(access.features.length), 'features'],
             ].map(([v, l]) => (
               <span key={l} className="rounded-full bg-muted px-3 py-1 text-xs">
@@ -330,6 +332,20 @@ export default function SubscriptionPage() {
           </details>
         </CardContent>
       </Card>
+
+      {primaryFamily?.id && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold">Plan usage</h2>
+          <PlanLimitNotice familyId={primaryFamily.id} kind="eventsPerMonth" />
+          <PlanLimitNotice familyId={primaryFamily.id} kind="activeReminders" />
+          <PlanLimitNotice familyId={primaryFamily.id} kind="boardUploads" />
+          <PlanLimitNotice familyId={primaryFamily.id} kind="locationSharers" />
+        </div>
+      )}
+
+      {purchaseUiReady && !canPurchase && (
+        <p className="rounded-lg border bg-card p-3 text-sm text-muted-foreground">{IN_APP_PLANS_COPY}</p>
+      )}
 
       {canPurchase && (
         <>

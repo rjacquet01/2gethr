@@ -4,6 +4,8 @@ import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/li
 import { z } from "zod"
 import { notifyChildStoppedSharing } from "@/lib/family-alerts"
 import { guestForbidden, isGuestOnly } from "@/lib/permissions"
+import { checkLimit, planLimitResponse } from "@/lib/tier-limits"
+import { deleteLocationHistoryAfterSharingOff } from "@/lib/location-history"
 
 const updateSettingsSchema = z.object({
   memberId: z.string().min(1, "Member ID is required"),
@@ -214,6 +216,15 @@ export async function PATCH(request: NextRequest) {
     `
     const wasSharing = existing.length > 0 && existing[0].mode === "ACTIVE" && existing[0].share_with_family === true
 
+    // Plan cap: members sharing live location at once. Only switching a
+    // member on is checked; anyone already sharing keeps sharing.
+    const nextMode = validatedData.mode ?? (existing[0]?.mode as string | undefined) ?? "OFF"
+    const nextShare = validatedData.shareWithFamily ?? (existing[0]?.share_with_family === true)
+    if (!wasSharing && nextMode === "ACTIVE" && nextShare) {
+      const sharerLimit = await checkLimit(membership[0].family_id, "locationSharers", { exceptMemberId: validatedData.memberId })
+      if (!sharerLimit.allowed) return planLimitResponse(sharerLimit, request)
+    }
+
     if (existing.length === 0) {
       // Create settings - generate a text-based ID to match the column type
       const settingsId = `loc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
@@ -248,6 +259,13 @@ export async function PATCH(request: NextRequest) {
     if (isOwnSettings && targetIsChild && wasSharing) {
       const nowOff = validatedData.mode === "OFF" || validatedData.mode === "PAUSED" || validatedData.shareWithFamily === false
       if (nowOff) await notifyChildStoppedSharing(validatedData.memberId, validatedData.mode === "PAUSED" ? "paused" : "turned off in the app")
+    }
+
+    // Sharing turned off (not paused): the person's stored location history goes
+    // (privacy policy section 4), unless they still share with another family
+    // or a legal hold covers them.
+    if (validatedData.mode === "OFF" || validatedData.shareWithFamily === false) {
+      await deleteLocationHistoryAfterSharingOff(membership[0].target_user_id as string | null)
     }
 
     // Audit log

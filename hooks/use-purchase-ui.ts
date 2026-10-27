@@ -20,7 +20,12 @@ const EXTERNAL_LINKS_ENABLED = process.env.NEXT_PUBLIC_PLAY_EXTERNAL_LINKS === '
 export function detectAndroidApp(): boolean {
   try {
     localStorage.removeItem(STORAGE_KEY) // old, browser-wide flag
-    if (document.referrer.startsWith('android-app://')) {
+    // The app's first page carries an android-app:// referrer; a start URL
+    // with ?source=android-app (lib/android-app.ts) is the same signal.
+    const fromApp =
+      document.referrer.startsWith('android-app://') ||
+      new URLSearchParams(window.location.search).get('source') === 'android-app'
+    if (fromApp) {
       sessionStorage.setItem(STORAGE_KEY, '1')
     }
     const is = sessionStorage.getItem(STORAGE_KEY) === '1'
@@ -34,12 +39,30 @@ export function detectAndroidApp(): boolean {
   }
 }
 
+// After the first hydration, components that mount later (most pages, which
+// wait for sign-in) can read the flag straight away instead of one render
+// later, so the app never shows an upgrade link or price for a frame.
+let hydrated = false
+
+/** Called once the first page has hydrated (components/android-app-detector.tsx). */
+export function markPurchaseUiHydrated() {
+  hydrated = true
+}
+
+function initialState(): { ready: boolean; isAndroidApp: boolean } {
+  if (!hydrated || typeof window === 'undefined') return { ready: false, isAndroidApp: false }
+  const android = detectAndroidApp()
+  return { ready: !(android && EXTERNAL_LINKS_ENABLED), isAndroidApp: android }
+}
+
 export function usePurchaseUi() {
-  const [ready, setReady] = useState(false)
-  const [isAndroidApp, setIsAndroidApp] = useState(false)
+  const [init] = useState(initialState)
+  const [ready, setReady] = useState(init.ready)
+  const [isAndroidApp, setIsAndroidApp] = useState(init.isAndroidApp)
   const [country, setCountry] = useState<string | null>(null)
 
   useEffect(() => {
+    hydrated = true
     const android = detectAndroidApp()
     setIsAndroidApp(android)
     if (android && EXTERNAL_LINKS_ENABLED) {

@@ -550,7 +550,7 @@ export async function POST(request: NextRequest) {
       await sql`
         DELETE FROM location_pings
         WHERE user_id = ${user.id}
-          AND timestamp < NOW() - make_interval(days => ${subscription.features.historyDays})
+          AND timestamp < NOW() - make_interval(days => ${subscription.features.locationTrailDays})
       `
     }
 

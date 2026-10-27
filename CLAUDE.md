@@ -23,7 +23,8 @@ portal (support, legal requests). Preparing for a soft launch.
   error is `prefer-const` in `scripts/test-push-ownership.ts`. Add no new errors and
   no new warnings.
 - `npm run test:e2e`: Playwright smoke test of the public pages (`/`, `/login`,
-  `/privacy`, `/terms`). No sign-in, no writes. It starts `next dev` on port 3210.
+  `/privacy`, `/terms`), plus `/` and `/pricing` as the Android app sees them (no prices in the HTML).
+  No sign-in, no writes. It starts `next dev` on port 3210.
   Next allows one `next dev` per checkout, so if one is already running use
   `E2E_PORT=<its port> npm run test:e2e`. The first time on a machine, run
   `npx playwright install chromium`. Browsers go in the user cache, not the repo.
@@ -43,10 +44,10 @@ real email. Read a script's header before running it.
 - **Safe, with no database and no network.** These use pure logic, or the
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
   admin-delete-child, admin-tier-breakdown, admin-token-refresh, adult-location-access, brand-logo, child-invite, coppa, cron-health,
-  dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security, legal-hold-closure,
+  dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, free-tier-limits, geofence, kid-ping, launch-security, legal-hold-closure, location-history-delete,
   legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-link, push-ownership,
   dictation, place-alerts, push-picker, quick-add, schema-snapshot, sms-allowance, sms-consent, stillness, stripe-cancel-pending, stripe-checkout-tax, task-due, trial-eligibility,
-  stripe-webhook-events, telnyx-sms, upgrade-order, weather-prompt, weather-route.
+  stripe-webhook-events, telnyx-sms, twa-upgrade-links, upgrade-order, weather-prompt, weather-route.
 - **Board suites** (board-flyer-download, board-flyers, board-limits,
   board-notify) need a disposable database in `BOARD_TEST_DATABASE_URL`.
   `scripts/board-test-db.ts` reads it from `.env.test.local` automatically, which points
@@ -105,6 +106,28 @@ real email. Read a script's header before running it.
 - Place (geofence) alerts: Free none, Plus 3 places, Premium every place (`limits.maxAlertPlaces`,
   `alertPlaceLimit()`). Enforced when a place is created or switched on (`lib/place-alerts.ts`) and when
   alerts fire (the family's oldest alert places), so a downgrade keeps only what the plan allows.
+- Plan caps (Free / Plus / Premium, constants at the top of `lib/subscription-tiers.ts`): live location
+  sharers at once 3 / 4 / all (children count); active reminders 5 / 30 / unlimited; new events a month 15 / 100 /
+  unlimited (a repeating series counts once; imports and calendar sync don't count); board photo uploads
+  kept 3 / 25 / 100; routine pushes a month 100 / 1000 / unlimited; location trail (`locationTrailDays`) none (Free stores only the latest point) / 90 / 90 days;
+  past events and task/reminder archives (`historyDays`) 30 / 90 / 90 days, hidden not deleted. Trials get
+  Premium's caps. Enforced server-side by `lib/tier-limits.ts` (`checkLimit`, `claimMonthly`), which
+  answers 402 `{ code: "PLAN_LIMIT", limit: {...} }`; rules and wording in `lib/plan-limits.ts`. Over a cap
+  nothing is deleted or hidden, adding more is refused. Safety is never capped: only pushes marked
+  `routineFamilyId` (`isRoutinePush` types) count; SOS, emergency, geofence, location and approval
+  requests never do. Inside the Android app the limit copy is neutral, with no prices or upgrade links.
+- Android app (TWA) and purchases: wrap every upgrade / "see plans" / pricing link in `<UpgradeGate>`
+  (`components/upgrade-gate.tsx`; neutral "Manage your plan at mytogethr.com" in the app), or gate it on
+  `usePurchaseUi().canPurchase`. `scripts/test-twa-upgrade-links.ts` fails on an ungated link. Server pages
+  that show prices (`/`, `/pricing`) decide with `purchaseBlockedForPage` (`lib/android-app.ts`: the
+  android-app:// referrer, the `togethr_android` cookie or `?source=android-app`) and leave priced parts
+  out of the HTML for the app; `e2e/android-app.spec.ts` checks the HTML. `proxy.ts` sets the cookie on the
+  server when a page is opened with `?source=android-app` (the app's launch URL from 1.2.8:
+  `https://mytogethr.com/?source=android-app`) or an android-app:// referrer.
+- Location history (points and arrival/departure records) is deleted when a person turns sharing off
+  (mode OFF or share-with-family off, not pause) and when their account is deleted
+  (`lib/location-history.ts`, `lib/account-closure.ts`). Kept while they still share with another family
+  or a legal hold covers them.
 - Location: adults see children without sharing their own location. Adults see
   each other only after approval (`lib/location-access.ts`).
 - Android background sharing uses device tokens (`lib/device-token.ts`), handed over by a

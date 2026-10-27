@@ -5,6 +5,8 @@ import { createNotification, type NotificationChannel } from '@/lib/notification
 import { getHistoryDays } from '@/lib/history-limit'
 import { ensureReminderChildColumn } from '@/lib/reminder-schema'
 import { getParentUserIds } from '@/lib/assignment'
+import { checkLimit, planLimitResponse } from '@/lib/tier-limits'
+import { SUBSCRIPTION_TIERS } from '@/lib/subscription-tiers'
 import { memberName, actorNameInFamily } from "@/lib/member-names"
 
 const VALID_NOTIFY_CHANNELS: NotificationChannel[] = ['in_app', 'push', 'email', 'sms']
@@ -121,7 +123,7 @@ export async function GET(request: NextRequest) {
       const now = Date.now()
       return NextResponse.json({
         data: reminders.filter((x: { family_id: string; updated_at: string }) =>
-          now - new Date(x.updated_at).getTime() <= (limits.get(x.family_id) || 30) * 86400000
+          now - new Date(x.updated_at).getTime() <= (limits.get(x.family_id) || SUBSCRIPTION_TIERS.FREE.limits.historyDays) * 86400000
         ),
       })
     }
@@ -241,6 +243,10 @@ export async function POST(request: NextRequest) {
       `
       childProfileId = own[0]?.id ?? null
     }
+
+    // Plan cap: upcoming reminders per family.
+    const reminderLimit = await checkLimit(resolvedFamilyId, 'activeReminders')
+    if (!reminderLimit.allowed) return planLimitResponse(reminderLimit, request)
 
     const reminder = await sql`
       INSERT INTO reminders (

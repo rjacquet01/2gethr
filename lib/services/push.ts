@@ -42,6 +42,13 @@ interface PushPayload {
   ttl?: number
   /** Same topic = a queued copy is replaced, not stacked (lib/services/web-push-vapid.ts). */
   topic?: string
+  /**
+   * A routine push (reminders, event and task updates, board posts): counts
+   * toward this family's monthly push quota and is skipped once it is used
+   * up (the in-app notification is still there). Leave unset for safety
+   * alerts, which are never counted or capped. Ignored when urgent.
+   */
+  routineFamilyId?: string | null
 }
 
 // SOS, emergencies and location/geofence alerts stay deliverable for an hour;
@@ -179,6 +186,21 @@ export async function sendPushToUser(
     return { sent: 0, failed: 0 }
   }
 
+  // One slot per person notified, given back if no device got it.
+  const quotaFamilyId = payload.urgent ? null : payload.routineFamilyId || null
+  let claimed = false
+  if (quotaFamilyId) {
+    try {
+      // Loaded only for routine pushes, so importing push stays light (no auth/plan code).
+      const { claimMonthly } = await import('@/lib/tier-limits')
+      const slot = await claimMonthly(quotaFamilyId, 'routinePush')
+      if (!slot.allowed) return { sent: 0, failed: 0 }
+      claimed = true
+    } catch (err) {
+      console.error('[Push] Quota check failed, sending anyway:', err)
+    }
+  }
+
   let sent = 0
   let failed = 0
 
@@ -198,6 +220,11 @@ export async function sendPushToUser(
         `
       }
     }
+  }
+
+  if (claimed && quotaFamilyId && sent === 0) {
+    const { releaseMonthly } = await import('@/lib/tier-limits')
+    await releaseMonthly(quotaFamilyId, 'routinePush').catch(() => {})
   }
 
   return { sent, failed }

@@ -1,7 +1,9 @@
-// Usage: DATABASE_URL=postgres://u:p@127.0.0.1:1/x npx tsx --tsconfig tsconfig.json scripts/test-trial-eligibility.ts
+// Usage: npx tsx --tsconfig tsconfig.json scripts/test-trial-eligibility.ts
 // One free trial a year (lib/trial-eligibility.ts). Pure logic plus the
 // in-memory fake through __setSqlForTests: no database, no network.
 import assert from "node:assert"
+
+process.env.DATABASE_URL = "postgresql://test:test@127.0.0.1:1/never_connected"
 
 let passed = 0
 const ok = (name: string) => { passed++; console.log(`  ok  ${name}`) }

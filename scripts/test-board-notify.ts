@@ -106,6 +106,8 @@ async function main() {
     }
     const fam = async (Fid: string, members: [string, string, boolean][]) => {
       await sql`INSERT INTO families (id, name, owner_id, created_at, updated_at) VALUES (${Fid}, ${`${tag} family`}, ${U.P}, NOW(), NOW())`
+      // Premium, so the plan's photo-upload cap (lib/tier-limits.ts) doesn't get in the way.
+      await sql`INSERT INTO subscriptions (id, family_id, tier, status, created_at, updated_at) VALUES (${id()}, ${Fid}, 'PREMIUM_PLUS', 'ACTIVE', NOW(), NOW())`
       for (const [k, role, active] of members) {
         await sql`INSERT INTO family_members (id, family_id, user_id, role, is_active, joined_at, created_at, updated_at)
                   VALUES (${id()}, ${Fid}, ${U[k]}, ${role}, ${active}, NOW(), NOW(), NOW())`

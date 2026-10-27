@@ -7,6 +7,8 @@ import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/li
 import { notifyFamilyAboutEvent, createNotification, type NotificationChannel } from "@/lib/notifications" // Event notifications
 import { z } from "zod"
 import { planGateError } from "@/lib/tier-gates"
+import { claimMonthly, releaseMonthly, planLimitResponse } from "@/lib/tier-limits"
+import { SUBSCRIPTION_TIERS } from "@/lib/subscription-tiers"
 import { getGuestFamilyIds, filterEventsForGuest, filterEventsByVisibility } from "@/lib/guest-scope"
 import { generateOccurrences, isValidTimeZone, recurrenceFromPreset, type RecurrenceInput } from "@/lib/recurrence"
 import { participantName, actorNameInFamily } from "@/lib/member-names"
@@ -262,19 +264,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Apply history limit based on subscription (for past events)
-    // FREE: 30 days, PREMIUM (Plus): 90 days, PREMIUM_PLUS (Premium): 90 days
+    // (lib/subscription-tiers.ts HISTORY_DAYS: Free 30, Plus 90, Premium 90)
     const effectiveFamilyId = familyId || (events[0]?.family_id ? events[0].family_id : null)
-    let historyDays = 30 // Default for free tier
+    const freeHistoryDays = SUBSCRIPTION_TIERS.FREE.limits.historyDays
+    let historyDays = freeHistoryDays
     
     if (effectiveFamilyId) {
       try {
         const subscription = await (effectiveFamilyId === familyId && familySubscriptionPromise
           ? familySubscriptionPromise
           : checkFamilySubscription(effectiveFamilyId))
-        historyDays = subscription.features.historyDays || 30
+        historyDays = subscription.features.historyDays || freeHistoryDays
       } catch {
-        // Default to 30 days if subscription check fails
-        historyDays = 30
+        // Fall back to the Free window if the subscription check fails
+        historyDays = freeHistoryDays
       }
     }
     
@@ -371,6 +374,8 @@ export async function GET(request: NextRequest) {
 
 // Create event
 export async function POST(request: NextRequest) {
+  // Family whose monthly event slot was taken, until the event row exists.
+  let eventSlotFamilyId: string | null = null
   try {
   await ensureEventCategoryColumn()
   await ensureTaskEventNotifyChannelsColumns()
@@ -623,6 +628,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Plan cap: events created this month (a repeating series counts once).
+    const eventSlot = await claimMonthly(calendar.family_id, "eventsPerMonth")
+    if (!eventSlot.allowed) return planLimitResponse(eventSlot, request)
+    eventSlotFamilyId = calendar.family_id
+
     // Determine initial status. A child's event is approved right away unless
     // they chose "Ask a parent"; then it waits for a parent or guardian.
     const status = calendar.role === "CHILD"
@@ -683,6 +693,7 @@ export async function POST(request: NextRequest) {
         NOW(), NOW()
       )
     `
+    eventSlotFamilyId = null
 
     // Add participants
     if (participantUserIds.length > 0) {
@@ -844,6 +855,7 @@ export async function POST(request: NextRequest) {
         : "Event created successfully",
     })
   } catch (error) {
+    if (eventSlotFamilyId) await releaseMonthly(eventSlotFamilyId, "eventsPerMonth").catch(() => {})
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { success: false, error: error.errors[0].message },

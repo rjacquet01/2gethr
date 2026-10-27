@@ -609,6 +609,8 @@ export async function logAuditEvent(
 export async function checkFamilySubscription(familyId: string): Promise<{
   tier: string
   isActive: boolean
+  /** On an unexpired free trial (plan limits then follow Premium). */
+  trial?: boolean
   features: {
     maxFamilyMembers: number
     maxChildren: number
@@ -620,6 +622,7 @@ export async function checkFamilySubscription(familyId: string): Promise<{
     smsNotifications: boolean
     customReminderTimes: boolean
     historyDays: number
+    locationTrailDays: number
   }
 }> {
   const subscriptions = await sql`
@@ -646,6 +649,7 @@ export async function checkFamilySubscription(familyId: string): Promise<{
       smsNotifications: def.features.smsNotifications,
       customReminderTimes: def.features.customReminderTimes,
       historyDays: def.limits.historyDays,
+      locationTrailDays: def.limits.locationTrailDays,
     }
   }
 
@@ -668,6 +672,7 @@ export async function checkFamilySubscription(familyId: string): Promise<{
   return {
     tier: sub.tier,
     isActive: true,
+    trial: sub.status === "TRIALING",
     features: toFeatures(sub.tier),
   }
 }
