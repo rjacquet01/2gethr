@@ -29,7 +29,7 @@ export default function TermsPage() {
         <h1 className="text-3xl font-bold mb-8">Terms of Service</h1>
         
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: October 22, 2026</p>
+          <p className="text-muted-foreground">Last updated: October 26, 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Acceptance of Terms</h2>
@@ -44,6 +44,8 @@ export default function TermsPage() {
             <p>
               Togethr is a family coordination platform that helps families manage schedules, share locations, 
               and coordinate activities. The Service includes mobile applications and web interfaces.
+              The Togethr Android app is published on Google Play by Nexus Calibration Maintenance Management, LLC on
+              behalf of Togethr, LLC.
             </p>
           </section>
 
