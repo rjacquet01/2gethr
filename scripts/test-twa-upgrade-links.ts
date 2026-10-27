@@ -84,6 +84,21 @@ async function main() {
   assert.deepStrictEqual(ungated, [], `ungated upgrade/pricing links:\n${ungated.join("\n")}`)
   ok(`every upgrade/pricing link in the signed-in app is gated (${checked} links checked)`)
 
+  // 3. "My plan" (/subscription) in the app: plan name, limits and usage only.
+  //    Prices, the billing toggle, trials and the way to checkout all live in
+  //    the {canPurchase && (...)} plans block, which the app never renders.
+  const sub = fs.readFileSync(path.join(ROOT, "app", "(dashboard)", "subscription", "page.tsx"), "utf8").replace(/\r\n/g, "\n")
+  const plansStart = sub.indexOf("      {canPurchase && (\n        <>")
+  const plansEnd = sub.indexOf("Questions about billing")
+  assert.ok(plansStart > 0 && plansEnd > plansStart, "found the plans block")
+  const priced = /displayPrice\(|priceTaxNote\(|<BillingToggle|handleStartTrial\(|\/subscription\/upgrade|\/pricing|centsToDisplay\(/g
+  const outside = [...sub.matchAll(priced)]
+    .filter((m) => m.index! < plansStart || m.index! > plansEnd)
+    .map((m) => `line ${sub.slice(0, m.index).split("\n").length}: ${m[0]}`)
+  assert.deepStrictEqual(outside, [], "price or checkout outside the plans block")
+  assert.ok(/purchaseUiReady && !canPurchase && \(\s*<p[^>]*>\{IN_APP_PLANS_COPY\}/.test(sub), "the app sees the neutral line")
+  ok("My plan in the app: prices, trials and checkout only inside the canPurchase block")
+
   console.log(`\n${passed} checks passed`)
 }
 

@@ -104,7 +104,7 @@ async function main() {
     ["maxBoardUploads", 3, 25, 100],
     ["pushMonthlyQuota", 100, 1000, -1],
     ["historyDays", 30, 90, 90],
-    ["locationTrailDays", 7, 90, 90],
+    ["locationTrailDays", 0, 90, 90],
   ]
   for (const [field, f, p, pr] of table) {
     assert.deepStrictEqual(
@@ -113,8 +113,13 @@ async function main() {
       field
     )
   }
-  assert.ok(tiers.SUBSCRIPTION_TIERS.FREE.featureList.includes("7-day location trail, 30 days of past events"))
-  assert.ok(tiers.SUBSCRIPTION_TIERS.FREE.featureList.some((b) => b.startsWith("Live location for 3 family members")))
+  const free = tiers.SUBSCRIPTION_TIERS.FREE.featureList
+  assert.ok(free.includes("30 days of past events"))
+  assert.ok(free.some((b) => b.startsWith("Live family location (3 members at once")))
+  assert.ok(!free.some((b) => /trail/i.test(b)), "Free claims no location trail")
+  for (const key of ["PREMIUM", "PREMIUM_PLUS"] as const) {
+    assert.ok(tiers.SUBSCRIPTION_TIERS[key].featureList.includes("90-day location trail, 90 days of past events"), key)
+  }
   assert.ok(tiers.SUBSCRIPTION_TIERS.FREE.featureList.some((b) => b.includes("15 new events a month")))
   ok("caps: Free / Plus / Premium numbers, and the Free plan bullets quote them")
 

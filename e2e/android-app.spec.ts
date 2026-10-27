@@ -17,6 +17,13 @@ const APP_VISITS: Array<{ name: string; query?: string; headers?: Record<string,
   { name: '?source=android-app', query: '?source=android-app' },
 ]
 
+test('the app launch URL sets the app cookie on the server, for every later page', async ({ request }) => {
+  const res = await request.get('/?source=android-app', { maxRedirects: 0 })
+  expect(res.headers()['set-cookie'] ?? '').toMatch(/togethr_android=1/)
+  const web = await request.get('/pricing', { headers: { cookie: '' } })
+  expect(web.headers()['set-cookie'] ?? '').not.toMatch(/togethr_android/)
+})
+
 for (const path of ['/', '/pricing']) {
   test(`${path}: the website HTML has prices (control)`, async ({ request }) => {
     const html = await (await request.get(path)).text()

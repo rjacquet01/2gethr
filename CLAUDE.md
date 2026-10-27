@@ -44,7 +44,7 @@ real email. Read a script's header before running it.
 - **Safe, with no database and no network.** These use pure logic, or the
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
   admin-delete-child, admin-tier-breakdown, admin-token-refresh, adult-location-access, brand-logo, child-invite, coppa, cron-health,
-  dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, free-tier-limits, geofence, kid-ping, launch-security,
+  dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, free-tier-limits, geofence, kid-ping, launch-security, location-history-delete,
   legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-link, push-ownership,
   dictation, place-alerts, push-picker, quick-add, schema-snapshot, sms-allowance, sms-consent, stillness, stripe-checkout-tax, task-due, trial-eligibility,
   stripe-webhook-events, telnyx-sms, twa-upgrade-links, upgrade-order, weather-prompt, weather-route.
@@ -106,7 +106,7 @@ real email. Read a script's header before running it.
 - Plan caps (Free / Plus / Premium, constants at the top of `lib/subscription-tiers.ts`): live location
   sharers at once 3 / 4 / all (children count); active reminders 5 / 30 / unlimited; new events a month 15 / 100 /
   unlimited (a repeating series counts once; imports and calendar sync don't count); board photo uploads
-  kept 3 / 25 / 100; routine pushes a month 100 / 1000 / unlimited; location trail (`locationTrailDays`) 7 / 90 / 90 days;
+  kept 3 / 25 / 100; routine pushes a month 100 / 1000 / unlimited; location trail (`locationTrailDays`) none (Free stores only the latest point) / 90 / 90 days;
   past events and task/reminder archives (`historyDays`) 30 / 90 / 90 days, hidden not deleted. Trials get
   Premium's caps. Enforced server-side by `lib/tier-limits.ts` (`checkLimit`, `claimMonthly`), which
   answers 402 `{ code: "PLAN_LIMIT", limit: {...} }`; rules and wording in `lib/plan-limits.ts`. Over a cap
@@ -118,7 +118,13 @@ real email. Read a script's header before running it.
   `usePurchaseUi().canPurchase`. `scripts/test-twa-upgrade-links.ts` fails on an ungated link. Server pages
   that show prices (`/`, `/pricing`) decide with `purchaseBlockedForPage` (`lib/android-app.ts`: the
   android-app:// referrer, the `togethr_android` cookie or `?source=android-app`) and leave priced parts
-  out of the HTML for the app; `e2e/android-app.spec.ts` checks the HTML.
+  out of the HTML for the app; `e2e/android-app.spec.ts` checks the HTML. `proxy.ts` sets the cookie on the
+  server when a page is opened with `?source=android-app` (the app's launch URL from 1.2.8:
+  `https://mytogethr.com/?source=android-app`) or an android-app:// referrer.
+- Location history (points and arrival/departure records) is deleted when a person turns sharing off
+  (mode OFF or share-with-family off, not pause) and when their account is deleted
+  (`lib/location-history.ts`, `lib/account-closure.ts`). Kept while they still share with another family
+  or a legal hold covers them.
 - Location: adults see children without sharing their own location. Adults see
   each other only after approval (`lib/location-access.ts`).
 - Android background sharing uses device tokens (`lib/device-token.ts`), handed over by a

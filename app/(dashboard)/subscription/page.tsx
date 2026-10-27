@@ -176,7 +176,7 @@ export default function SubscriptionPage() {
   return (
     <div className="space-y-4 pb-20 sm:space-y-5 lg:pb-0">
       <div>
-        <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Subscription</h1>
+        <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{purchaseUiReady && !canPurchase ? 'My plan' : 'Subscription'}</h1>
         <FamilyNameTag name={primaryFamily.name} className="mt-1" />
       </div>
 

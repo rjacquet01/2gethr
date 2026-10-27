@@ -37,7 +37,7 @@ export interface TierLimits {
   maxCalendars: number
   /** Days of past calendar events and task/reminder archives kept visible. */
   historyDays: number
-  /** Days of location trail (past positions) shown. */
+  /** Days of location trail (past positions) kept and shown; 0 = latest point only. */
   locationTrailDays: number
   /** Text messages per family per calendar month (urgent safety alerts are exempt). */
   smsMonthlyQuota: number
@@ -63,8 +63,8 @@ export const BOARD_UPLOADS = { FREE: 3, PLUS: 25, PREMIUM: 100 } as const
 export const ROUTINE_PUSH_PER_MONTH = { FREE: 100, PLUS: 1000, PREMIUM: -1 } as const
 /** Past calendar events and task/reminder archives. */
 export const HISTORY_DAYS = { FREE: 30, PLUS: 90, PREMIUM: 90 } as const
-/** Location trail. */
-export const LOCATION_TRAIL_DAYS = { FREE: 7, PLUS: 90, PREMIUM: 90 } as const
+/** Location trail (past positions). Free has none: only the latest point is kept. */
+export const LOCATION_TRAIL_DAYS = { FREE: 0, PLUS: 90, PREMIUM: 90 } as const
 /** Show a soft "nearly at your limit" nudge from this share of a cap. */
 export const NEAR_LIMIT_RATIO = 0.8
 
@@ -143,11 +143,11 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
     featureList: [
       "Up to 2 children",
       `Shared family calendar (${EVENTS_PER_MONTH.FREE} new events a month)`,
-      `Live location for ${LOCATION_SHARERS.FREE} family members (2 saved places)`,
+      `Live family location (${LOCATION_SHARERS.FREE} members at once, 2 saved places)`,
       `${ACTIVE_REMINDERS.FREE} active reminders`,
       `${BOARD_UPLOADS.FREE} photo uploads on the family board`,
       `${ROUTINE_PUSH_PER_MONTH.FREE} notifications a month (safety alerts always arrive)`,
-      `${LOCATION_TRAIL_DAYS.FREE}-day location trail, ${HISTORY_DAYS.FREE} days of past events`,
+      `${HISTORY_DAYS.FREE} days of past events`,
       "Email support",
     ],
   },

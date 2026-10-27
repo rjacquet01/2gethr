@@ -19,7 +19,7 @@ const ROWS: { label: string; value: (t: TierDefinition) => string }[] = [
   { label: 'Active reminders', value: (t) => n(t.limits.maxActiveReminders) },
   { label: 'Family board photo uploads', value: (t) => n(t.limits.maxBoardUploads) },
   { label: 'Notifications a month', value: (t) => n(t.limits.pushMonthlyQuota) },
-  { label: 'Location trail', value: (t) => `${t.limits.locationTrailDays} days` },
+  { label: 'Location trail', value: (t) => (t.limits.locationTrailDays > 0 ? `${t.limits.locationTrailDays} days` : 'Latest location only') },
   { label: 'Past events & archives', value: (t) => `${t.limits.historyDays} days` },
 ]
 

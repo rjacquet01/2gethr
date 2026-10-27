@@ -5,6 +5,7 @@ import { z } from "zod"
 import { notifyChildStoppedSharing } from "@/lib/family-alerts"
 import { guestForbidden, isGuestOnly } from "@/lib/permissions"
 import { checkLimit, planLimitResponse } from "@/lib/tier-limits"
+import { deleteLocationHistoryAfterSharingOff } from "@/lib/location-history"
 
 const updateSettingsSchema = z.object({
   memberId: z.string().min(1, "Member ID is required"),
@@ -258,6 +259,13 @@ export async function PATCH(request: NextRequest) {
     if (isOwnSettings && targetIsChild && wasSharing) {
       const nowOff = validatedData.mode === "OFF" || validatedData.mode === "PAUSED" || validatedData.shareWithFamily === false
       if (nowOff) await notifyChildStoppedSharing(validatedData.memberId, validatedData.mode === "PAUSED" ? "paused" : "turned off in the app")
+    }
+
+    // Sharing turned off (not paused): the person's stored location history goes
+    // (privacy policy section 4), unless they still share with another family
+    // or a legal hold covers them.
+    if (validatedData.mode === "OFF" || validatedData.shareWithFamily === false) {
+      await deleteLocationHistoryAfterSharingOff(membership[0].target_user_id as string | null)
     }
 
     // Audit log

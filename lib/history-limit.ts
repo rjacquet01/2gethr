@@ -5,7 +5,7 @@ const FREE_HISTORY_DAYS = SUBSCRIPTION_TIERS.FREE.limits.historyDays
 
 // How many days of archived history a family's plan keeps visible
 // (Free 30 / Plus 90 / Premium 90 - from lib/subscription-tiers.ts). The location
-// trail has its own, shorter window (locationTrailDays: Free 7).
+// trail has its own setting (locationTrailDays: Free keeps only the latest point).
 // Items older than the plan's window but inside the 90-day cap are hidden,
 // not deleted, so upgrading Free -> Plus/Premium restores them. Nothing is
 // kept beyond the cap: the archive cron deletes it (lib/retention.ts).

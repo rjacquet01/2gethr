@@ -56,8 +56,10 @@ export async function GET(request: NextRequest) {
     if (!subscription.features.locationSharing) {
       return NextResponse.json({ success: false, error: "Location sharing requires a Premium subscription", code: "SUBSCRIPTION_REQUIRED" }, { status: 403 })
     }
-    // The plan's location trail (Free 7 days), not its event history.
-    const windowHours = Math.min(hours, Math.max(1, subscription.features.locationTrailDays || 1) * 24)
+    // The plan's location trail. Free keeps no trail (only the latest point is
+    // stored), so its window stays as wide as before and shows that point.
+    const trailDays = subscription.features.locationTrailDays || subscription.features.historyDays || 1
+    const windowHours = Math.min(hours, Math.max(1, trailDays) * 24)
 
     const rows = await sql`
       SELECT latitude, longitude, speed, battery_level, timestamp
