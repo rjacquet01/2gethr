@@ -3,10 +3,18 @@
 import useSWR from 'swr'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect } from 'react'
+import {
+  ADMIN_ACCESS_TOKEN_KEY,
+  ADMIN_REFRESH_TOKEN_KEY,
+  browserAdminTokenEnv,
+  ensureFreshAdminToken,
+} from '@/lib/admin-token-refresh'
 
-// Token storage keys for admin
-const ADMIN_ACCESS_TOKEN_KEY = 'safelink_admin_access_token'
-const ADMIN_REFRESH_TOKEN_KEY = 'safelink_admin_refresh_token'
+/** Refreshes the admin access token when it is close to expiring. */
+export async function refreshAdminTokenIfNeeded(): Promise<string | null> {
+  const env = browserAdminTokenEnv()
+  return env ? ensureFreshAdminToken(env) : null
+}
 
 // Token management utilities
 export function getAdminAccessToken(): string | null {
@@ -42,39 +50,15 @@ export interface AdminUser {
 
 // Fetcher for admin auth
 async function adminFetcher(url: string): Promise<AdminUser | null> {
-  const token = getAdminAccessToken()
+  const token = (await refreshAdminTokenIfNeeded()) ?? getAdminAccessToken()
   if (!token) return null
-  
+
   const res = await fetch(url, {
     headers: { 'Authorization': `Bearer ${token}` },
   })
-  
+
   if (!res.ok) {
     if (res.status === 401) {
-      // Try to refresh token
-      const refreshToken = getAdminRefreshToken()
-      if (refreshToken) {
-        const refreshRes = await fetch('/api/admin/auth/refresh', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken }),
-        })
-        
-        if (refreshRes.ok) {
-          const refreshData = await refreshRes.json()
-          setAdminTokens(refreshData.accessToken, refreshData.refreshToken)
-          
-          // Retry with new token
-          const retryRes = await fetch(url, {
-            headers: { 'Authorization': `Bearer ${refreshData.accessToken}` },
-          })
-          
-          if (retryRes.ok) {
-            const data = await retryRes.json()
-            return data.admin
-          }
-        }
-      }
       clearAdminTokens()
       return null
     }

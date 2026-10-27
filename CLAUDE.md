@@ -42,7 +42,7 @@ real email. Read a script's header before running it.
 
 - **Safe, with no database and no network.** These use pure logic, or the
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
-  admin-delete-child, admin-tier-breakdown, adult-location-access, brand-logo, child-invite, coppa, cron-health,
+  admin-delete-child, admin-tier-breakdown, admin-token-refresh, adult-location-access, brand-logo, child-invite, coppa, cron-health,
   dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
   legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-link, push-ownership,
   dictation, place-alerts, push-picker, quick-add, schema-snapshot, sms-allowance, sms-consent, stillness, stripe-checkout-tax, task-due, trial-eligibility,
