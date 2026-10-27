@@ -5,6 +5,7 @@ import { z } from "zod"
 import { isParentInOtherFamily, getRolePermissions } from "@/lib/family-invites"
 import { canManageFamily } from "@/lib/permissions"
 import { deleteChildData } from "@/lib/parental-consent"
+import { ACCOUNT_CLOSURE_BLOCKED_MESSAGE, LegalHoldError } from "@/lib/account-closure"
 
 const updateMemberSchema = z.object({
   role: z.enum(["PARENT", "GUARDIAN", "ADULT", "CHILD", "GUEST"]).optional(),
@@ -259,6 +260,9 @@ export async function DELETE(
       inviteCodeRotated,
     })
   } catch (error) {
+    if (error instanceof LegalHoldError) {
+      return NextResponse.json({ success: false, error: ACCOUNT_CLOSURE_BLOCKED_MESSAGE }, { status: 409 })
+    }
     console.error("Remove member error:", error)
     return NextResponse.json(
       { success: false, error: "Failed to remove member" },

@@ -5,6 +5,7 @@ import { purchaseBlockedForRequest } from "@/lib/android-app"
 import { stripe, getPriceId } from "@/lib/stripe"
 import { buildCheckoutSessionParams, subscriptionUpdateTaxParams } from "@/lib/stripe-checkout"
 import { appUrl as siteUrl } from '@/lib/app-url'
+import { resumeParams } from "@/lib/stripe-cancel"
 
 // POST - Create a Stripe Checkout Session for a subscription upgrade.
 //
@@ -127,13 +128,15 @@ export async function POST(request: NextRequest) {
             await stripe.subscriptions.update(currentStripeSubId, {
               items: [{ id: item.id, price: priceId }],
               proration_behavior: "create_prorations",
-              cancel_at_period_end: false,
+              // Switching plans also stops a pending cancellation.
+              ...(resumeParams(current) ?? {}),
               metadata: { familyId, requestedTier: tier.toUpperCase(), billingCycle },
               ...subscriptionUpdateTaxParams(),
             })
-          } else if (current.cancel_at_period_end) {
+          } else {
             // Same plan, but set to end: subscribing again means "keep it".
-            await stripe.subscriptions.update(currentStripeSubId, { cancel_at_period_end: false })
+            const resume = resumeParams(current)
+            if (resume) await stripe.subscriptions.update(currentStripeSubId, resume)
           }
           return NextResponse.json({
             success: true,

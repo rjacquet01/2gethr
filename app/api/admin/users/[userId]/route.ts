@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromToken, hasPermission, logAdminAction } from '@/lib/admin-auth'
 import { revokeAllUserTokens } from '@/lib/auth'
-import { closeUserAccount } from '@/lib/account-closure'
+import { ACCOUNT_CLOSURE_BLOCKED_ADMIN_MESSAGE, LegalHoldError, assertAccountCanBeClosed, closeUserAccount } from '@/lib/account-closure'
 import { sql } from '@/lib/db'
 import { sendPasswordResetLink } from '@/lib/password-reset'
 
@@ -178,6 +178,13 @@ export async function PATCH(
       }
       if (String(target[0].email).startsWith('deleted-')) {
         return NextResponse.json({ error: 'Account is already closed' }, { status: 400 })
+      }
+      // A legal hold blocks closure; checked before the audit entry.
+      try {
+        await assertAccountCanBeClosed(target[0].id)
+      } catch (e) {
+        if (e instanceof LegalHoldError) return NextResponse.json({ error: ACCOUNT_CLOSURE_BLOCKED_ADMIN_MESSAGE }, { status: 409 })
+        throw e
       }
       // Audit first: the closure anonymises the email.
       await logAdminAction(admin.id, 'CLOSE_USER', 'user', userId, { reason, email: target[0].email }, ipAddress, userAgent)

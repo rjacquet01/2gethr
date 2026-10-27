@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { stripe, getTierFromPriceId } from "@/lib/stripe"
 import { notifyAdmin, EMAIL_TEMPLATES } from "@/lib/services/email"
 import { handleChargeRefunded, handleDisputeClosed, handleDisputeCreated } from "@/lib/stripe-disputes"
+import { ensureSubscriptionCancelAtColumn, pendingCancelFrom } from "@/lib/stripe-cancel"
 import type Stripe from "stripe"
 
 // Looks up the family name and the owning user's email for the admin
@@ -168,6 +169,8 @@ async function activateSubscriptionFromSession(session: Stripe.Checkout.Session)
   const existing = await sql`SELECT * FROM subscriptions WHERE family_id = ${familyId}`
   const previousTier = existing[0]?.tier ?? "FREE"
   const item = stripeSub.items.data[0]
+  const cancel = pendingCancelFrom(stripeSub)
+  await ensureSubscriptionCancelAtColumn()
 
   await sql`
     UPDATE subscriptions
@@ -178,7 +181,8 @@ async function activateSubscriptionFromSession(session: Stripe.Checkout.Session)
         stripe_price_id = ${priceId ?? null},
         current_period_start = ${item ? new Date(item.current_period_start * 1000).toISOString() : null},
         current_period_end = ${item ? new Date(item.current_period_end * 1000).toISOString() : null},
-        cancel_at_period_end = ${stripeSub.cancel_at_period_end},
+        cancel_at_period_end = ${cancel.pending},
+        cancel_at = ${cancel.endsAt},
         updated_at = NOW()
     WHERE family_id = ${familyId}
   `
@@ -221,6 +225,9 @@ async function syncSubscriptionFromStripe(sub: Stripe.Subscription) {
 
   const newStatus = STRIPE_STATUS_MAP[sub.status] ?? "ACTIVE"
   const previousStatus = existing[0].status
+  // A portal cancellation in flexible billing mode sets only cancel_at (lib/stripe-cancel.ts).
+  const cancel = pendingCancelFrom(sub)
+  await ensureSubscriptionCancelAtColumn()
 
   await sql`
     UPDATE subscriptions
@@ -231,7 +238,8 @@ async function syncSubscriptionFromStripe(sub: Stripe.Subscription) {
         stripe_price_id = ${priceId ?? null},
         current_period_start = ${item ? new Date(item.current_period_start * 1000).toISOString() : null},
         current_period_end = ${item ? new Date(item.current_period_end * 1000).toISOString() : null},
-        cancel_at_period_end = ${sub.cancel_at_period_end},
+        cancel_at_period_end = ${cancel.pending},
+        cancel_at = ${cancel.endsAt},
         trial_ends_at = COALESCE(${sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null}::timestamptz, trial_ends_at),
         updated_at = NOW()
     WHERE family_id = ${existing[0].family_id}
@@ -270,11 +278,13 @@ async function handleSubscriptionCanceled(sub: Stripe.Subscription) {
 
   if (existing.length === 0) return
 
+  await ensureSubscriptionCancelAtColumn()
   await sql`
     UPDATE subscriptions
     SET tier = 'FREE',
         status = 'CANCELLED',
         cancel_at_period_end = false,
+        cancel_at = NULL,
         updated_at = NOW()
     WHERE family_id = ${existing[0].family_id}
   `

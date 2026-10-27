@@ -17,7 +17,9 @@ export interface Subscription {
   currentPeriodStart: string | null
   currentPeriodEnd: string | null
   trialEnd: string | null
+  /** A cancellation is pending: the plan ends on cancelAt (or currentPeriodEnd). */
   cancelAtPeriodEnd: boolean
+  cancelAt: string | null
 }
 
 /** Whether the owner may start a free trial now (one a year), or when they next can. */
@@ -75,6 +77,7 @@ interface APISubscriptionResponse {
     currentPeriodStart?: string
     currentPeriodEnd?: string
     cancelAtPeriodEnd?: boolean
+    cancelAt?: string | null
     trialEndsAt?: string
     /** Only for the owner of a family on Free. */
     trial?: TrialAvailability | null
@@ -143,6 +146,7 @@ const fetcher = async (url: string): Promise<SubscriptionData> => {
       currentPeriodEnd: data.currentPeriodEnd || null,
       trialEnd: data.trialEndsAt || null,
       cancelAtPeriodEnd: data.cancelAtPeriodEnd || false,
+      cancelAt: data.cancelAt || null,
     } : null,
     trial: data.trial ?? null,
     access: {

@@ -141,6 +141,8 @@ export async function GET(request: NextRequest) {
         currentPeriodStart: subscription.current_period_start,
         currentPeriodEnd: subscription.current_period_end,
         cancelAtPeriodEnd: subscription.cancel_at_period_end,
+        // When a pending cancellation takes effect (lib/stripe-cancel.ts).
+        cancelAt: subscription.cancel_at ?? null,
         trialEndsAt: subscription.trial_ends_at,
         tierInfo,
         familyId,

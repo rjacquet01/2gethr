@@ -4,6 +4,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { canManageFamily } from "@/lib/permissions"
 import { hasParentalConsentRecord, listParentalConsents, recordParentalConsent, withdrawChildConsent } from "@/lib/parental-consent"
+import { ACCOUNT_CLOSURE_BLOCKED_MESSAGE, LegalHoldError } from "@/lib/account-closure"
 
 type Params = { params: Promise<{ familyId: string; memberId: string }> }
 
@@ -111,6 +112,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     })
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ success: false, error: error.errors[0].message }, { status: 400 })
+    if (error instanceof LegalHoldError) return NextResponse.json({ success: false, error: ACCOUNT_CLOSURE_BLOCKED_MESSAGE }, { status: 409 })
     console.error("Withdraw child consent error:", error)
     return NextResponse.json({ success: false, error: "Failed to withdraw consent" }, { status: 500 })
   }
