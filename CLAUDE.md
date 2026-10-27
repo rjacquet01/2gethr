@@ -43,7 +43,7 @@ real email. Read a script's header before running it.
 - **Safe, with no database and no network.** These use pure logic, or the
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
   admin-delete-child, admin-tier-breakdown, admin-token-refresh, adult-location-access, brand-logo, child-invite, coppa, cron-health,
-  dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security,
+  dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, geofence, kid-ping, launch-security, legal-hold-closure,
   legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-link, push-ownership,
   dictation, place-alerts, push-picker, quick-add, schema-snapshot, sms-allowance, sms-consent, stillness, stripe-cancel-pending, stripe-checkout-tax, task-due, trial-eligibility,
   stripe-webhook-events, telnyx-sms, upgrade-order, weather-prompt, weather-route.
@@ -67,6 +67,9 @@ real email. Read a script's header before running it.
 - Do not weaken auth, rate limits, or the family-membership checks.
 - Every new SQL uses tagged-template parameters.
 - The legal access log is append-only. The trigger `legal_access_log_immutable` enforces it.
+- A legal hold blocks account deletion: `closeUserAccount` throws `LegalHoldError` before any change
+  (self-service, admin, a child's consent withdrawal or removal, and family deletion that would close a
+  held child's login). Users see a neutral "contact support" message; only admins see the reason.
 - Never read or print `.env*` files in the shell. Never edit `.env`, Vercel, or Stripe
   settings unless asked.
 

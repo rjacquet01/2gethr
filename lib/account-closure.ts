@@ -4,6 +4,39 @@ import { revokeAllUserTokens } from "@/lib/auth"
 import { stripe } from "@/lib/stripe"
 import { ensureSocialTables } from "@/lib/social"
 import { deleteFlyerFiles, ensureBoardFlyerColumns, type FlyerFileRow } from "@/lib/board-flyers"
+import { isUnderLegalHold } from "@/lib/legal"
+
+/**
+ * The account can't be closed: a legal hold (an open case or a preservation
+ * request) covers this person, so their data must be kept. Nothing was changed.
+ * Close it after the hold ends.
+ */
+export class LegalHoldError extends Error {
+  constructor() {
+    super("This account is covered by a legal hold")
+    this.name = "LegalHoldError"
+  }
+}
+
+/**
+ * Shown to the person and to family members. It doesn't say why: a legal
+ * hold can be confidential.
+ */
+export const ACCOUNT_CLOSURE_BLOCKED_MESSAGE =
+  "We can't delete this account right now. Please contact support at admin@mytogethr.com."
+
+/** The same, for deleting a family that would close a child's login. */
+export const FAMILY_DELETION_BLOCKED_MESSAGE =
+  "We can't delete this family right now. Please contact support at admin@mytogethr.com."
+
+/** Shown to Togethr admins. */
+export const ACCOUNT_CLOSURE_BLOCKED_ADMIN_MESSAGE =
+  "This account is under a legal hold and can't be closed until the hold ends."
+
+/** Throws LegalHoldError when the account must not be closed now. */
+export async function assertAccountCanBeClosed(userId: string): Promise<void> {
+  if (await isUnderLegalHold(userId)) throw new LegalHoldError()
+}
 
 // Shared account-closure logic used by both self-service deletion
 // (/api/account/delete) and admin closure of ToS-violating accounts.
@@ -11,6 +44,9 @@ import { deleteFlyerFiles, ensureBoardFlyerColumns, type FlyerFileRow } from "@/
 // billing and permanently deactivates the login. The users row is kept
 // (anonymised) because shared family data still references it.
 export async function closeUserAccount(user: { id: string; email: string }): Promise<void> {
+    // 0. Never while a legal hold covers them: refused before anything changes.
+    await assertAccountCanBeClosed(user.id)
+
     // 1. Hand off any families this user owns.
     const ownedFamilies = await sql`
       SELECT id FROM families WHERE owner_id = ${user.id}

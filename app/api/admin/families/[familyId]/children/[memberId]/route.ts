@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getAdminFromToken, hasPermission, logAdminAction } from '@/lib/admin-auth'
 import { sql } from '@/lib/db'
 import { withdrawChildConsent } from '@/lib/parental-consent'
+import { ACCOUNT_CLOSURE_BLOCKED_ADMIN_MESSAGE, LegalHoldError } from '@/lib/account-closure'
 
 const schema = z.object({
   reason: z.string({ required_error: 'A reason is required' }).trim().min(1, 'A reason is required').max(1000),
@@ -72,6 +73,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, deleted: result.deleted, message: 'Child profile deleted' })
   } catch (error) {
+    if (error instanceof LegalHoldError) return NextResponse.json({ error: ACCOUNT_CLOSURE_BLOCKED_ADMIN_MESSAGE }, { status: 409 })
     console.error('Admin delete child profile error:', error)
     return NextResponse.json({ error: 'Failed to delete child profile' }, { status: 500 })
   }
