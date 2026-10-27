@@ -60,12 +60,13 @@ export default function SubscriptionPage() {
     toast.info(`Only the account holder${ownerName ? ` (${ownerName})` : ''} can change this family's plan. Since you were invited to this family, please ask them to upgrade or downgrade.`)
     return true
   }
-  const { subscription, access, trial, isLoading: subLoading, startTrial, cancelTrial } = useSubscription(primaryFamily?.id || null)
+  const { subscription, access, trial, isLoading: subLoading, startTrial, cancelTrial, mutate: refreshSubscription } = useSubscription(primaryFamily?.id || null)
   const tiers = useSubscriptionTiers()
 
   const [isStartingTrial, setIsStartingTrial] = useState(false)
   const [isCanceling, setIsCanceling] = useState(false)
   const [isCancelingTrial, setIsCancelingTrial] = useState(false)
+  const [isResuming, setIsResuming] = useState(false)
 
   // Map tier names to API tier keys
   const tierNameToKey: Record<string, string> = {
@@ -106,6 +107,31 @@ export default function SubscriptionPage() {
       toast.success('Your free trial has been cancelled.')
     } else {
       toast.error(result.error || 'Failed to cancel trial')
+    }
+  }
+
+  // Stops a pending cancellation (app/api/subscription/resume).
+  const handleResume = async () => {
+    if (ownerOnly()) return
+    if (!primaryFamily?.id) return
+    setIsResuming(true)
+    try {
+      const res = await authFetch('/api/subscription/resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ familyId: primaryFamily.id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        await refreshSubscription()
+        toast.success(`Your ${formatTierName(currentTier)} plan will keep renewing.`)
+      } else {
+        toast.error(data.error || 'Failed to resume your plan')
+      }
+    } catch {
+      toast.error('Something went wrong resuming your plan')
+    } finally {
+      setIsResuming(false)
     }
   }
 
@@ -154,6 +180,9 @@ export default function SubscriptionPage() {
 
   const currentTier = access.tier.toUpperCase()
   const isTrialing = subscription?.status === 'TRIALING'
+  // A pending cancellation ends on cancelAt (portal, flexible billing) or at the period end.
+  const planEndIso = subscription?.cancelAt || subscription?.currentPeriodEnd
+  const planEndsOn = planEndIso ? new Date(planEndIso).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : null
   const trialEndsAt = subscription?.trialEnd ? new Date(subscription.trialEnd) : null
 
   const daysLeft = trialEndsAt ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : 0
@@ -203,7 +232,7 @@ export default function SubscriptionPage() {
               <div className="flex shrink-0 gap-2">
                 <Button variant="outline" size="sm" onClick={handleManageBilling} disabled={isCanceling}>
                   {isCanceling ? <Spinner className="h-4 w-4 sm:mr-1.5" /> : <CreditCard className="h-4 w-4 sm:mr-1.5" />}
-                  <span className="hidden sm:inline">{subscription?.cancelAtPeriodEnd ? 'Resume / manage' : 'Manage billing'}</span>
+                  <span className="hidden sm:inline">Manage billing</span>
                 </Button>
                 {!subscription?.cancelAtPeriodEnd && (
                   <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleManageBilling} disabled={isCanceling}>
@@ -245,13 +274,19 @@ export default function SubscriptionPage() {
           )}
 
           {subscription?.cancelAtPeriodEnd && !isTrialing && (
-            <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 p-2.5 text-sm">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>
-                Cancelled
-                {subscription.currentPeriodEnd ? ` - ends ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}` : ' at the end of the billing period'}
-                . You keep premium features until then.
+            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-500/10 p-2.5 text-sm" data-testid="cancel-pending">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1">
+                {planEndsOn
+                  ? `Your plan ends on ${planEndsOn}. You keep ${formatTierName(currentTier)} until then.`
+                  : `Your plan ends at the end of this billing period. You keep ${formatTierName(currentTier)} until then.`}
               </span>
+              {canPurchase && (
+                <Button size="sm" onClick={handleResume} disabled={isResuming} className="shrink-0">
+                  {isResuming ? <Spinner className="mr-1.5 h-4 w-4" /> : null}
+                  Resume
+                </Button>
+              )}
             </div>
           )}
 
