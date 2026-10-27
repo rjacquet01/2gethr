@@ -39,7 +39,7 @@ export default function PrivacyPage() {
         <h1 className="text-3xl font-bold mb-8">Privacy Policy</h1>
 
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: October 22, 2026</p>
+          <p className="text-muted-foreground">Last updated: October 26, 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Who we are</h2>
@@ -47,7 +47,9 @@ export default function PrivacyPage() {
               Togethr is operated by Togethr, LLC ("Togethr", "we", "our", or "us"). This Privacy Policy
               explains what personal information we collect through the Togethr website, web app and
               mobile apps (the "Service"), how we use it, who we share it with, and the choices you have.
-              Togethr, LLC is the company responsible for your information.
+              Togethr, LLC is the company responsible for your information. The Togethr Android app is
+              published on Google Play by Nexus Calibration Maintenance Management, LLC on behalf of
+              Togethr, LLC. Togethr, LLC remains responsible for your information as described in this policy.
             </p>
           </section>
 
