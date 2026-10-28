@@ -162,3 +162,7 @@ real email. Read a script's header before running it.
   `.ts` or `.tsx` edit. It runs the incremental type check and ESLint (errors only),
   and reports problems in that file. It never blocks.
 - Personal overrides go in `.claude/settings.local.json`, which git ignores.
+
+## Follow-ups
+
+- Follow-up: when a legal hold closes, auto-delete location history for anyone who turned sharing off and finish pending account deletions (option B).
