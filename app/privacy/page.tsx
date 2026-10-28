@@ -10,6 +10,12 @@ export const metadata = {
 
 const CONTACT = 'admin@mytogethr.com'
 
+// SMS PROVIDER NAME: set it here (e.g. 'Twilio' or 'Telnyx') once chosen. While
+// null, the policy says "our text-message delivery provider" (sections 5 and 6).
+const SMS_PROVIDER_NAME: string | null = null
+const SMS_PROVIDER = SMS_PROVIDER_NAME ?? 'our text-message delivery provider'
+const SMS_PROVIDER_START = SMS_PROVIDER.charAt(0).toUpperCase() + SMS_PROVIDER.slice(1)
+
 function Contact() {
   return (
     <a href={`mailto:${CONTACT}`} className="text-primary hover:underline">
@@ -39,7 +45,7 @@ export default function PrivacyPage() {
         <h1 className="text-3xl font-bold mb-8">Privacy Policy</h1>
 
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: October 26, 2026</p>
+          <p className="text-muted-foreground">Last updated: October 28, 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Who we are</h2>
@@ -135,7 +141,7 @@ export default function PrivacyPage() {
                   <li>Neon: database hosting</li>
                   <li>Stripe: payment processing and billing</li>
                   <li>Resend: transactional and notification email</li>
-                  <li>Twilio: sends the text messages (SMS) you turn on</li>
+                  <li>{SMS_PROVIDER_START}: sends the text messages (SMS) you turn on</li>
                   <li>Google Firebase Cloud Messaging: push notifications</li>
                   <li>Open-Meteo: weather forecasts. We send approximate coordinates of your family's saved Home place (or another saved place if the family has no place named Home), rounded to about 1 km, through our servers to retrieve the forecast shown on your calendar. No names, addresses or account details are sent.</li>
                   <li>OpenStreetMap-based services: map tiles and address lookup (the address or coordinates you look up may be sent to them)</li>
@@ -165,7 +171,7 @@ export default function PrivacyPage() {
               <li>We do not send marketing texts.</li>
               <li>
                 Mobile numbers and SMS consent are not sold or shared with third parties or affiliates
-                for marketing or promotional purposes. Twilio sends our texts as a service provider
+                for marketing or promotional purposes. {SMS_PROVIDER_START} sends our texts as a service provider
                 (section 5) and uses your number only to deliver them.
               </li>
               <li>
@@ -251,6 +257,10 @@ export default function PrivacyPage() {
               <li>Turn location sharing and notifications on or off</li>
               <li>Opt out of non-essential email</li>
             </ul>
+            <p>
+              We may keep an account or its location history while an open legal hold or legal obligation
+              requires it, and we delete it once the hold ends, in line with this policy.
+            </p>
             <p>
               Depending on where you live (for example California, other U.S. states, or the EU/UK), you
               may also have the right to request access, correction, deletion or portability of your
