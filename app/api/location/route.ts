@@ -9,7 +9,13 @@ import { z } from "zod"
 import { sendSMSMetered, SMS_TEMPLATES, isSmsConfigured } from "@/lib/services/sms"
 import { sendEmail, EMAIL_TEMPLATES, isResendConfigured } from "@/lib/services/email"
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
-import { distanceMeters, evaluateGeofence, confirmsDeparture, suggestedIntervalForGaps } from "@/lib/geofence"
+import {
+  distanceMeters,
+  suggestedIntervalForGaps,
+  planGeofenceTransitions,
+  GEOFENCE_FIX_MAX_AGE_MS,
+  type GeofenceFix,
+} from "@/lib/geofence"
 import { shouldMergeWithPrevious, oneTimePingId, isOneTimePingId } from "@/lib/location-dedupe"
 import { answerLocationRequests, fulfillLocationRequests } from "@/lib/location-schema"
 import { alertFamilyAdults } from "@/lib/family-alerts"
@@ -356,19 +362,20 @@ export async function POST(request: NextRequest) {
       ORDER BY timestamp DESC
       LIMIT 1
     `
-    const prevPing = prevPings[0]
+    const prevPing: GeofenceFix | null = prevPings[0]
       ? {
           latitude: Number(prevPings[0].latitude),
           longitude: Number(prevPings[0].longitude),
           accuracy: prevPings[0].accuracy != null ? Number(prevPings[0].accuracy) : null,
-          ageSec: (Date.now() - new Date(prevPings[0].timestamp).getTime()) / 1000,
+          timeMs: new Date(prevPings[0].timestamp).getTime(),
         }
       : null
     const prevBattery = prevPings[0]?.battery_level != null ? Number(prevPings[0].battery_level) : null
 
     // Fixes queued while the phone had no signal: store them (oldest first,
     // skipping duplicates and anything absurdly old/future) so the history
-    // trail has no gaps. Only the newest fix drives geofence alerts below.
+    // trail has no gaps. Newly stored ones are run past the places below,
+    // before the newest fix, so a delayed arrival still counts.
     // A one-time share is a single fix: no offline backlog comes with it.
     const nowMs = Date.now()
     const queued = (oneTime ? [] : validatedData.pings ?? [])
@@ -377,8 +384,9 @@ export async function POST(request: NextRequest) {
         return Number.isFinite(t) && t > nowMs - 7 * 86400_000 && t < nowMs + 300_000
       })
       .sort((a, b) => Date.parse(a.timestamp as string) - Date.parse(b.timestamp as string))
+    const queuedFixes: GeofenceFix[] = []
     for (const q of queued) {
-      await sql`
+      const inserted = await sql`
         INSERT INTO location_pings (
           id, user_id, latitude, longitude, accuracy, altitude, speed, heading, battery_level, timestamp
         )
@@ -388,8 +396,38 @@ export async function POST(request: NextRequest) {
         WHERE NOT EXISTS (
           SELECT 1 FROM location_pings WHERE user_id = ${user.id} AND timestamp = ${q.timestamp}
         )
+        RETURNING id
       `
+      // A resent backlog (the reply to an earlier delivery was lost) is
+      // already stored and was already judged: only new fixes count.
+      if (inserted.length > 0) {
+        queuedFixes.push({
+          latitude: q.latitude,
+          longitude: q.longitude,
+          accuracy: q.accuracy,
+          timeMs: Date.parse(q.timestamp as string),
+          queued: true,
+        })
+      }
     }
+
+    // A phone with a wrong clock must not write a future-dated "latest" fix
+    // (it would stay on the map and block departure/stale checks): clamp
+    // anything more than 5 minutes ahead to now, like queued fixes above.
+    const sentMs = validatedData.timestamp ? Date.parse(validatedData.timestamp) : NaN
+    const pingTimestamp = Number.isFinite(sentMs) && sentMs <= Date.now() + 300_000
+      ? (validatedData.timestamp as string)
+      : new Date().toISOString()
+    // Oldest first, the newest fix last.
+    const geofenceFixes: GeofenceFix[] = [
+      ...queuedFixes,
+      {
+        latitude: validatedData.latitude,
+        longitude: validatedData.longitude,
+        accuracy: validatedData.accuracy,
+        timeMs: Date.parse(pingTimestamp),
+      },
+    ]
 
     // Geofences are evaluated on every report, before storing it: whether this
     // report changed an arrival/departure decides below whether it may be
@@ -406,9 +444,7 @@ export async function POST(request: NextRequest) {
       const geo = await checkGeofences(
         user.id,
         setting.family_id,
-        validatedData.latitude,
-        validatedData.longitude,
-        validatedData.accuracy,
+        geofenceFixes,
         prevPing,
         alertPlaceLimit(subscription.tier)
       )
@@ -434,9 +470,7 @@ export async function POST(request: NextRequest) {
       const geo = await checkGeofences(
         user.id,
         other.family_id as string,
-        validatedData.latitude,
-        validatedData.longitude,
-        validatedData.accuracy,
+        geofenceFixes,
         prevPing,
         alertPlaceLimit(otherSub.tier)
       )
@@ -449,13 +483,6 @@ export async function POST(request: NextRequest) {
     // instead of adding one (lib/location-dedupe.ts). Last-seen stays fresh;
     // a new row is still written every few minutes, after real movement, or
     // when a geofence state changed.
-    // A phone with a wrong clock must not write a future-dated "latest" fix
-    // (it would stay on the map and block departure/stale checks): clamp
-    // anything more than 5 minutes ahead to now, like queued fixes above.
-    const sentMs = validatedData.timestamp ? Date.parse(validatedData.timestamp) : NaN
-    const pingTimestamp = Number.isFinite(sentMs) && sentMs <= Date.now() + 300_000
-      ? (validatedData.timestamp as string)
-      : new Date().toISOString()
     const merge = !oneTime && shouldMergeWithPrevious({
       prev: prevPings[0]
         ? { id: prevPings[0].id as string, latitude: Number(prevPings[0].latitude), longitude: Number(prevPings[0].longitude) }
@@ -577,10 +604,9 @@ export async function POST(request: NextRequest) {
 async function checkGeofences(
   userId: string,
   familyId: string,
-  latitude: number,
-  longitude: number,
-  accuracy?: number | null,
-  prevPing?: { latitude: number; longitude: number; accuracy: number | null; ageSec: number } | null,
+  /** Oldest first: newly stored queued fixes, then the newest fix. */
+  fixes: GeofenceFix[],
+  prevPing: GeofenceFix | null,
   /** Places the plan allows alerts on (null = all): the family's oldest ones. */
   alertLimit: number | null = null
 ): Promise<{ gaps: number[]; recorded: number }> {
@@ -614,52 +640,52 @@ async function checkGeofences(
   // Last arrival/departure state per place for this user, in one query.
   // Events from before a place was turned on/off, moved or resized don't count.
   const lastRows = await sql`
-    SELECT DISTINCT ON (ge.saved_place_id) ge.saved_place_id, ge.event_type
+    SELECT DISTINCT ON (ge.saved_place_id) ge.saved_place_id, ge.event_type, ge.timestamp
     FROM geofence_events ge
     JOIN saved_places sp ON sp.id = ge.saved_place_id
     WHERE ge.user_id = ${userId}
       AND ge.timestamp > COALESCE(sp.geofence_state_reset_at, '-infinity'::timestamptz)
     ORDER BY ge.saved_place_id, ge.timestamp DESC
   `
-  const lastByPlace = new Map<string, string>()
-  for (const r of lastRows) lastByPlace.set(r.saved_place_id, r.event_type)
+  const lastByPlace = new Map<string, { type: string; atMs: number }>()
+  for (const r of lastRows) lastByPlace.set(r.saved_place_id, { type: r.event_type, atMs: new Date(r.timestamp).getTime() })
 
-  // Distance to each place's edge (negative = inside); each gets its own hint.
-  const gaps: number[] = []
+  // Hysteresis, accuracy gating and departure confirmation live in
+  // lib/geofence.ts (unit tested). Each fix carries the state to the next.
+  const nowMs = Date.now()
+  const { transitions, gaps } = planGeofenceTransitions(
+    places.map((p) => ({
+      id: p.id as string,
+      latitude: Number(p.latitude),
+      longitude: Number(p.longitude),
+      radius: Number(p.radius),
+      wasInside: lastByPlace.get(p.id)?.type === "ARRIVAL",
+      lastEventMs: lastByPlace.get(p.id)?.atMs ?? null,
+    })),
+    fixes,
+    prevPing,
+    nowMs
+  )
+  const byId = new Map(places.map((p) => [p.id as string, p]))
   let recordedCount = 0
 
-  for (const place of places) {
-    const radius = Number(place.radius)
-    const distance = distanceMeters(latitude, longitude, Number(place.latitude), Number(place.longitude))
-    const gap = distance - radius
-    gaps.push(gap)
-
-    const wasInside = lastByPlace.get(place.id) === "ARRIVAL"
-
-    // Hysteresis + accuracy gating live in lib/geofence.ts (unit tested).
-    const transition = evaluateGeofence({ distance, accuracy, radius, wasInside })
-    if (!transition) continue
-
-    // A departure also needs the previous fix (if it's recent) to be trusted
-    // (accuracy within half the radius) and outside the radius, so a one-off
-    // outlier fix can't fire a false "left".
-    if (transition === "DEPARTURE" && prevPing && prevPing.ageSec < 600) {
-      const prevDistance = distanceMeters(prevPing.latitude, prevPing.longitude, Number(place.latitude), Number(place.longitude))
-      if (!confirmsDeparture({ distance: prevDistance, accuracy: prevPing.accuracy }, radius)) continue
-    }
-
+  for (const t of transitions) {
+    const place = byId.get(t.placeId)!
     // State is always recorded so arrival/departure tracking stays correct
     // even when only one of the two alerts is enabled (previously a place
     // with arrival alerts off could never report a departure). The insert is
     // skipped if the same event was just written, which stops two
     // overlapping pings from double-alerting.
-    const recorded = await recordGeofenceEvent(userId, place.id, transition, latitude, longitude)
+    const recorded = await recordGeofenceEvent(userId, place.id, t.transition, t.fix.latitude, t.fix.longitude, t.atMs)
     if (!recorded) continue
     recordedCount++
 
-    const wantsAlert = transition === "ARRIVAL" ? place.alert_on_arrival : place.alert_on_departure
-    if (wantsAlert) {
-      await createGeofenceNotification(userId, familyId, place.name, transition, place.notify_channels)
+    // A backlog older than the time window only updates the state: an alert
+    // hours after the fact would read as if it just happened.
+    const fresh = t.fix.timeMs >= nowMs - GEOFENCE_FIX_MAX_AGE_MS
+    const wantsAlert = t.transition === "ARRIVAL" ? place.alert_on_arrival : place.alert_on_departure
+    if (wantsAlert && fresh) {
+      await createGeofenceNotification(userId, familyId, place.name, t.transition, place.notify_channels)
     }
   }
 
@@ -671,17 +697,21 @@ async function recordGeofenceEvent(
   placeId: string,
   eventType: "ARRIVAL" | "DEPARTURE",
   latitude: number,
-  longitude: number
+  longitude: number,
+  /** When it happened (geofenceEventTimeMs): the fix's own time, or now. */
+  atMs: number
 ): Promise<boolean> {
   const eventId = `gfe_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+  const at = new Date(atMs).toISOString()
   const rows = await sql`
     INSERT INTO geofence_events (id, user_id, saved_place_id, event_type, latitude, longitude, timestamp)
-    SELECT ${eventId}, ${userId}, ${placeId}, ${eventType}, ${latitude}, ${longitude}, NOW()
+    SELECT ${eventId}, ${userId}, ${placeId}, ${eventType}, ${latitude}, ${longitude}, ${at}::timestamptz
     WHERE NOT EXISTS (
       SELECT 1 FROM geofence_events
       WHERE user_id = ${userId} AND saved_place_id = ${placeId}
         AND event_type = ${eventType}
-        AND timestamp > NOW() - INTERVAL '45 seconds'
+        AND timestamp > ${at}::timestamptz - INTERVAL '45 seconds'
+        AND timestamp < ${at}::timestamptz + INTERVAL '45 seconds'
     )
     RETURNING id
   `
