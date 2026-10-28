@@ -128,6 +128,9 @@ real email. Read a script's header before running it.
   (mode OFF or share-with-family off, not pause) and when their account is deleted
   (`lib/location-history.ts`, `lib/account-closure.ts`). Kept while they still share with another family
   or a legal hold covers them.
+- Arrivals/departures (`planGeofenceTransitions`, `lib/geofence.ts`): every newly stored queued fix is judged,
+  oldest first, then the newest; trusted fixes only. `geofence_events.timestamp` is the fix's device time
+  when not in the future and at most 6 hours old, else now (`geofenceEventTimeMs`); no alert for older backlog.
 - Location: adults see children without sharing their own location. Adults see
   each other only after approval (`lib/location-access.ts`).
 - Android background sharing uses device tokens (`lib/device-token.ts`), handed over by a

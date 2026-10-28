@@ -1,5 +1,6 @@
 import assert from "node:assert"
-import { distanceMeters, evaluateGeofence, suggestedPingIntervalSec, suggestedIntervalForGaps, isTrustedFix, confirmsDeparture } from "../lib/geofence"
+import { distanceMeters, evaluateGeofence, suggestedPingIntervalSec, suggestedIntervalForGaps, isTrustedFix, confirmsDeparture,
+  geofenceEventTimeMs, planGeofenceTransitions, GEOFENCE_FIX_MAX_AGE_MS } from "../lib/geofence"
 
 const HOME = { lat: 37.7749, lng: -122.4194 }
 const R = 100
@@ -103,4 +104,70 @@ function latency(intervalSec: number) {
   return -1
 }
 console.log("walking past a fence: arrival delay @15s =", latency(15), "s; @300s =", latency(300) === -1 ? "MISSED entirely" : latency(300) + "s")
+// 9. Event time: the fix's own time, unless future or older than 6 hours.
+const NOW = Date.parse("2026-10-28T14:00:00Z")
+assert.strictEqual(geofenceEventTimeMs(NOW - 30 * 60_000, NOW), NOW - 30 * 60_000, "30 min old fix keeps its time")
+assert.strictEqual(geofenceEventTimeMs(NOW, NOW), NOW, "now is fine")
+assert.strictEqual(geofenceEventTimeMs(NOW + 1000, NOW), NOW, "future fix -> now")
+assert.strictEqual(geofenceEventTimeMs(NOW - GEOFENCE_FIX_MAX_AGE_MS, NOW), NOW - GEOFENCE_FIX_MAX_AGE_MS, "exactly 6 h is kept")
+assert.strictEqual(geofenceEventTimeMs(NOW - GEOFENCE_FIX_MAX_AGE_MS - 1, NOW), NOW, "older than 6 h -> now")
+assert.strictEqual(geofenceEventTimeMs(NaN, NOW), NOW, "no time -> now")
+
+// 10. Queued fixes are judged oldest first, with state carried between them.
+const WORK = { id: "work", latitude: HOME.lat, longitude: HOME.lng, radius: R, wasInside: false, lastEventMs: null }
+const fixAt = (north: number, acc: number, minAgo: number, queued = true) => ({
+  latitude: at(north).lat, longitude: at(north).lng, accuracy: acc, timeMs: NOW - minAgo * 60_000, queued,
+})
+{
+  // Arrived 8:30 in a delayed backlog; the newest fix (9:00) is inside but coarse.
+  const { transitions, gaps } = planGeofenceTransitions(
+    [WORK],
+    [fixAt(800, 10, 40), fixAt(20, 15, 30), fixAt(10, 15, 20), fixAt(0, 200, 0, false)],
+    null,
+    NOW
+  )
+  assert.deepStrictEqual(transitions.map((t) => [t.transition, t.atMs]), [["ARRIVAL", NOW - 30 * 60_000]],
+    "arrival found in the backlog, stamped with its fix time, recorded once")
+  assert.strictEqual(gaps.length, 1)
+  assert.ok(gaps[0] < 0, "gaps come from the newest fix")
+}
+{
+  // Old behaviour lost this: arrive and leave both inside the backlog.
+  const { transitions } = planGeofenceTransitions(
+    [WORK],
+    [fixAt(10, 10, 50), fixAt(400, 10, 20), fixAt(600, 10, 15), fixAt(2000, 10, 0, false)],
+    null,
+    NOW
+  )
+  assert.deepStrictEqual(transitions.map((t) => t.transition), ["ARRIVAL", "DEPARTURE"], "arrive and leave from the backlog")
+  assert.strictEqual(transitions[1].atMs, NOW - 20 * 60_000)
+}
+{
+  // Trusted-fix rule still applies to queued fixes.
+  const { transitions } = planGeofenceTransitions([WORK], [fixAt(10, 80, 30), fixAt(5, 90, 0, false)], null, NOW)
+  assert.deepStrictEqual(transitions, [], "imprecise queued fixes never arrive")
+}
+{
+  // A queued fix no newer than the place's last event can't change it; the newest fix can.
+  const place = { ...WORK, wasInside: true, lastEventMs: NOW - 10 * 60_000 }
+  const { transitions } = planGeofenceTransitions([place], [fixAt(2000, 10, 20), fixAt(2000, 10, 15)], null, NOW)
+  assert.deepStrictEqual(transitions, [], "stale backlog ignored")
+  const live = planGeofenceTransitions([place], [fixAt(2000, 10, 1), fixAt(2000, 10, 0, false)], null, NOW)
+  assert.deepStrictEqual(live.transitions.map((t) => t.transition), ["DEPARTURE"])
+}
+{
+  // Departure still needs the fix before it to agree (one stray fix can't leave).
+  const place = { ...WORK, wasInside: true, lastEventMs: NOW - 60 * 60_000 }
+  const prev = fixAt(10, 10, 2, false)
+  const one = planGeofenceTransitions([place], [fixAt(2000, 10, 0, false)], prev, NOW)
+  assert.deepStrictEqual(one.transitions, [], "single outside fix right after an inside one doesn't depart")
+  const two = planGeofenceTransitions([place], [fixAt(2000, 10, 1), fixAt(2000, 10, 0, false)], prev, NOW)
+  assert.deepStrictEqual(two.transitions.map((t) => [t.transition, t.atMs]), [["DEPARTURE", NOW]])
+}
+{
+  // A day-old backlog arrival is recorded at now (outside the 6 h window).
+  const { transitions } = planGeofenceTransitions([WORK], [fixAt(0, 10, 24 * 60), fixAt(0, 10, 0, false)], null, NOW)
+  assert.deepStrictEqual(transitions.map((t) => [t.transition, t.atMs]), [["ARRIVAL", NOW]])
+}
+
 console.log("geofence tests passed")

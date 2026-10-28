@@ -106,3 +106,90 @@ export function suggestedIntervalForGaps(gaps: number[], movedMeters: number | n
   }
   return best
 }
+
+/** A recorded arrival/departure takes the fix's own time when it is at most this old. */
+export const GEOFENCE_FIX_MAX_AGE_MS = 6 * 3600_000
+
+/** A departure needs the fix before it to agree when the two are this close in time. */
+export const DEPARTURE_CONFIRM_WINDOW_SEC = 600
+
+/**
+ * When an arrival/departure happened: the device's fix time, unless it is in
+ * the future or older than GEOFENCE_FIX_MAX_AGE_MS (wrong clock, very old
+ * backlog), then the server's now.
+ */
+export function geofenceEventTimeMs(fixMs: number, nowMs: number): number {
+  return Number.isFinite(fixMs) && fixMs <= nowMs && fixMs >= nowMs - GEOFENCE_FIX_MAX_AGE_MS ? fixMs : nowMs
+}
+
+export interface GeofenceFix {
+  latitude: number
+  longitude: number
+  accuracy?: number | null
+  /** Device time of the fix. */
+  timeMs: number
+  /** Sent late from the phone's offline queue (not the newest fix). */
+  queued?: boolean
+}
+
+export interface GeofencePlace {
+  id: string
+  latitude: number
+  longitude: number
+  radius: number
+  /** Last recorded event here was an arrival. */
+  wasInside: boolean
+  /** Time of that last recorded event, if any. */
+  lastEventMs: number | null
+}
+
+export interface PlannedTransition {
+  placeId: string
+  transition: "ARRIVAL" | "DEPARTURE"
+  fix: GeofenceFix
+  /** geofence_events.timestamp to record (geofenceEventTimeMs). */
+  atMs: number
+}
+
+/**
+ * Run fixes (oldest first, the newest last) past each place, carrying the
+ * inside/outside state from one fix to the next, so an arrival seen only in a
+ * delayed backlog is still recorded, at the time it happened. Each fix goes
+ * through evaluateGeofence (trusted fixes only), and a departure still needs
+ * the fix before it to agree when the two are close in time. A queued fix no
+ * newer than the place's last recorded event can't change it. `gaps` are the
+ * newest fix's distances to each place's edge.
+ */
+export function planGeofenceTransitions(
+  places: GeofencePlace[],
+  fixes: GeofenceFix[],
+  prev: GeofenceFix | null,
+  nowMs: number
+): { transitions: PlannedTransition[]; gaps: number[] } {
+  const state = new Map(places.map((p) => [p.id, { inside: p.wasInside, lastMs: p.lastEventMs }]))
+  const transitions: PlannedTransition[] = []
+  let before = prev
+  for (const fix of fixes) {
+    for (const place of places) {
+      const s = state.get(place.id)!
+      if (fix.queued && s.lastMs != null && fix.timeMs <= s.lastMs) continue
+      const distance = distanceMeters(fix.latitude, fix.longitude, place.latitude, place.longitude)
+      const transition = evaluateGeofence({ distance, accuracy: fix.accuracy, radius: place.radius, wasInside: s.inside })
+      if (!transition) continue
+      if (transition === "DEPARTURE" && before && Math.abs(fix.timeMs - before.timeMs) / 1000 < DEPARTURE_CONFIRM_WINDOW_SEC) {
+        const prevDistance = distanceMeters(before.latitude, before.longitude, place.latitude, place.longitude)
+        if (!confirmsDeparture({ distance: prevDistance, accuracy: before.accuracy }, place.radius)) continue
+      }
+      const atMs = geofenceEventTimeMs(fix.timeMs, nowMs)
+      s.inside = transition === "ARRIVAL"
+      s.lastMs = atMs
+      transitions.push({ placeId: place.id, transition, fix, atMs })
+    }
+    before = fix
+  }
+  const last = fixes[fixes.length - 1]
+  const gaps = last
+    ? places.map((p) => distanceMeters(last.latitude, last.longitude, p.latitude, p.longitude) - p.radius)
+    : []
+  return { transitions, gaps }
+}
