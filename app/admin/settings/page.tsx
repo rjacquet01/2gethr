@@ -557,9 +557,11 @@ export default function AdminSettingsPage() {
                     <div key={log.id} className="flex items-start justify-between border-b pb-4 last:border-0">
                       <div>
                         <p className="font-medium">{log.action.replace(/_/g, ' ')}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {log.targetType}: {log.targetId}
-                        </p>
+                        {(log.targetType || log.targetId) && (
+                          <p className="text-sm text-muted-foreground">
+                            {[log.targetType, log.targetId].filter(Boolean).join(': ')}
+                          </p>
+                        )}
                         {log.ipAddress && (
                           <p className="text-xs text-muted-foreground">IP: {log.ipAddress}</p>
                         )}

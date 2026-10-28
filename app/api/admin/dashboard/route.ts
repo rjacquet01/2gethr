@@ -50,7 +50,8 @@ export async function GET(request: NextRequest) {
     const subscriptionTotals = await sql`
       SELECT 
         COUNT(*) as total,
-        COUNT(*) FILTER (WHERE status = 'ACTIVE') as active,
+        -- "Active subscriptions" are paying ones; a Free plan row is ACTIVE too.
+        COUNT(*) FILTER (WHERE status = 'ACTIVE' AND tier <> 'FREE') as active,
         COUNT(*) FILTER (WHERE status = 'TRIALING') as trialing,
         COUNT(*) FILTER (WHERE status = 'PAST_DUE') as past_due,
         COUNT(*) FILTER (WHERE status = 'CANCELLED') as cancelled

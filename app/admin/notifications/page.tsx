@@ -368,13 +368,23 @@ export default function AdminNotificationsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Alert>
-                <AlertTriangle className="w-4 h-4" />
-                <AlertTitle>Environment Variables Required</AlertTitle>
-                <AlertDescription>
-                  Add these to your Vercel project settings: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER
-                </AlertDescription>
-              </Alert>
+              {services?.sms?.configured ? (
+                <Alert className="border-green-200 bg-green-50">
+                  <Check className="w-4 h-4 text-green-600" />
+                  <AlertTitle className="text-green-800">SMS Configured</AlertTitle>
+                  <AlertDescription className="text-green-700">
+                    The SMS provider&apos;s keys are set and texts are ready to send.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <Alert>
+                  <AlertTriangle className="w-4 h-4" />
+                  <AlertTitle>Environment Variables Required</AlertTitle>
+                  <AlertDescription>
+                    Add these to your Vercel project settings: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER
+                  </AlertDescription>
+                </Alert>
+              )}
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
