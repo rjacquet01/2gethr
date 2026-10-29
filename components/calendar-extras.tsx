@@ -219,12 +219,82 @@ export function participantLooks(family?: {
   return looks
 }
 
+type Participant = { userId?: string | null; childProfileId?: string | null; name?: string }
+
+function lookFor(p: Participant, members?: ParticipantLook[]) {
+  return members?.find((x) =>
+    (p.userId && x.userId && String(x.userId) === String(p.userId)) ||
+    (p.childProfileId && x.childProfileId && String(x.childProfileId) === String(p.childProfileId)))
+}
+
+function ParticipantAvatar({ p, members, className }: { p: Participant; members?: ParticipantLook[]; className?: string }) {
+  const m = lookFor(p, members)
+  return (
+    <MemberAvatar
+      name={p.name}
+      avatarUrl={m?.avatarUrl}
+      color={m?.color || hashColor(p.name || '')}
+      emoji={m?.emoji}
+      className={className}
+    />
+  )
+}
+
+/** Everyone in these participant lists once (by user, child profile, else name), in order. */
+export function uniqueParticipants(lists: Array<Participant[] | undefined>): Participant[] {
+  const seen = new Set<string>()
+  const out: Participant[] = []
+  for (const list of lists) {
+    for (const p of list || []) {
+      if (!p.name) continue
+      const key = p.userId ? `u:${p.userId}` : p.childProfileId ? `c:${p.childProfileId}` : `n:${p.name}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(p)
+    }
+  }
+  return out
+}
+
+/**
+ * A compact, overlapping row of faces for tight spots (the week grid). Each
+ * face has a white ring so it stays readable on a colored event chip.
+ */
+export function ParticipantFaces({
+  participants,
+  members,
+  max = 3,
+  className,
+}: {
+  participants?: Participant[]
+  members?: ParticipantLook[]
+  max?: number
+  /** Size of each face (default h-4 w-4). */
+  className?: string
+}) {
+  const list = (participants || []).filter((p) => p.name)
+  if (list.length === 0) return null
+  return (
+    <span className="inline-flex shrink-0 items-center -space-x-1" title={list.map((p) => p.name).join(', ')}>
+      {list.slice(0, max).map((p, i) => (
+        <ParticipantAvatar
+          key={i}
+          p={p}
+          members={members}
+          className={cn('h-4 w-4 text-[8px] ring-1 ring-background', className)}
+        />
+      ))}
+      {list.length > max && <span className="pl-1.5 text-[10px] font-medium opacity-80">+{list.length - max}</span>}
+    </span>
+  )
+}
+
 export function ParticipantDots({
   participants,
   members,
   className,
 }: {
-  participants?: Array<{ userId?: string | null; childProfileId?: string | null; name?: string }>
+  participants?: Participant[]
   members?: ParticipantLook[]
   /** Size of each avatar (default h-5 w-5). */
   className?: string
@@ -233,22 +303,11 @@ export function ParticipantDots({
   if (list.length === 0) return null
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1">
-      {list.slice(0, 6).map((p, i) => {
-        const m = members?.find((x) =>
-          (p.userId && x.userId && String(x.userId) === String(p.userId)) ||
-          (p.childProfileId && x.childProfileId && String(x.childProfileId) === String(p.childProfileId)))
-        return (
-          <span key={i} title={p.name} className="inline-flex">
-            <MemberAvatar
-              name={p.name}
-              avatarUrl={m?.avatarUrl}
-              color={m?.color || hashColor(p.name || '')}
-              emoji={m?.emoji}
-              className={cn('h-5 w-5 text-[10px]', className)}
-            />
-          </span>
-        )
-      })}
+      {list.slice(0, 6).map((p, i) => (
+        <span key={i} title={p.name} className="inline-flex">
+          <ParticipantAvatar p={p} members={members} className={cn('h-5 w-5 text-[10px]', className)} />
+        </span>
+      ))}
       {list.length > 6 && <span className="text-xs text-muted-foreground">+{list.length - 6}</span>}
     </div>
   )
