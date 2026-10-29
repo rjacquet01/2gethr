@@ -54,7 +54,7 @@ const faqs = [
       },
       {
         question: 'How do I set up event reminders?',
-        answer: `When creating or editing an event, choose how long before it starts you want to be reminded. Reminders arrive by push notification and email. Text message alerts on the ${PLUS.name} and ${PREMIUM.name} plans are coming soon. Choose your default reminder times and turn each notification type on or off in Settings > Notifications. Custom reminder times are available on ${PLUS.name} and ${PREMIUM.name}.`
+        answer: `When creating or editing an event, choose how long before it starts you want to be reminded. Reminders arrive by push notification and email. Text message alerts are opt-in: a signed-in adult adds their mobile number in Settings > Profile and turns on text messages. Texts cover event and task reminders, task assignments, arrival alerts for saved places, and family safety alerts. ${PLUS.name} includes ${PLUS.limits.smsMonthlyQuota} texts a month and ${PREMIUM.name} includes ${PREMIUM.limits.smsMonthlyQuota}; urgent safety alerts don't count toward the limit. Message and data rates may apply. Reply STOP to any text to opt out, or HELP for help. Choose your default reminder times and turn each notification type on or off in Settings > Notifications. Custom reminder times are available on ${PLUS.name} and ${PREMIUM.name}.`
       },
     ]
   },
