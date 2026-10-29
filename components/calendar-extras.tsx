@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { format, isSameDay, parseISO } from 'date-fns'
 import { Umbrella } from 'lucide-react'
 import { authFetch } from '@/hooks/use-auth'
+import { MemberAvatar } from '@/components/member-avatar'
 import { useMyRole } from '@/hooks/use-my-role'
 import { cn } from '@/lib/utils'
 import { chooseWeatherPlace, weatherPlaceLabel, weatherStatusFor, type WeatherStatus } from '@/lib/weather-prompt'
@@ -181,28 +182,70 @@ function hashColor(s: string) {
   return PALETTE[h % PALETTE.length]
 }
 
+/** How a family member or child looks: their photo, else emoji, else initials, in their color. */
+export interface ParticipantLook {
+  userId?: string | null
+  /** Children without a login are event participants by child profile. */
+  childProfileId?: string | null
+  avatarUrl?: string | null
+  color?: string | null
+  emoji?: string | null
+}
+
+/**
+ * Looks for everyone in a family (from useFamily: members and children). A
+ * child's own profile photo wins over their login's, as on the Family page.
+ */
+export function participantLooks(family?: {
+  members?: Array<{ id: string; userId: string; avatarUrl: string | null; color?: string | null; emoji?: string | null }>
+  children?: Array<{ id: string; familyMemberId?: string; avatarUrl: string | null; color?: string | null; emoji?: string | null }>
+} | null): ParticipantLook[] {
+  if (!family) return []
+  const members = family.members || []
+  const looks: ParticipantLook[] = (family.children || []).map((c) => {
+    const login = members.find((m) => m.id === c.familyMemberId)
+    return {
+      childProfileId: c.id,
+      userId: login?.userId ?? null,
+      avatarUrl: c.avatarUrl || login?.avatarUrl || null,
+      color: c.color || login?.color || null,
+      emoji: c.emoji || login?.emoji || null,
+    }
+  })
+  for (const m of members) {
+    if (looks.some((l) => l.userId && l.userId === m.userId)) continue
+    looks.push({ userId: m.userId, avatarUrl: m.avatarUrl, color: m.color, emoji: m.emoji })
+  }
+  return looks
+}
+
 export function ParticipantDots({
   participants,
   members,
+  className,
 }: {
-  participants?: Array<{ userId?: string | null; name?: string }>
-  members?: Array<{ userId: string; color?: string | null; emoji?: string | null }>
+  participants?: Array<{ userId?: string | null; childProfileId?: string | null; name?: string }>
+  members?: ParticipantLook[]
+  /** Size of each avatar (default h-5 w-5). */
+  className?: string
 }) {
   const list = (participants || []).filter((p) => p.name)
   if (list.length === 0) return null
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1">
       {list.slice(0, 6).map((p, i) => {
-        const m = members?.find((x) => p.userId && String(x.userId) === String(p.userId))
-        const color = m?.color || hashColor(p.name || '')
+        const m = members?.find((x) =>
+          (p.userId && x.userId && String(x.userId) === String(p.userId)) ||
+          (p.childProfileId && x.childProfileId && String(x.childProfileId) === String(p.childProfileId)))
         return (
-          <span
-            key={i}
-            title={p.name}
-            className="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-semibold text-white"
-            style={{ backgroundColor: color }}
-          >
-            {m?.emoji || (p.name || '?').trim().charAt(0).toUpperCase()}
+          <span key={i} title={p.name} className="inline-flex">
+            <MemberAvatar
+              name={p.name}
+              avatarUrl={m?.avatarUrl}
+              color={m?.color || hashColor(p.name || '')}
+              emoji={m?.emoji}
+              className={cn('h-5 w-5 text-[10px]', className)}
+            />
           </span>
         )
       })}
@@ -230,7 +273,7 @@ export function AgendaList({
   days: Date[]
   eventsFor: (d: Date) => any[]
   weather: Record<string, DayWeather>
-  members?: Array<{ userId: string; color?: string | null; emoji?: string | null }>
+  members?: ParticipantLook[]
   /** The event's color, as in month view: a category class, or a custom color style. */
   colorClass?: (e: { category: string; customColor?: string | null }) => string
   colorStyle?: (e: { customColor?: string | null }) => React.CSSProperties | undefined
@@ -275,7 +318,7 @@ export function AgendaList({
                         </span>
                       </div>
                       {e.location && <p className="truncate text-xs text-muted-foreground">{e.location}</p>}
-                      <ParticipantDots participants={e.participants} members={members} />
+                      <ParticipantDots participants={e.participants} members={members} className="h-7 w-7 text-sm" />
                     </div>
                   </Link>
                 </li>
