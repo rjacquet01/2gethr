@@ -193,3 +193,35 @@ export function planGeofenceTransitions(
     : []
   return { transitions, gaps }
 }
+
+/** A saved place as the Android app sees it: position and radius only. */
+export interface BoostPlace {
+  id: string
+  lat: number
+  lng: number
+  /** Radius in metres. */
+  r: number
+}
+
+/** At most this many places go to the phone. */
+export const MAX_BOOST_PLACES = 50
+
+/**
+ * Compact list of places for the phone's precise-location boost: no names or
+ * other details, coordinates rounded to ~1 m, each place once, capped.
+ */
+export function toBoostPlaces(rows: Record<string, unknown>[]): BoostPlace[] {
+  const out: BoostPlace[] = []
+  const seen = new Set<string>()
+  for (const row of rows) {
+    const id = String(row.id ?? "")
+    const lat = Number(row.latitude)
+    const lng = Number(row.longitude)
+    const r = Number(row.radius)
+    if (!id || seen.has(id) || !Number.isFinite(lat) || !Number.isFinite(lng) || !(r > 0)) continue
+    seen.add(id)
+    out.push({ id, lat: Math.round(lat * 1e5) / 1e5, lng: Math.round(lng * 1e5) / 1e5, r: Math.round(r) })
+    if (out.length >= MAX_BOOST_PLACES) break
+  }
+  return out
+}

@@ -1,6 +1,6 @@
 import assert from "node:assert"
 import { distanceMeters, evaluateGeofence, suggestedPingIntervalSec, suggestedIntervalForGaps, isTrustedFix, confirmsDeparture,
-  geofenceEventTimeMs, planGeofenceTransitions, GEOFENCE_FIX_MAX_AGE_MS } from "../lib/geofence"
+  geofenceEventTimeMs, planGeofenceTransitions, GEOFENCE_FIX_MAX_AGE_MS, toBoostPlaces, MAX_BOOST_PLACES } from "../lib/geofence"
 
 const HOME = { lat: 37.7749, lng: -122.4194 }
 const R = 100
@@ -168,6 +168,21 @@ const fixAt = (north: number, acc: number, minAgo: number, queued = true) => ({
   // A day-old backlog arrival is recorded at now (outside the 6 h window).
   const { transitions } = planGeofenceTransitions([WORK], [fixAt(0, 10, 24 * 60), fixAt(0, 10, 0, false)], null, NOW)
   assert.deepStrictEqual(transitions.map((t) => [t.transition, t.atMs]), [["ARRIVAL", NOW]])
+}
+
+// 11. Places for the phone's boost: position and radius only, rounded, once each, capped.
+{
+  const rows = [
+    { id: "p1", name: "Work", latitude: "37.7749123", longitude: -122.4194987, radius: 100.4, notify_channels: ["push"] },
+    { id: "p1", name: "Work", latitude: 37.7749123, longitude: -122.4194987, radius: 100 },
+    { id: "p2", latitude: 1, longitude: 2, radius: 0 },
+    { id: "", latitude: 1, longitude: 2, radius: 50 },
+    { id: "p3", latitude: "x", longitude: 2, radius: 50 },
+  ]
+  assert.deepStrictEqual(toBoostPlaces(rows), [{ id: "p1", lat: 37.77491, lng: -122.4195, r: 100 }], "compact, deduped, invalid dropped")
+  assert.ok(!("name" in toBoostPlaces(rows)[0]), "no names go to the phone")
+  const many = Array.from({ length: 80 }, (_, i) => ({ id: `p${i}`, latitude: 1, longitude: 2, radius: 50 }))
+  assert.strictEqual(toBoostPlaces(many).length, MAX_BOOST_PLACES, "capped")
 }
 
 console.log("geofence tests passed")

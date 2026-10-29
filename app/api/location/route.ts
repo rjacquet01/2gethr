@@ -1,7 +1,7 @@
 import { isUnderLegalHold } from "@/lib/legal"
 import { ensureLocationRequestsTable } from "@/lib/location-schema"
 import { NextRequest, NextResponse } from "next/server"
-import { ensurePlaceNotifyChannelsColumn, ensurePlaceMembersTable } from "@/lib/place-schema"
+import { geofencePlacesFor } from "@/lib/geofence-places"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, getUserWithFamily, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { verifyDeviceToken } from "@/lib/device-token"
@@ -14,6 +14,7 @@ import {
   suggestedIntervalForGaps,
   planGeofenceTransitions,
   GEOFENCE_FIX_MAX_AGE_MS,
+  toBoostPlaces,
   type GeofenceFix,
 } from "@/lib/geofence"
 import { shouldMergeWithPrevious, oneTimePingId, isOneTimePingId } from "@/lib/location-dedupe"
@@ -437,6 +438,8 @@ export async function POST(request: NextRequest) {
       : null
     let suggestedIntervalSec: number | null = null
     let geofenceChanged = false
+    // The places judged here, for the Android app's precise-location boost.
+    const placeRows: Record<string, unknown>[] = []
     // Not for a one-time share while sharing is off here: the last arrival/
     // departure state may be days old, so a single fix would fire a late
     // "arrived"/"left" alert (with no recent fix to confirm a departure).
@@ -449,6 +452,7 @@ export async function POST(request: NextRequest) {
         alertPlaceLimit(subscription.tier)
       )
       geofenceChanged = geo.recorded > 0
+      placeRows.push(...geo.places)
       // Only report faster near a boundary while actually moving; a phone
       // standing still (e.g. at home) keeps its normal interval.
       suggestedIntervalSec = suggestedIntervalForGaps(geo.gaps, moved)
@@ -475,6 +479,7 @@ export async function POST(request: NextRequest) {
         alertPlaceLimit(otherSub.tier)
       )
       if (geo.recorded > 0) geofenceChanged = true
+      placeRows.push(...geo.places)
       const hint = suggestedIntervalForGaps(geo.gaps, moved)
       if (hint != null && (suggestedIntervalSec == null || hint < suggestedIntervalSec)) suggestedIntervalSec = hint
     }
@@ -583,7 +588,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { pingId, suggestedIntervalSec, queuedAccepted: queued.length },
+      data: { pingId, suggestedIntervalSec, queuedAccepted: queued.length, places: toBoostPlaces(placeRows) },
     })
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -609,33 +614,9 @@ async function checkGeofences(
   prevPing: GeofenceFix | null,
   /** Places the plan allows alerts on (null = all): the family's oldest ones. */
   alertLimit: number | null = null
-): Promise<{ gaps: number[]; recorded: number }> {
-  // Geofence-enabled places in this family that apply to this person: ones
-  // assigned to nobody (everyone) or assigned to their membership here.
-  // LIMIT NULL is no limit.
-  await ensurePlaceNotifyChannelsColumn()
-  await ensurePlaceMembersTable()
-  const places = await sql`
-    SELECT sp.id, sp.name, sp.latitude, sp.longitude, sp.radius, sp.alert_on_arrival, sp.alert_on_departure, sp.notify_channels
-    FROM saved_places sp
-    WHERE sp.family_id = ${familyId} AND sp.geofence_enabled = true
-      AND sp.id IN (
-        SELECT id FROM saved_places
-        WHERE family_id = ${familyId} AND geofence_enabled = true
-        ORDER BY created_at ASC, id ASC
-        LIMIT ${alertLimit}
-      )
-      AND (
-        NOT EXISTS (SELECT 1 FROM saved_place_members spm WHERE spm.place_id = sp.id)
-        OR EXISTS (
-          SELECT 1 FROM saved_place_members spm
-          JOIN family_members fm ON fm.id = spm.family_member_id
-          WHERE spm.place_id = sp.id AND fm.user_id = ${userId}
-            AND fm.family_id = ${familyId} AND fm.is_active = true
-        )
-      )
-  `
-  if (places.length === 0) return { gaps: [], recorded: 0 }
+): Promise<{ gaps: number[]; recorded: number; places: Record<string, unknown>[] }> {
+  const places = await geofencePlacesFor(userId, familyId, alertLimit)
+  if (places.length === 0) return { gaps: [], recorded: 0, places }
 
   // Last arrival/departure state per place for this user, in one query.
   // Events from before a place was turned on/off, moved or resized don't count.
@@ -689,7 +670,7 @@ async function checkGeofences(
     }
   }
 
-  return { gaps, recorded: recordedCount }
+  return { gaps, recorded: recordedCount, places }
 }
 
 async function recordGeofenceEvent(

@@ -3,6 +3,8 @@ import { sql } from "@/lib/db"
 import { verifyDeviceToken } from "@/lib/device-token"
 import { hasPendingLocationRequest } from "@/lib/location-schema"
 import { guestForbidden } from "@/lib/permissions"
+import { boostPlacesForUser } from "@/lib/geofence-places"
+import type { BoostPlace } from "@/lib/geofence"
 
 // Cheap check the Android background service makes when nothing else has
 // reached the server for a while (app 1.2.5+: 2 min, 5 min paused; older: 45 s):
@@ -33,12 +35,24 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     console.error("poll pending check failed:", err)
   }
+  // While sharing: the places to switch on precise location near (app 1.2.10+).
+  // Left out on an error, so the phone keeps the list it has.
+  let places: BoostPlace[] | undefined = []
+  if (sharing) {
+    try {
+      places = await boostPlacesForUser(info.userId)
+    } catch (err) {
+      console.error("poll places failed:", err)
+      places = undefined
+    }
+  }
   return NextResponse.json({
     success: true,
     data: {
       sharing,
       requestPending,
       intervalSec: s?.update_interval_sec ?? 300,
+      places,
     },
   })
 }
