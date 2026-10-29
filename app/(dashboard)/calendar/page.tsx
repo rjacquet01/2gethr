@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
-import { useFamilies } from '@/hooks/use-family'
+import { useFamilies, useFamily } from '@/hooks/use-family'
 import { useEvents } from '@/hooks/use-events'
 import { customCategoryColor, formatCategory } from '@/lib/categories'
 import { Button } from '@/components/ui/button'
@@ -60,6 +60,7 @@ import {
   CellWeather,
   DayWeatherLine,
   ParticipantDots,
+  participantLooks,
   AgendaList,
   participantNames,
 } from '@/components/calendar-extras'
@@ -99,6 +100,9 @@ export default function CalendarPage() {
   
   const { families, isLoading: familiesLoading } = useFamilies()
   const primaryFamily = families[0]
+  // Members' and children's photos, emoji and colors, for who's in each event.
+  const { family: familyDetail } = useFamily(primaryFamily?.id)
+  const looks = useMemo(() => participantLooks(familyDetail), [familyDetail])
   const { weather, weatherStatus, role, placeLabel, isHomePlace, source: weatherSource } = useCalendarWeatherState(primaryFamily?.id)
   const [personFilter, setPersonFilter] = useState('ALL')
   
@@ -303,7 +307,7 @@ export default function CalendarPage() {
                 days={calendarDays.filter((d) => isSameMonth(d, currentDate))}
                 eventsFor={getEventsForDay}
                 weather={weather}
-                members={primaryFamily?.members}
+                members={looks}
                 colorClass={eventBg}
                 colorStyle={eventStyle}
               />
@@ -454,7 +458,7 @@ export default function CalendarPage() {
                               {event.location}
                             </p>
                           )}
-                          <ParticipantDots participants={event.participants as any} members={primaryFamily?.members} />
+                          <ParticipantDots participants={event.participants as any} members={looks} />
                           {(event.category || event.allDay) && (
                             <div className="mt-2">
                               {event.category && (
@@ -562,7 +566,7 @@ export default function CalendarPage() {
                             <span className="truncate">{event.location}</span>
                           </p>
                         )}
-                        <ParticipantDots participants={event.participants as any} members={primaryFamily?.members} />
+                        <ParticipantDots participants={event.participants as any} members={looks} />
                         {(event.category || event.allDay) && (
                           <div className="mt-3 flex flex-wrap gap-2">
                             {event.category && (
