@@ -60,7 +60,9 @@ import {
   CellWeather,
   DayWeatherLine,
   ParticipantDots,
+  ParticipantFaces,
   participantLooks,
+  uniqueParticipants,
   AgendaList,
   participantNames,
 } from '@/components/calendar-extras'
@@ -378,6 +380,14 @@ export default function CalendarPage() {
                                 {dayEvents.length} {dayEvents.length === 1 ? 'event' : 'events'}
                               </span>
                             )}
+                            {/* Week view: who is in that day's events. */}
+                            {viewMode === 'week' && (
+                              <ParticipantFaces
+                                participants={uniqueParticipants(dayEvents.map((e) => e.participants))}
+                                members={looks}
+                                max={2}
+                              />
+                            )}
                           </div>
                         )}
                       </div>
@@ -387,17 +397,24 @@ export default function CalendarPage() {
                           <div
                             key={event.id}
                             className={cn(
-                              'text-xs px-1.5 py-0.5 rounded truncate text-white',
+                              'text-xs px-1.5 py-0.5 rounded text-white',
+                              viewMode === 'week' ? 'min-w-0' : 'truncate',
                               eventBg(event)
                             )}
                             style={eventStyle(event)}
                           >
-                            {!(event.allDay || (event as any).isAllDay) && (
-                              <span className="opacity-80 mr-1">
-                                {format(parseISO(event.startTime), 'h:mma').toLowerCase()}
-                              </span>
+                            <span className={cn(viewMode === 'week' && 'block truncate')}>
+                              {!(event.allDay || (event as any).isAllDay) && (
+                                <span className="opacity-80 mr-1">
+                                  {format(parseISO(event.startTime), 'h:mma').toLowerCase()}
+                                </span>
+                              )}
+                              {event.title}
+                            </span>
+                            {/* Week view: who is in the event, under the title. */}
+                            {viewMode === 'week' && (
+                              <div className="mt-0.5 flex"><ParticipantFaces participants={event.participants} members={looks} /></div>
                             )}
-                            {event.title}
                           </div>
                         ))}
                         {dayEvents.length > 3 && (
