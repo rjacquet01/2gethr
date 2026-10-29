@@ -2,13 +2,14 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Logo } from '@/components/brand/logo'
+import { COMPANY_EMAIL, COMPANY_MAILING_ADDRESS, COMPANY_NAME } from '@/lib/company-info'
 
 export const metadata = {
   title: 'Privacy Policy | Togethr',
   description: 'Privacy Policy for Togethr, the family coordination app operated by Togethr, LLC',
 }
 
-const CONTACT = 'admin@mytogethr.com'
+const CONTACT = COMPANY_EMAIL
 
 // SMS PROVIDER NAME: set it here (e.g. 'Twilio' or 'Telnyx') once chosen. While
 // null, the policy says "our text-message delivery provider" (sections 5 and 6).
@@ -45,7 +46,7 @@ export default function PrivacyPage() {
         <h1 className="text-3xl font-bold mb-8">Privacy Policy</h1>
 
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: October 28, 2026</p>
+          <p className="text-muted-foreground">Last updated: October 29, 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Who we are</h2>
@@ -303,9 +304,11 @@ export default function PrivacyPage() {
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">13. Contact us</h2>
             <p>
-              Togethr, LLC
+              {COMPANY_NAME}
               <br />
               Massachusetts, United States
+              <br />
+              Mailing address: {COMPANY_MAILING_ADDRESS}
               <br />
               Contact: <Contact />
               <br />

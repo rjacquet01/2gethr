@@ -19,6 +19,7 @@ import {
   LifeBuoy,
 } from 'lucide-react'
 import { authFetch } from '@/hooks/use-events'
+import { COMPANY_EMAIL, COMPANY_MAILING_ADDRESS, COMPANY_NAME } from '@/lib/company-info'
 
 interface Ticket {
   id: string
@@ -124,7 +125,7 @@ export default function SupportPage() {
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </Link>
         <a
-          href="mailto:admin@mytogethr.com"
+          href={`mailto:${COMPANY_EMAIL}`}
           className="flex items-center gap-3 rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-purple-100 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400">
@@ -132,11 +133,14 @@ export default function SupportPage() {
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">Email us</p>
-            <p className="truncate text-xs text-muted-foreground">admin@mytogethr.com</p>
+            <p className="truncate text-xs text-muted-foreground">{COMPANY_EMAIL}</p>
           </div>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </a>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Mailing address: {COMPANY_NAME}, {COMPANY_MAILING_ADDRESS}
+      </p>
 
       {/* Tabs */}
       <div className="inline-flex rounded-lg bg-muted p-1">

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Logo } from '@/components/brand/logo'
+import { COMPANY_EMAIL, COMPANY_MAILING_ADDRESS, COMPANY_NAME } from '@/lib/company-info'
 
 export const metadata = {
   title: 'Terms of Service | Togethr',
@@ -29,7 +30,7 @@ export default function TermsPage() {
         <h1 className="text-3xl font-bold mb-8">Terms of Service</h1>
         
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-muted-foreground">Last updated: October 26, 2026</p>
+          <p className="text-muted-foreground">Last updated: October 29, 2026</p>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">1. Acceptance of Terms</h2>
@@ -205,19 +206,21 @@ export default function TermsPage() {
           <section className="space-y-4">
             <h2 className="text-xl font-semibold">14. Contact Us</h2>
             <p>
-              Togethr, LLC
+              {COMPANY_NAME}
               <br />
               Massachusetts, United States
               <br />
+              Mailing address: {COMPANY_MAILING_ADDRESS}
+              <br />
               Contact:{' '}
-              <a href="mailto:admin@mytogethr.com" className="text-primary hover:underline">
-                admin@mytogethr.com
+              <a href={`mailto:${COMPANY_EMAIL}`} className="text-primary hover:underline">
+                {COMPANY_EMAIL}
               </a>
             </p>
             <p>
               If you have questions about these Terms, please contact us at{' '}
-              <a href="mailto:admin@mytogethr.com" className="text-primary hover:underline">
-                admin@mytogethr.com
+              <a href={`mailto:${COMPANY_EMAIL}`} className="text-primary hover:underline">
+                {COMPANY_EMAIL}
               </a>
             </p>
           </section>
