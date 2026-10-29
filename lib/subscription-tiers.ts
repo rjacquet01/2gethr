@@ -65,6 +65,8 @@ export const ROUTINE_PUSH_PER_MONTH = { FREE: 100, PLUS: 1000, PREMIUM: -1 } as 
 export const HISTORY_DAYS = { FREE: 30, PLUS: 90, PREMIUM: 90 } as const
 /** Location trail (past positions). Free has none: only the latest point is kept. */
 export const LOCATION_TRAIL_DAYS = { FREE: 0, PLUS: 90, PREMIUM: 90 } as const
+/** Text messages a month (opt-in; urgent safety alerts don't count). */
+export const SMS_PER_MONTH = { FREE: 0, PLUS: 25, PREMIUM: 100 } as const
 /** Show a soft "nearly at your limit" nudge from this share of a cap. */
 export const NEAR_LIMIT_RATIO = 0.8
 
@@ -86,8 +88,10 @@ export function priceTaxNote(): string {
   return process.env.NEXT_PUBLIC_STRIPE_TAX_ENABLED === "true" ? "Taxes calculated at checkout" : ""
 }
 
-/** Plan bullet for texts while the SMS provider isn't approved yet. smsMonthlyQuota still applies. */
-export const TEXT_ALERTS_SOON = "Text alerts (coming soon)"
+/** Plan bullet for a plan's monthly text allowance. */
+export function textAlertsBullet(quota: number): string {
+  return `${quota} text alerts a month (opt-in; urgent safety alerts don't count)`
+}
 
 /** Yearly price as a whole-percent saving over 12 monthly payments (e.g. 17). */
 export function annualSavingsPercent(def: Pick<TierDefinition, "priceMonthlyCents" | "priceAnnualCents">): number {
@@ -123,7 +127,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       maxCalendars: 2,
       historyDays: HISTORY_DAYS.FREE,
       locationTrailDays: LOCATION_TRAIL_DAYS.FREE,
-      smsMonthlyQuota: 0,
+      smsMonthlyQuota: SMS_PER_MONTH.FREE,
       maxLocationSharers: LOCATION_SHARERS.FREE,
       maxActiveReminders: ACTIVE_REMINDERS.FREE,
       maxEventsPerMonth: EVENTS_PER_MONTH.FREE,
@@ -165,7 +169,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       maxCalendars: 5,
       historyDays: HISTORY_DAYS.PLUS,
       locationTrailDays: LOCATION_TRAIL_DAYS.PLUS,
-      smsMonthlyQuota: 25,
+      smsMonthlyQuota: SMS_PER_MONTH.PLUS,
       maxLocationSharers: LOCATION_SHARERS.PLUS,
       maxActiveReminders: ACTIVE_REMINDERS.PLUS,
       maxEventsPerMonth: EVENTS_PER_MONTH.PLUS,
@@ -192,7 +196,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       "Custom reminder times",
       "Complex recurring events",
       `${LOCATION_TRAIL_DAYS.PLUS}-day location trail, ${HISTORY_DAYS.PLUS} days of past events`,
-      TEXT_ALERTS_SOON,
+      textAlertsBullet(SMS_PER_MONTH.PLUS),
       "Priority support",
     ],
   },
@@ -210,7 +214,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       maxCalendars: 20,
       historyDays: HISTORY_DAYS.PREMIUM, // every plan is capped at 90 days (lib/retention.ts)
       locationTrailDays: LOCATION_TRAIL_DAYS.PREMIUM,
-      smsMonthlyQuota: 100,
+      smsMonthlyQuota: SMS_PER_MONTH.PREMIUM,
       maxLocationSharers: LOCATION_SHARERS.PREMIUM,
       maxActiveReminders: ACTIVE_REMINDERS.PREMIUM,
       maxEventsPerMonth: EVENTS_PER_MONTH.PREMIUM,
@@ -236,7 +240,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       "Emergency alerts to your child",
       `${LOCATION_TRAIL_DAYS.PREMIUM}-day location trail, ${HISTORY_DAYS.PREMIUM} days of past events`,
       "Custom reminder times",
-      TEXT_ALERTS_SOON,
+      textAlertsBullet(SMS_PER_MONTH.PREMIUM),
       "Priority support",
     ],
   },

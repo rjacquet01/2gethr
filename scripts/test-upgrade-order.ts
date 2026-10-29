@@ -1,7 +1,7 @@
 // Usage: npx tsx --tsconfig tsconfig.json scripts/test-upgrade-order.ts
 // The upgrade page's order summary (lib/upgrade-order.ts) and its ?tier= /
 // &billing= parsing, plus the pricing copy rules: no tax wording until Stripe
-// Tax is on, texts shown as "coming soon". Pure logic: no database, no network.
+// Tax is on, texts shown with each plan's monthly allowance. Pure logic: no database, no network.
 import assert from "node:assert"
 
 let passed = 0
@@ -10,7 +10,7 @@ const ok = (name: string) => { passed++; console.log(`  ok  ${name}`) }
 async function main() {
   delete process.env.NEXT_PUBLIC_STRIPE_TAX_ENABLED
   const { parseUpgradeParams, orderSummaryCents, centsToDollars } = await import("../lib/upgrade-order")
-  const { SUBSCRIPTION_TIERS, priceTaxNote, TEXT_ALERTS_SOON } = await import("../lib/subscription-tiers")
+  const { SUBSCRIPTION_TIERS, priceTaxNote, textAlertsBullet } = await import("../lib/subscription-tiers")
 
   // --- order summary (the prices themselves are not changed) ---
   assert.equal(SUBSCRIPTION_TIERS.PREMIUM.priceMonthlyCents, 599)
@@ -73,13 +73,15 @@ async function main() {
   ok("tax note only when STRIPE_TAX_ENABLED is true")
 
   for (const t of [SUBSCRIPTION_TIERS.PREMIUM, SUBSCRIPTION_TIERS.PREMIUM_PLUS]) {
-    assert.ok(t.featureList.includes(TEXT_ALERTS_SOON))
-    assert.ok(!t.featureList.some((f) => /\d+ text alerts/.test(f)))
-    assert.ok(t.limits.smsMonthlyQuota > 0, "the quota itself is kept")
+    assert.ok(t.featureList.includes(textAlertsBullet(t.limits.smsMonthlyQuota)))
+    assert.ok(!t.featureList.some((f) => /coming soon/i.test(f)))
   }
+  assert.ok(!SUBSCRIPTION_TIERS.FREE.featureList.some((f) => /text/i.test(f)))
+  assert.equal(SUBSCRIPTION_TIERS.FREE.limits.smsMonthlyQuota, 0)
   assert.equal(SUBSCRIPTION_TIERS.PREMIUM.limits.smsMonthlyQuota, 25)
   assert.equal(SUBSCRIPTION_TIERS.PREMIUM_PLUS.limits.smsMonthlyQuota, 100)
-  ok('plan bullets say "Text alerts (coming soon)"; quotas 25/100 kept in code')
+  assert.equal(textAlertsBullet(25), "25 text alerts a month (opt-in; urgent safety alerts don't count)")
+  ok("plan bullets show 25/100 opt-in text alerts a month; Free has none; no \"coming soon\"")
 
   console.log(`\n${passed} passed`)
 }
