@@ -11,9 +11,9 @@ export const metadata = {
 
 const CONTACT = COMPANY_EMAIL
 
-// SMS PROVIDER NAME: set it here (e.g. 'Twilio' or 'Telnyx') once chosen. While
-// null, the policy says "our text-message delivery provider" (sections 5 and 6).
-const SMS_PROVIDER_NAME: string | null = null
+// SMS PROVIDER NAME, named in sections 5 and 6. If set to null, the policy says
+// "our text-message delivery provider" instead.
+const SMS_PROVIDER_NAME: string | null = 'Twilio'
 const SMS_PROVIDER = SMS_PROVIDER_NAME ?? 'our text-message delivery provider'
 const SMS_PROVIDER_START = SMS_PROVIDER.charAt(0).toUpperCase() + SMS_PROVIDER.slice(1)
 
