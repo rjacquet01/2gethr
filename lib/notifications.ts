@@ -2,6 +2,7 @@ import { sql, type Row } from '@/lib/db'
 import { sendPushToUser, isFirebaseConfigured, notificationDedupeKey } from "@/lib/services/push"
 import { notificationHref } from "@/lib/notification-link"
 import { isRoutinePush } from "@/lib/plan-limits"
+import { isQuietNow } from "@/lib/quiet-hours"
 import { sendEmail, isResendConfigured, EMAIL_TEMPLATES } from "@/lib/services/email"
 import { sendSMSMetered, isSmsConfigured } from "@/lib/services/sms"
 
@@ -74,6 +75,25 @@ type NotificationData = {
   force?: boolean
 }
 
+// The notification_type enum in the database predates some types the app
+// sends. A value missing there made every such notification fail (the
+// dedupe query and the insert both reject it), quietly: no in-app row, no
+// push, no email. Added once per server instance; IF NOT EXISTS is a no-op
+// when it's already there.
+let enumEnsured: Promise<void> | null = null
+function ensureNotificationTypes(): Promise<void> {
+  if (!enumEnsured) {
+    enumEnsured = (async () => {
+      // A fixed value: ALTER TYPE takes no parameters.
+      await sql`ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'TASK_COMMENT'`
+    })().catch((err) => {
+      enumEnsured = null
+      console.error('[Notification] Adding notification types failed:', err instanceof Error ? err.message : err)
+    })
+  }
+  return enumEnsured
+}
+
 export async function createNotification({
   userId,
   type,
@@ -86,6 +106,7 @@ export async function createNotification({
   force = false
 }: NotificationData): Promise<{ success: boolean; notificationId?: string; error?: string }> {
   try {
+    await ensureNotificationTypes()
     const notificationId = crypto.randomUUID()
     const wantsInApp = !channels || channels.includes('in_app')
     const wantsPush = !channels || channels.includes('push')
@@ -143,11 +164,18 @@ export async function createNotification({
     if (wantsPush && isFirebaseConfigured()) {
       try {
         const pushPrefs = await sql`
-          SELECT push_enabled FROM reminder_settings WHERE user_id = ${userId}
+          SELECT rs.push_enabled, rs.quiet_hours_start, rs.quiet_hours_end, u.timezone
+          FROM users u LEFT JOIN reminder_settings rs ON rs.user_id = u.id
+          WHERE u.id = ${userId}
         `
-        const pushEnabled = force || pushPrefs.length === 0 || pushPrefs[0].push_enabled
+        const prefs = pushPrefs[0]
+        const pushEnabled = force || !prefs || prefs.push_enabled !== false
+        // Quiet hours hold back routine pushes only (the in-app row is still
+        // written); safety alerts and approval requests always go through.
+        const quiet = !force && !!prefs && isRoutinePush(type, data)
+          && isQuietNow(prefs.quiet_hours_start, prefs.quiet_hours_end, prefs.timezone)
 
-        if (pushEnabled) {
+        if (pushEnabled && !quiet) {
           // Same destination as clicking it in the app (lib/notification-link.ts).
           const clickAction = notificationHref(type, data) ?? '/'
 

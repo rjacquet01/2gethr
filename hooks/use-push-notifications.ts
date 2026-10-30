@@ -124,7 +124,8 @@ export function usePushNotifications() {
           platform: 'web',
           deviceInfo: {
             browser: browserLabel(navigator.userAgent),
-            language: navigator.language
+            language: navigator.language,
+            deviceId: pushDeviceId(),
           }
         })
       })
@@ -214,9 +215,29 @@ async function isActiveForThisAccount(subscription: PushSubscription): Promise<b
   }
 }
 
+/**
+ * A random id kept by this browser, so the server can retire this browser's
+ * older subscription without touching another device with the same label
+ * (two Android phones, or Chrome and Samsung Internet on one phone).
+ */
+function pushDeviceId(): string | undefined {
+  try {
+    const key = 'togethr-push-device'
+    let id = localStorage.getItem(key)
+    if (!id) {
+      id = crypto.randomUUID()
+      localStorage.setItem(key, id)
+    }
+    return id
+  } catch {
+    return undefined
+  }
+}
+
 /** "Chrome on Windows" from a user agent, for the admin device list. */
-function browserLabel(ua: string): string {
+export function browserLabel(ua: string): string {
   const browser = /Edg\//.test(ua) ? 'Edge'
+    : /SamsungBrowser\//.test(ua) ? 'Samsung Internet'
     : /OPR\/|Opera/.test(ua) ? 'Opera'
     : /Firefox\//.test(ua) ? 'Firefox'
     : /Chrome\//.test(ua) ? 'Chrome'

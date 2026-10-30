@@ -44,13 +44,15 @@ async function runJob(request: NextRequest) {
       // only the most imminent due offset matters if several are already due (e.g. event just created)
       const offset = Math.min(...dueOffsets)
 
-      // FAMILY events remind everyone in the family; PRIVATE / SELECTED_MEMBERS
-      // events only remind the creator and the chosen participants.
+      // FAMILY events remind everyone in the family except guests (who only
+      // see events they're invited to: lib/guest-scope.ts); PRIVATE /
+      // SELECTED_MEMBERS events only remind the creator and the chosen
+      // participants. Invited guests are reminded as participants.
       const participants = event.visibility === "FAMILY" || !event.visibility
         ? await sql`
             SELECT DISTINCT u.id, u.email, u.phone, u.timezone
             FROM users u JOIN family_members fm ON u.id = fm.user_id
-            WHERE fm.family_id = ${event.family_id} AND fm.is_active = true
+            WHERE fm.family_id = ${event.family_id} AND fm.is_active = true AND fm.role <> 'GUEST'
             UNION
             SELECT DISTINCT u.id, u.email, u.phone, u.timezone
             FROM users u JOIN event_participants ep ON u.id = ep.user_id

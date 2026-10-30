@@ -91,9 +91,9 @@ export async function notifyEventAssignment(args: {
         title: "Event needs your approval",
         body: `${creatorName} wants to add "${title}". Open it to approve or decline.`,
         data: { eventId, familyId },
+        // Parents' own notification settings decide, not the creator's picks.
         sendEmail: true,
         sendSms: true,
-        channels,
       })
     }
     return

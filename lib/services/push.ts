@@ -271,15 +271,18 @@ export async function registerPushToken(
         is_active = true,
         updated_at = NOW()
     `
-    // One browser = one active token: a re-subscription (or the same
-    // browser's older subscription) is retired, so this person's pushes go
-    // to it once. "Same browser" is the same platform and browser label
-    // (e.g. "Chrome on Windows"; the full user agent isn't stored).
-    if (platform === 'web' && deviceInfo.browser) {
+    // One browser = one active token: this browser's older subscription is
+    // retired, so this person's pushes go to it once. "This browser" is its
+    // own random deviceId. The browser label used before ("Chrome on
+    // Android") is shared by different devices, so turning push on for one
+    // phone switched it off on another, or on the same phone's other
+    // browser. A browser that sends no deviceId retires nothing; a repeated
+    // endpoint is still sent to once (sendPushToUser).
+    if (platform === 'web' && deviceInfo.deviceId) {
       await sql`
         UPDATE push_tokens SET is_active = false, updated_at = NOW()
         WHERE user_id = ${userId} AND platform = ${platform} AND is_active = true
-          AND token <> ${token} AND device_info->>'browser' = ${deviceInfo.browser}
+          AND token <> ${token} AND device_info->>'deviceId' = ${deviceInfo.deviceId}
       `
     }
     return true

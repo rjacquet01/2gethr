@@ -56,7 +56,8 @@ async function main() {
       .filter((n) => n.user_id === v[0] && n.type === v[1] && n.title === v[2] && n.body === v[3] && n.data === v[4] && Date.now() - n.at < 60_000)
       .map((n) => ({ id: n.id }))],
     ["INSERT INTO notifications", (v) => { db.notifications.push({ id: v[0], user_id: v[1], type: v[2], title: v[3], body: v[4], data: v[5], at: Date.now() }); return [] }],
-    ["SELECT push_enabled FROM reminder_settings", (v) => [{ push_enabled: db.users[v[0] as string]?.push !== false }]],
+    // createNotification's push preferences (push on/off, quiet hours: none here)
+    ["SELECT rs.push_enabled, rs.quiet_hours_start", (v) => [{ push_enabled: db.users[v[0] as string]?.push !== false, quiet_hours_start: null, quiet_hours_end: null, timezone: null }]],
     ["SELECT token, platform FROM push_tokens", (v) => db.tokens.filter((t) => t.user_id === v[0] && t.is_active)],
     ["SELECT u.phone, rs.sms_enabled", (v) => { const u = db.users[v[0] as string]; return u ? [{ phone: u.phone, sms_enabled: u.sms }] : [] }],
     ["SELECT u.email, rs.email_enabled", () => []],
@@ -130,9 +131,18 @@ async function main() {
   ok("sendPushToUser: two stored copies of one browser's subscription -> one push")
 
   fresh()
-  await push.registerPushToken("u1", subscription(2), "web", { browser: "Chrome on Windows" })
-  assert.ok(db.writes.some((w) => w.startsWith("UPDATE push_tokens SET is_active = false") && w.includes("device_info->>'browser'")))
-  ok("registerPushToken: retires the same browser's other active tokens")
+  await push.registerPushToken("u1", subscription(2), "web", { browser: "Chrome on Android", deviceId: "dev-aaaa-1111" })
+  const retire = db.writes.filter((w) => w.startsWith("UPDATE push_tokens SET is_active = false"))
+  assert.equal(retire.length, 1)
+  assert.ok(retire[0].includes("device_info->>'deviceId'"), "retires by this browser's own id")
+  assert.ok(!retire[0].includes("device_info->>'browser'"), "never by the shared browser label")
+  ok("registerPushToken: retires only this browser's older tokens (by deviceId)")
+
+  fresh()
+  await push.registerPushToken("u1", subscription(3), "web", { browser: "Chrome on Android" })
+  assert.ok(!db.writes.some((w) => w.startsWith("UPDATE push_tokens SET is_active = false")),
+    "a second phone with the same label (no deviceId) must not switch the first one off")
+  ok("registerPushToken: no deviceId retires nothing (another phone with the same label keeps push)")
 
   console.log("dispatcher")
   fresh()

@@ -49,6 +49,8 @@ export async function POST(request: Request) {
     const deviceInfo: Record<string, string> = {}
     if (typeof info.browser === 'string') deviceInfo.browser = info.browser.slice(0, 60)
     if (typeof info.language === 'string') deviceInfo.language = info.language.slice(0, 20)
+    // This browser's own random id (hooks/use-push-notifications.ts).
+    if (typeof info.deviceId === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(info.deviceId)) deviceInfo.deviceId = info.deviceId
 
     const success = await registerPushToken(payload.userId, token, platform, deviceInfo)
 
