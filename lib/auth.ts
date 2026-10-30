@@ -205,8 +205,16 @@ export async function generateTokenPair(
 // scripts/test-refresh-rotation.ts can run rotation against a temp table.
 type QueryFn = (strings: TemplateStringsArray, ...values: unknown[]) => Promise<Record<string, unknown>[]>
 
-/** How long a just-rotated refresh token may still be answered with its replacement. */
-export const REFRESH_RACE_GRACE_SEC = 20
+/**
+ * How long a rotated refresh token may still be answered with its
+ * replacement, as long as that replacement has never been used. Covers a
+ * lost race (two tabs refreshing at once) and a lost reply: the refresh was
+ * done on the server but its Set-Cookie never reached the browser (the page
+ * navigated or the network dropped mid-request), so the browser still holds
+ * the old token, often until its next refresh some 15 minutes later. It was
+ * 20 seconds, which signed those people out.
+ */
+export const REFRESH_REPLACEMENT_WINDOW_SEC = 24 * 60 * 60
 
 /**
  * Exchange a refresh token for a new pair, safely under concurrency.
@@ -216,13 +224,16 @@ export const REFRESH_RACE_GRACE_SEC = 20
  * winner to commit, re-checks `revoked_at IS NULL` and matches nothing.
  *
  * The loser (two tabs, or the service worker and the page, refreshing at the
- * same moment) gets the winner's new refresh token instead of an error, so a
- * lost race never logs anyone out. The replacement is the row inserted in the
- * same statement, recognised by created_at = the old row's revoked_at (both
- * are that statement's NOW()). This only works within a short grace window
- * and only while the replacement is still valid.
+ * same moment), or a browser whose refresh reply was lost, gets the new
+ * refresh token instead of an error, so neither logs anyone out. The
+ * replacement is the row inserted in the same statement, recognised by
+ * created_at = the old row's revoked_at (both are that statement's NOW()).
+ * Only while the replacement is unused and valid (revoked_at IS NULL: once it
+ * has been refreshed, signed out, or revoked by "sign out other devices" or a
+ * password change, the old token is dead) and within
+ * REFRESH_REPLACEMENT_WINDOW_SEC.
  *
- * Returns null when the token is unknown, expired or revoked (outside the race).
+ * Returns null when the token is unknown, expired or revoked (and not covered above).
  */
 export async function rotateRefreshToken(
   oldToken: string,
@@ -256,15 +267,15 @@ export async function rotateRefreshToken(
   `
   if (rotated.length > 0) return { accessToken, refreshToken }
 
-  // Lost the race (or the token was never valid): hand back the replacement
-  // the winner just issued, if there is one.
+  // Lost the race or the reply (or the token was never valid): hand back the
+  // replacement issued for it, if it's still unused.
   const replacement = await db`
     SELECT n.token
     FROM refresh_tokens o
     JOIN refresh_tokens n ON n.user_id = o.user_id AND n.created_at = o.revoked_at AND n.id <> o.id
     WHERE o.token = ${oldToken}
       AND o.user_id = ${userId}
-      AND o.revoked_at > NOW() - make_interval(secs => ${REFRESH_RACE_GRACE_SEC}::int)
+      AND o.revoked_at > NOW() - make_interval(secs => ${REFRESH_REPLACEMENT_WINDOW_SEC}::int)
       AND n.revoked_at IS NULL
       AND n.expires_at > NOW()
     LIMIT 1
