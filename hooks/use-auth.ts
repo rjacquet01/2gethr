@@ -5,32 +5,30 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { releasePushForThisDevice } from '@/lib/push-release'
 import { forgetLastFamily, readLastFamily, rememberLastFamily } from '@/lib/last-family'
+import { SITE_DATA_BLOCKED_MESSAGE, readStored, removeStored, siteDataBlocked, writeStored } from '@/lib/site-data'
 
 // Token storage keys
 const ACCESS_TOKEN_KEY = 'safe_link_access_token'
 const REFRESH_TOKEN_KEY = 'safe_link_refresh_token'
 
-// Token management utilities
+// Token management utilities. They never throw: a browser that blocks site
+// data makes every localStorage access throw (lib/site-data.ts).
 export function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem(ACCESS_TOKEN_KEY)
+  return readStored(ACCESS_TOKEN_KEY)
 }
 
 export function setTokens(accessToken: string, refreshToken: string) {
-  if (typeof window === 'undefined') return
-  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
-  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+  writeStored(ACCESS_TOKEN_KEY, accessToken)
+  writeStored(REFRESH_TOKEN_KEY, refreshToken)
 }
 
 export function clearTokens() {
-  if (typeof window === 'undefined') return
-  localStorage.removeItem(ACCESS_TOKEN_KEY)
-  localStorage.removeItem(REFRESH_TOKEN_KEY)
+  removeStored(ACCESS_TOKEN_KEY)
+  removeStored(REFRESH_TOKEN_KEY)
 }
 
 export function getRefreshToken(): string | null {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem(REFRESH_TOKEN_KEY)
+  return readStored(REFRESH_TOKEN_KEY)
 }
 
 export interface User {
@@ -217,6 +215,8 @@ export function useAuth(): AuthState & {
   }, [primaryFamilyId, primaryFamilyRole])
   
   const login = useCallback(async (email: string, password: string) => {
+    // The session couldn't be kept: say so instead of signing in for nothing.
+    if (siteDataBlocked()) return { success: false, error: SITE_DATA_BLOCKED_MESSAGE }
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -247,11 +247,12 @@ export function useAuth(): AuthState & {
       await mutate(undefined, { revalidate: true })
       return { success: true }
     } catch (err) {
-      return { success: false, error: 'Network error' }
+      return { success: false, error: siteDataBlocked() ? SITE_DATA_BLOCKED_MESSAGE : 'Network error' }
     }
   }, [mutate])
 
   const verifyTwoFactor = useCallback(async (challengeToken: string, code: string) => {
+    if (siteDataBlocked()) return { success: false, error: SITE_DATA_BLOCKED_MESSAGE }
     try {
       const res = await fetch('/api/auth/2fa/verify', {
         method: 'POST',
@@ -273,11 +274,13 @@ export function useAuth(): AuthState & {
       await mutate(undefined, { revalidate: true })
       return { success: true }
     } catch (err) {
-      return { success: false, error: 'Network error' }
+      return { success: false, error: siteDataBlocked() ? SITE_DATA_BLOCKED_MESSAGE : 'Network error' }
     }
   }, [mutate])
-  
+
   const register = useCallback(async (registerData: { email: string; password: string; displayName?: string; phone?: string; smsConsent?: boolean; ageConfirmed?: boolean; termsAccepted?: boolean; childInviteCode?: string }) => {
+    // Don't create an account the browser can't stay signed in to.
+    if (siteDataBlocked()) return { success: false, error: SITE_DATA_BLOCKED_MESSAGE }
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
