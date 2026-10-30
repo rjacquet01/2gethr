@@ -45,8 +45,7 @@ export default function TermsPage() {
             <p>
               Togethr is a family coordination platform that helps families manage schedules, share locations, 
               and coordinate activities. The Service includes mobile applications and web interfaces.
-              The Togethr Android app is published on Google Play by Nexus Calibration Maintenance Management, LLC on
-              behalf of Togethr, LLC.
+              The Togethr Android app is published on Google Play by Togethr, LLC.
             </p>
           </section>
 

@@ -55,8 +55,7 @@ export default function PrivacyPage() {
               explains what personal information we collect through the Togethr website, web app and
               mobile apps (the "Service"), how we use it, who we share it with, and the choices you have.
               Togethr, LLC is the company responsible for your information. The Togethr Android app is
-              published on Google Play by Nexus Calibration Maintenance Management, LLC on behalf of
-              Togethr, LLC. Togethr, LLC remains responsible for your information as described in this policy.
+              published on Google Play by Togethr, LLC.
             </p>
           </section>
 
