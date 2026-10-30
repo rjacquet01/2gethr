@@ -14,7 +14,7 @@ process.env.JWT_REFRESH_SECRET ||= 'test-refresh-secret-not-used-in-production'
 async function main() {
   const { Pool, neonConfig } = await import('@neondatabase/serverless')
   neonConfig.webSocketConstructor = WebSocket
-  const { rotateRefreshToken, generateRefreshToken, REFRESH_RACE_GRACE_SEC } = await import('../lib/auth')
+  const { rotateRefreshToken, generateRefreshToken, REFRESH_REPLACEMENT_WINDOW_SEC } = await import('../lib/auth')
 
   // Direct (non-pooler) host: through the transaction pooler a TEMP table can
   // outlive this connection on a shared server session where the app's own
@@ -80,8 +80,39 @@ async function main() {
     await db`UPDATE refresh_tokens SET revoked_at = NOW() WHERE token = ${c!.refreshToken}`
     assert.strictEqual(await rotateRefreshToken(old2, USER, undefined, db), null, 'no resurrection after logout')
 
-    // 6. Revoked longer ago than the grace window, expired, unknown, wrong user -> null.
-    assert.strictEqual(await rotateRefreshToken(await seed({ revokedAgoSec: REFRESH_RACE_GRACE_SEC + 40 }), USER, undefined, db), null, 'old revocation')
+    // 6. Revoked with no replacement (signed out), expired, unknown, wrong user -> null.
+    assert.strictEqual(await rotateRefreshToken(await seed({ revokedAgoSec: 40 }), USER, undefined, db), null, 'signed out: no replacement')
+
+    // 7. Lost reply: the refresh happened but its cookie never reached the
+    //    browser, which comes back 15 minutes later with the old token. It
+    //    gets the unused replacement instead of being signed out.
+    const old3 = await seed()
+    const e = await rotateRefreshToken(old3, USER, undefined, db)
+    assert.ok(e)
+    // Move a rotation (old row's revoked_at and its replacement's created_at,
+    // which are equal) back in time, in SQL so the microseconds still match.
+    const backdate = async (old: string, secs: number) => {
+      await db`
+        UPDATE refresh_tokens n SET created_at = n.created_at - make_interval(secs => ${secs}::int)
+        FROM refresh_tokens o
+        WHERE o.token = ${old} AND n.user_id = o.user_id AND n.created_at = o.revoked_at AND n.id <> o.id`
+      await db`UPDATE refresh_tokens SET revoked_at = revoked_at - make_interval(secs => ${secs}::int) WHERE token = ${old}`
+    }
+    await backdate(old3, 15 * 60)
+    const late = await rotateRefreshToken(old3, USER, undefined, db)
+    assert.ok(late, 'lost reply 15 minutes later still succeeds')
+    assert.strictEqual(late!.refreshToken, e!.refreshToken, 'and gets the unused replacement')
+
+    // 8. Once the replacement has been used, the old token is dead.
+    const f = await rotateRefreshToken(e!.refreshToken, USER, undefined, db)
+    assert.ok(f)
+    assert.strictEqual(await rotateRefreshToken(old3, USER, undefined, db), null, 'replacement already used')
+
+    // 9. Past the window, even an unused replacement isn't handed out.
+    const old4 = await seed()
+    assert.ok(await rotateRefreshToken(old4, USER, undefined, db))
+    await backdate(old4, REFRESH_REPLACEMENT_WINDOW_SEC + 60)
+    assert.strictEqual(await rotateRefreshToken(old4, USER, undefined, db), null, 'past the window')
     assert.strictEqual(await rotateRefreshToken(await seed({ expired: true }), USER, undefined, db), null, 'expired')
     assert.strictEqual(await rotateRefreshToken('never-issued', USER, undefined, db), null, 'unknown')
     assert.strictEqual(await rotateRefreshToken(await seed({ user: 'someone-else' }), USER, undefined, db), null, 'wrong user')
