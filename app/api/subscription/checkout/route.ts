@@ -115,9 +115,11 @@ export async function POST(request: NextRequest) {
     const appUrl = siteUrl()
 
     // Already paying through Stripe? Switch the existing subscription's
-    // price instead of opening (no proration: a plan change never creates partial-month charges or credits; the new price applies from the next invoice) - a second Checkout - a second
-    // checkout would create a duplicate subscription and double-bill. The
-    // customer.subscription.updated webhook then syncs the new tier.
+    // price instead of opening a second Checkout - a second checkout would
+    // create a duplicate subscription and double-bill. No proration: a plan
+    // change never creates partial-month charges or credits; the new price
+    // applies from the next invoice. The customer.subscription.updated
+    // webhook then syncs the new tier.
     const currentStripeSubId: string | null = subscription[0].stripe_subscription_id
     if (currentStripeSubId && subscription[0].status !== "CANCELLED") {
       try {
