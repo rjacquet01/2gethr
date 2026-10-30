@@ -19,6 +19,7 @@ import {
   UserPlus,
   CalendarPlus,
   ShieldCheck,
+  Star,
 } from 'lucide-react'
 
 const features = [
@@ -83,15 +84,19 @@ function ProductPreview() {
             <p className="text-xs text-muted-foreground">Today, 4 things on the plan</p>
           </div>
           <div className="flex -space-x-2">
-            {['M', 'D', 'J', 'S'].map((l, i) => (
-              <span
-                key={l}
-                className={`flex h-7 w-7 items-center justify-center rounded-full border-2 border-card text-[11px] font-semibold text-white ${['bg-primary', 'bg-accent', 'bg-emerald-500', 'bg-sky-500'][i]}`}
-              >
-                {l}
-              </span>
-            ))}
+            <span title="Letter" className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-card bg-primary text-[12px] font-semibold text-white">M</span>
+            <span title="Icon" className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-card bg-accent text-white">
+              <Star className="h-4 w-4" />
+            </span>
+            <span title="Avatar" className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-card bg-emerald-100 text-base leading-none">
+              🦊
+            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img title="Photo" src="/brand/demo-photo.svg" alt="" className="h-8 w-8 rounded-full border-2 border-card object-cover" />
           </div>
+        </div>
+        <div className="flex items-center justify-center gap-3 border-b border-border bg-muted/40 px-5 py-1.5 text-[11px] text-muted-foreground">
+          <span>Letter</span><span aria-hidden="true">·</span><span>Icon</span><span aria-hidden="true">·</span><span>Avatar</span><span aria-hidden="true">·</span><span>Photo</span>
         </div>
         <div className="space-y-3 p-5">
           {[
