@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
     const appUrl = siteUrl()
 
     // Already paying through Stripe? Switch the existing subscription's
-    // price (prorated) instead of opening a second Checkout - a second
+    // price instead of opening (no proration: a plan change never creates partial-month charges or credits; the new price applies from the next invoice) - a second Checkout - a second
     // checkout would create a duplicate subscription and double-bill. The
     // customer.subscription.updated webhook then syncs the new tier.
     const currentStripeSubId: string | null = subscription[0].stripe_subscription_id
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
           if (item && item.price.id !== priceId) {
             await stripe.subscriptions.update(currentStripeSubId, {
               items: [{ id: item.id, price: priceId }],
-              proration_behavior: "create_prorations",
+              proration_behavior: "none",
               // Switching plans also stops a pending cancellation.
               ...(resumeParams(current) ?? {}),
               metadata: { familyId, requestedTier: tier.toUpperCase(), billingCycle },

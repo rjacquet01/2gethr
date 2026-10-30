@@ -60,7 +60,7 @@ export async function PATCH(
             if (item && priceId && item.price.id !== priceId) {
               await stripe.subscriptions.update(subscription.stripe_subscription_id, {
                 items: [{ id: item.id, price: priceId }],
-                proration_behavior: 'create_prorations',
+                proration_behavior: 'none',
               })
             }
           }
