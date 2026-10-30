@@ -276,7 +276,8 @@ export async function POST(request: NextRequest) {
           userId: pid, type: 'APPROVAL_REQUEST',
           title: 'Task needs your approval',
           body: `${assignerName} asked you to approve a task${who}: "${title}". Open it to approve or decline.`,
-          data: { taskId: task[0].id, familyId }, sendEmail: true, sendSms: true, channels: ch,
+          // Parents' own notification settings decide, not the creator's picks.
+          data: { taskId: task[0].id, familyId }, sendEmail: true, sendSms: true,
         })
       }
     } else if (assignmentStatus === 'PENDING_ACCEPTANCE' && targetUserId) {

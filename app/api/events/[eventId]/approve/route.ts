@@ -28,7 +28,7 @@ export async function POST(
 
     // Get event and verify parent access
     const events = await sql`
-      SELECT e.id, e.title, e.status, e.created_by_id, fm.role, c.family_id
+      SELECT e.id, e.title, e.status, e.created_by_id, e.recurrence_rule_id, fm.role, c.family_id
       FROM events e
       JOIN calendars c ON e.calendar_id = c.id
       JOIN family_members fm ON c.family_id = fm.family_id AND fm.user_id = ${user.id}
@@ -71,21 +71,38 @@ export async function POST(
 
     const newStatus = action === "APPROVE" ? "APPROVED" : "REJECTED"
 
-    // Update event status
-    await sql`
-      UPDATE events SET status = ${newStatus}, updated_at = NOW()
-      WHERE id = ${eventId}
-    `
+    // A repeating request is one decision: every occurrence still waiting in
+    // the series gets it (each had its own PENDING request, and only this one
+    // was ever shown to the parent). Only PENDING ones change.
+    const decided = event.recurrence_rule_id
+      ? await sql`
+          UPDATE events SET status = ${newStatus}, updated_at = NOW()
+          WHERE recurrence_rule_id = ${event.recurrence_rule_id} AND calendar_id = (SELECT calendar_id FROM events WHERE id = ${eventId})
+            AND status = 'PENDING'
+          RETURNING id
+        `
+      : await sql`
+          UPDATE events SET status = ${newStatus}, updated_at = NOW()
+          WHERE id = ${eventId} AND status = 'PENDING'
+          RETURNING id
+        `
+    const decidedIds = decided.map((r) => r.id as string)
+    if (decidedIds.length === 0) {
+      // Another parent decided a moment ago.
+      return NextResponse.json(
+        { success: false, error: "Event is not pending approval" },
+        { status: 409 }
+      )
+    }
 
-    // Update event request
     await sql`
-      UPDATE event_requests 
-      SET 
+      UPDATE event_requests
+      SET
         status = ${action === "APPROVE" ? "APPROVED" : "REJECTED"},
         approver_id = ${user.id},
         response_notes = ${responseNotes || null},
         responded_at = NOW()
-      WHERE event_id = ${eventId} AND status = 'PENDING'
+      WHERE event_id = ANY(${decidedIds}) AND status = 'PENDING'
     `
 
     // Tell the creator (in-app + push + their chosen channels). The old

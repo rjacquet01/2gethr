@@ -12,7 +12,7 @@
 import { sql } from '@/lib/db'
 import { ddl } from '../schema-snapshot'
 import { getTierDefinition, TRIAL_SMS_QUOTA } from '@/lib/subscription-tiers'
-import { formatSmsBody, hasSmsConsent, toE164 } from '@/lib/sms-consent'
+import { formatSmsBody, hasSmsConsent, optOutNumber, toE164 } from '@/lib/sms-consent'
 
 interface SMSPayload {
   to: string
@@ -31,6 +31,27 @@ interface SMSResult {
 
 // The SOS / emergency retry loops treat this as permanent ("opted").
 const NO_CONSENT: SMSResult = { success: false, skipped: 'consent', error: 'Not opted in to texts' }
+
+/**
+ * The provider refused because this number replied STOP: Twilio 21610,
+ * Telnyx 40300. Twilio answers STOP itself and doesn't always pass it on to
+ * our webhook, so this is how the app learns of it: texts are turned off for
+ * that number here too (as the webhook would), and the send counts as no consent.
+ */
+export const OPTED_OUT_ERROR_CODES = { twilio: '21610', telnyx: '40300' } as const
+
+async function optedOutAtProvider(to: string, provider: string): Promise<SMSResult> {
+  try {
+    const n = await optOutNumber(to)
+    console.log(`[SMS] ${provider}: number replied STOP earlier; texts turned off for ${n} account(s)`)
+  } catch (error) {
+    console.error('[SMS] Recording an earlier STOP failed:', error instanceof Error ? error.message : 'unknown')
+  }
+  return { success: false, skipped: 'consent', error: 'This number replied STOP' }
+}
+
+/** A provider's error message without any phone number in it, for logs. */
+const withoutNumbers = (s: unknown) => String(s ?? '').replace(/\+?\d[\d\s().-]{6,}\d/g, '[number]')
 
 /** Has the owner of this number agreed to texts? A failed check counts as no. */
 async function consented(to: string): Promise<boolean> {
@@ -128,6 +149,7 @@ async function deliverTelnyx(to: string, text: string): Promise<SMSResult> {
     if (!response.ok) {
       // Only Telnyx's error code and title: never the request or its headers.
       const err = data?.errors?.[0]
+      if (String(err?.code ?? '') === OPTED_OUT_ERROR_CODES.telnyx) return optedOutAtProvider(to, 'Telnyx')
       console.error('Telnyx error:', response.status, err?.code ?? '', err?.title ?? '')
       return { success: false, error: err?.detail || err?.title || `Telnyx error ${response.status}` }
     }
@@ -163,7 +185,9 @@ async function deliverTwilio(formattedTo: string, body: string): Promise<SMSResu
     const data = await response.json()
 
     if (!response.ok) {
-      console.error('Twilio error:', data)
+      if (String(data?.code ?? '') === OPTED_OUT_ERROR_CODES.twilio) return optedOutAtProvider(formattedTo, 'Twilio')
+      // Twilio's code and message only (messages can name the number).
+      console.error('Twilio error:', response.status, data?.code ?? '', withoutNumbers(data?.message))
       return { 
         success: false, 
         error: data.message || 'Failed to send SMS' 

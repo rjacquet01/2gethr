@@ -268,7 +268,8 @@ export async function POST(request: NextRequest) {
           title: 'Reminder needs your approval',
           body: `${byName} asked you to approve a reminder: "${title}". Open Reminders to approve or decline.`,
           data: { reminderId: reminder[0].id, familyId: resolvedFamilyId },
-          sendEmail: true, sendSms: true, channels: normalizedNotifyChannels || undefined,
+          // Parents' own notification settings decide, not the creator's picks.
+          sendEmail: true, sendSms: true,
         }).catch((err) => console.error('Reminder approval request failed (non-fatal):', err))
       }
       return NextResponse.json({ data: reminder[0] }, { status: 201 })
