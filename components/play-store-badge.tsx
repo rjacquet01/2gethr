@@ -13,11 +13,10 @@ export const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com
  */
 export const PLAY_STORE_LIVE = process.env.NEXT_PUBLIC_PLAY_STORE_LIVE === 'true'
 
-// OFFICIAL BADGE: download the "Get it on Google Play" badge from Google's
-// badge generator, put it in public/ (e.g. public/badges/google-play-badge.png)
-// and set its path here. While null, a plain brand-styled button is shown.
-// Don't draw or copy Google's logo by hand.
-const OFFICIAL_BADGE_SRC: string | null = null
+// OFFICIAL BADGE: Google's own English "Get it on Google Play" badge, downloaded
+// unmodified from play.google.com/intl/en_us/badges. Don't recolor, edit or
+// redraw it, and keep Google's clear space around it.
+const OFFICIAL_BADGE_SRC: string | null = '/badges/google-play-badge.png'
 
 /** True on the website once the browser has checked it isn't the Android app. */
 function useOnWebsite(): boolean {
