@@ -45,7 +45,7 @@ real email. Read a script's header before running it.
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
   admin-delete-child, admin-tier-breakdown, admin-token-refresh, adult-location-access, brand-logo, child-invite, coppa, cron-health,
   dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, free-tier-limits, geofence, kid-ping, launch-security, legal-hold-closure, location-history-delete,
-  legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-fixes, notification-link, site-data, push-ownership,
+  legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-fixes, event-heads-up, notification-link, site-data, push-ownership,
   dictation, place-alerts, push-picker, quick-add, schema-snapshot, sms-allowance, sms-consent, stillness, stripe-cancel-pending, stripe-checkout-tax, task-due, trial-eligibility,
   stripe-webhook-events, telnyx-sms, twa-upgrade-links, upgrade-order, weather-prompt, weather-route.
 - **Board suites** (board-flyer-download, board-flyers, board-limits,
@@ -128,6 +128,9 @@ real email. Read a script's header before running it.
   (mode OFF or share-with-family off, not pause) and when their account is deleted
   (`lib/location-history.ts`, `lib/account-closure.ts`). Kept while they still share with another family
   or a legal hold covers them.
+- Event notices: one "Upcoming Event" heads-up the day before (`lib/event-heads-up.ts`, hourly cron: timed events
+  22-24 h ahead, all-day the evening before) by in-app, push and email, never text; nothing earlier. Texts come
+  only at the reminder times picked on the event (`/api/cron/event-reminders`, every minute, all picked channels).
 - Arrivals/departures (`planGeofenceTransitions`, `lib/geofence.ts`): every newly stored queued fix is judged,
   oldest first, then the newest; trusted fixes only. `geofence_events.timestamp` is the fix's device time
   when not in the future and at most 6 hours old, else now (`geofenceEventTimeMs`); no alert for older backlog.
