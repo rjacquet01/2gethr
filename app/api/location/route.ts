@@ -749,11 +749,11 @@ async function createGeofenceNotification(
   const allowedRecipients = audience ? recipients.filter((r) => audience.includes(r.user_id)) : recipients
 
   const actionVerb = eventType === "ARRIVAL" ? "arrived" : "left"
-  const title = eventType === "ARRIVAL" ? `${userName} arrived` : `${userName} left`
+  const title = eventType === "ARRIVAL" ? `${userName} arrived at ${placeName}` : `${userName} left ${placeName}`
   const body =
     eventType === "ARRIVAL"
-      ? `${userName} has arrived at ${placeName}`
-      : `${userName} has left ${placeName}`
+      ? "Arrival alert"
+      : "Departure alert"
   const timeStr = new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
 
   for (const recipient of allowedRecipients) {
