@@ -72,16 +72,16 @@ async function main() {
   delete process.env.NEXT_PUBLIC_STRIPE_TAX_ENABLED
   ok("tax note only when STRIPE_TAX_ENABLED is true")
 
-  for (const t of [SUBSCRIPTION_TIERS.PREMIUM, SUBSCRIPTION_TIERS.PREMIUM_PLUS]) {
+  for (const t of [SUBSCRIPTION_TIERS.FREE, SUBSCRIPTION_TIERS.PREMIUM, SUBSCRIPTION_TIERS.PREMIUM_PLUS]) {
     assert.ok(t.featureList.includes(textAlertsBullet(t.limits.smsMonthlyQuota)))
     assert.ok(!t.featureList.some((f) => /coming soon/i.test(f)))
   }
-  assert.ok(!SUBSCRIPTION_TIERS.FREE.featureList.some((f) => /text/i.test(f)))
-  assert.equal(SUBSCRIPTION_TIERS.FREE.limits.smsMonthlyQuota, 0)
-  assert.equal(SUBSCRIPTION_TIERS.PREMIUM.limits.smsMonthlyQuota, 25)
-  assert.equal(SUBSCRIPTION_TIERS.PREMIUM_PLUS.limits.smsMonthlyQuota, 100)
+  assert.strictEqual(SUBSCRIPTION_TIERS.FREE.features.smsNotifications, true)
+  assert.equal(SUBSCRIPTION_TIERS.FREE.limits.smsMonthlyQuota, 20)
+  assert.equal(SUBSCRIPTION_TIERS.PREMIUM.limits.smsMonthlyQuota, 60)
+  assert.equal(SUBSCRIPTION_TIERS.PREMIUM_PLUS.limits.smsMonthlyQuota, 300)
   assert.equal(textAlertsBullet(25), "25 text alerts a month (opt-in; urgent safety alerts don't count)")
-  ok("plan bullets show 25/100 opt-in text alerts a month; Free has none; no \"coming soon\"")
+  ok("plan bullets show 20/60/300 opt-in text alerts a month (Free, Plus, Premium); no \"coming soon\"")
 
   console.log(`\n${passed} passed`)
 }

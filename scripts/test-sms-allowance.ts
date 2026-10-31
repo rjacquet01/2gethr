@@ -19,7 +19,7 @@ ok("no notice before the allowance is used up, or with no allowance")
 {
   const n = smsAllowanceNotice({ used: TRIAL_SMS_QUOTA, quota: TRIAL_SMS_QUOTA, trial: true, period: "2026-10" })!
   assert.equal(n.title, `All ${TRIAL_SMS_QUOTA} texts used this month`)
-  assert.match(n.body, /trial's 10 text messages/)
+  assert.match(n.body, new RegExp(`trial's ${TRIAL_SMS_QUOTA} text messages`))
   assert.match(n.body, /until November 1/)
   assert.match(n.body, /Push and email notifications still arrive/)
   assert.equal(n.canUpgrade, true)

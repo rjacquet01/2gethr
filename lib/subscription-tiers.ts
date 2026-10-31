@@ -66,7 +66,7 @@ export const HISTORY_DAYS = { FREE: 30, PLUS: 90, PREMIUM: 90 } as const
 /** Location trail (past positions). Free has none: only the latest point is kept. */
 export const LOCATION_TRAIL_DAYS = { FREE: 0, PLUS: 90, PREMIUM: 90 } as const
 /** Text messages a month (opt-in; urgent safety alerts don't count). */
-export const SMS_PER_MONTH = { FREE: 0, PLUS: 25, PREMIUM: 100 } as const
+export const SMS_PER_MONTH = { FREE: 20, PLUS: 60, PREMIUM: 300 } as const
 /** Show a soft "nearly at your limit" nudge from this share of a cap. */
 export const NEAR_LIMIT_RATIO = 0.8
 
@@ -78,7 +78,7 @@ export const NEAR_LIMIT_RATIO = 0.8
 export const TRIAL_DAYS = 7
 
 /** Text messages per month while a family is on its free trial. */
-export const TRIAL_SMS_QUOTA = 10
+export const TRIAL_SMS_QUOTA = 50
 
 /**
  * Shown under paid prices only once Stripe Tax is on (STRIPE_TAX_ENABLED,
@@ -141,7 +141,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       exportCalendar: false,
       prioritySupport: false,
       phoneAlerts: false,
-      smsNotifications: false,
+      smsNotifications: true,
       customReminderTimes: false,
     },
     featureList: [
@@ -152,6 +152,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       `${BOARD_UPLOADS.FREE} photo uploads on the family board`,
       `${ROUTINE_PUSH_PER_MONTH.FREE} notifications a month (safety alerts always arrive)`,
       `${HISTORY_DAYS.FREE} days of past events`,
+      textAlertsBullet(SMS_PER_MONTH.FREE),
       "Email support",
     ],
   },
