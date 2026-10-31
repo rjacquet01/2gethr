@@ -204,8 +204,8 @@ async function main() {
 
   // 5c. Plus and Premium keep every limit they had before this change.
   const before = {
-    PREMIUM: { maxFamilyMembers: 6, maxChildren: 5, maxSavedPlaces: 15, maxAlertPlaces: 3, maxCalendars: 5, historyDays: 90, smsMonthlyQuota: 25 },
-    PREMIUM_PLUS: { maxFamilyMembers: 12, maxChildren: -1, maxSavedPlaces: 50, maxAlertPlaces: -1, maxCalendars: 20, historyDays: 90, smsMonthlyQuota: 100 },
+    PREMIUM: { maxFamilyMembers: 6, maxChildren: 5, maxSavedPlaces: 15, maxAlertPlaces: 3, maxCalendars: 5, historyDays: 90, smsMonthlyQuota: 60 },
+    PREMIUM_PLUS: { maxFamilyMembers: 12, maxChildren: -1, maxSavedPlaces: 50, maxAlertPlaces: -1, maxCalendars: 20, historyDays: 90, smsMonthlyQuota: 300 },
   } as const
   for (const key of ["PREMIUM", "PREMIUM_PLUS"] as const) {
     for (const [field, value] of Object.entries(before[key])) {
