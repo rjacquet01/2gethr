@@ -3,7 +3,8 @@ import { sendPushToUser, isFirebaseConfigured, notificationDedupeKey } from "@/l
 import { notificationHref } from "@/lib/notification-link"
 import { isRoutinePush } from "@/lib/plan-limits"
 import { isQuietNow } from "@/lib/quiet-hours"
-import { sendEmail, isResendConfigured, EMAIL_TEMPLATES } from "@/lib/services/email"
+import { headsUpBody, headsUpChannels, HEADS_UP_ALL_DAY_HOURS, HEADS_UP_TIMED_HOURS } from "@/lib/event-heads-up"
+import { sendEmail, isResendConfigured, EMAIL_TEMPLATES, escapeHtml } from "@/lib/services/email"
 import { sendSMSMetered, isSmsConfigured } from "@/lib/services/sms"
 
 // SMS for in-app notifications. Goes through the metered sender so every text
@@ -242,7 +243,7 @@ export async function createNotification({
 
           const template = newStatus
             ? EMAIL_TEMPLATES.TASK_STATUS_CHANGED(taskTitle, newStatus, changedBy)
-            : { subject: title, html: `<p>${body}</p>`, text: body }
+            : { subject: title, html: `<p>${escapeHtml(body)}</p>`, text: body }
 
           await sendEmail({ to: userEmailPrefs[0].email, ...template })
         }
@@ -628,74 +629,81 @@ export async function checkAndNotifyUpcomingDueDates(): Promise<{
     }
   }
   
-  // Events in next 48 hours
+  // Events: one heads-up the day before (lib/event-heads-up.ts), by in-app,
+  // push and email, never text; nothing earlier. Timed events 22-24 hours
+  // ahead, all-day events the evening before.
   const upcomingEvents = await sql`
-    SELECT e.id, e.title, e.start_time, e.end_time, e.location, e.is_all_day,
+    SELECT e.id, e.title, e.start_time, e.location, e.is_all_day, e.notify_channels,
            e.created_by_id, e.visibility, c.family_id
     FROM events e
     JOIN calendars c ON e.calendar_id = c.id
     WHERE e.status IN ('APPROVED')
-      AND e.start_time >= NOW()
-      AND e.start_time <= NOW() + INTERVAL '48 hours'
+      AND (
+        (COALESCE(e.is_all_day, false) = false
+          AND e.start_time > NOW() + make_interval(hours => ${HEADS_UP_TIMED_HOURS.from}::int)
+          AND e.start_time <= NOW() + make_interval(hours => ${HEADS_UP_TIMED_HOURS.to}::int))
+        OR (e.is_all_day = true
+          AND e.start_time > NOW() + make_interval(hours => ${HEADS_UP_ALL_DAY_HOURS.from}::int)
+          AND e.start_time <= NOW() + make_interval(hours => ${HEADS_UP_ALL_DAY_HOURS.to}::int))
+      )
       AND NOT EXISTS (
         SELECT 1 FROM notifications n
         WHERE n.data->>'eventId' = e.id
           AND n.type = 'EVENT_REMINDER'
-          AND (n.data->>'reminder48h')::boolean = true
-          AND n.created_at > NOW() - INTERVAL '48 hours'
+          AND (n.data->>'headsUp')::boolean = true
+          AND n.created_at > NOW() - INTERVAL '3 days'
       )
   `
 
   for (const event of upcomingEvents) {
-    const startTime = new Date(event.start_time)
-    const now = new Date()
-    const hoursUntilEvent = Math.floor((startTime.getTime() - now.getTime()) / (1000 * 60 * 60))
+    const channels = headsUpChannels(event.notify_channels as string[] | null)
+    if (channels.length === 0) continue
 
     // Whole family (not guests) only for FAMILY events; PRIVATE goes to the
     // creator alone and SELECTED_MEMBERS to the creator plus participants.
     const members = !event.visibility || event.visibility === 'FAMILY'
       ? await sql`
-          SELECT fm.user_id
+          SELECT fm.user_id, u.timezone
           FROM family_members fm
+          JOIN users u ON u.id = fm.user_id
           WHERE fm.family_id = ${event.family_id}
             AND fm.is_active = true
             AND fm.role != 'GUEST'
             AND fm.user_id IS NOT NULL
         `
-      : [{ user_id: event.created_by_id }]
+      : await sql`SELECT id AS user_id, timezone FROM users WHERE id = ${event.created_by_id}`
 
     const participants = event.visibility === 'PRIVATE' ? [] : await sql`
-      SELECT ep.user_id
+      SELECT ep.user_id, u.timezone
       FROM event_participants ep
+      JOIN users u ON u.id = ep.user_id
       WHERE ep.event_id = ${event.id}
         AND ep.status != 'DECLINED'
         AND ep.user_id IS NOT NULL
     `
-    
-    const usersToNotify = new Set<string>()
-    members.forEach((m) => usersToNotify.add(m.user_id as string))
-    participants.forEach((p) => usersToNotify.add(p.user_id as string))
-    
-    const timeText = hoursUntilEvent <= 1 
-      ? 'in less than an hour' 
-      : hoursUntilEvent < 24 
-        ? `in ${hoursUntilEvent} hours`
-        : hoursUntilEvent < 36
-          ? 'tomorrow'
-          : 'in 2 days'
-    
-    for (const userId of usersToNotify) {
+
+    const usersToNotify = new Map<string, string | null>()
+    for (const m of [...members, ...participants]) usersToNotify.set(m.user_id as string, (m.timezone as string | null) ?? null)
+
+    for (const [userId, timeZone] of usersToNotify) {
       await createNotification({
         userId,
         type: 'EVENT_REMINDER',
         title: `Upcoming Event: ${event.title}`,
-        body: `"${event.title}" starts ${timeText}${event.location ? ` at ${event.location}` : ''}`,
-        data: { 
-          eventId: event.id, 
+        body: headsUpBody({
+          title: event.title as string,
+          start: new Date(event.start_time),
+          allDay: !!event.is_all_day,
+          location: event.location as string | null,
+          timeZone,
+        }),
+        data: {
+          eventId: event.id,
           familyId: event.family_id,
           startTime: event.start_time,
-          reminder48h: true
-        }
+          headsUp: true
+        },
+        channels,
       })
       eventsNotified++
     }
