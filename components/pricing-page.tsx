@@ -152,7 +152,7 @@ export function PricingPage({ serverInApp = false }: { serverInApp?: boolean }) 
             <div>
               <h3 className="font-semibold mb-2">Can I change my plan later?</h3>
               <p className="text-muted-foreground">
-                Yes! You can upgrade or downgrade your plan at any time. Changes take effect right away, and the price difference is prorated on your next bill.
+                Yes! You can upgrade or downgrade your plan at any time. Changes take effect right away. We don't prorate: your new price applies from your next bill, with no partial-month charges or credits.
               </p>
             </div>
             <div>
