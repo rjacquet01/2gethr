@@ -59,8 +59,9 @@ async function runJob(request: NextRequest) {
     // can't send the digest twice in the same week.
     if (!force) {
       const recentRun = await sql`
-        SELECT id FROM admin_action_logs
-        WHERE action = 'WEEKLY_DIGEST_CRON'
+        SELECT id FROM notifications
+        WHERE title LIKE 'Weekly Family Summary%'
+        AND data->>'generatedBy' = 'cron'
         AND created_at > NOW() - INTERVAL '20 hours'
         LIMIT 1
       `
@@ -183,7 +184,7 @@ async function runJob(request: NextRequest) {
           ) VALUES (
             ${crypto.randomUUID()},
             ${user.id},
-            'WEEKLY_DIGEST',
+            'SYSTEM',
             ${'Weekly Family Summary - ' + user.family_name},
             ${`Your weekly digest is ready! You have ${familyEvents.length} upcoming events this week.`},
             ${JSON.stringify({
@@ -210,24 +211,7 @@ async function runJob(request: NextRequest) {
 
     console.log(`[Cron] Weekly digest completed: ${results.sent} sent, ${results.failed} failed, ${results.skipped} skipped`)
 
-    // Log summary to admin_action_logs
-    await sql`
-      INSERT INTO admin_action_logs (
-        id, admin_id, action, resource_type, resource_id, metadata, created_at
-      ) VALUES (
-        ${crypto.randomUUID()},
-        NULL,
-        'WEEKLY_DIGEST_CRON',
-        'system',
-        'weekly_digest',
-        ${JSON.stringify({
-          ...results,
-          executedAt: new Date().toISOString(),
-          triggeredBy: 'cron'
-        })},
-        NOW()
-      )
-    `
+
 
     return NextResponse.json({
       success: true,
