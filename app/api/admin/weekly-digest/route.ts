@@ -233,7 +233,7 @@ export async function POST(request: NextRequest) {
             ) VALUES (
               ${crypto.randomUUID()},
               ${user.id},
-              'WEEKLY_DIGEST',
+              'SYSTEM',
               ${'Weekly Family Summary - ' + user.family_name},
               ${`Your weekly digest is ready! You have ${familyEvents.length} upcoming events this week.`},
               ${JSON.stringify({
