@@ -68,6 +68,15 @@ export function evaluateGeofence(opts: {
   return confidentDistance > radius + hysteresisBuffer(radius) ? "DEPARTURE" : null
 }
 
+/**
+ * A fix that is clearly far from a place even after giving it its own error
+ * margin: more than three radii away. A phone with poor GPS (reporting 100-200 m)
+ * can't pass isTrustedFix, but it can still tell a person is kilometres from
+ * home, so it may confirm a departure that precise fixes never got to.
+ */
+export function isClearlyAway(distance: number, accuracy: number | null | undefined, radius: number): boolean {
+  return typeof accuracy === "number" && Number.isFinite(accuracy) && accuracy >= 0 && distance - accuracy > radius * 3
+}
 /** Movement below this between two pings counts as standing still (GPS noise). */
 export const STATIONARY_METERS = 25
 
@@ -174,11 +183,19 @@ export function planGeofenceTransitions(
       const s = state.get(place.id)!
       if (fix.queued && s.lastMs != null && fix.timeMs <= s.lastMs) continue
       const distance = distanceMeters(fix.latitude, fix.longitude, place.latitude, place.longitude)
-      const transition = evaluateGeofence({ distance, accuracy: fix.accuracy, radius: place.radius, wasInside: s.inside })
+      let transition = evaluateGeofence({ distance, accuracy: fix.accuracy, radius: place.radius, wasInside: s.inside })
+      // Coarse GPS can never pass the trusted-fix test, which used to leave a
+      // person marked 'home' for an hour after driving away. A fix clearly far
+      // from a place they are marked inside of still counts as leaving it.
+      const coarseAway = !transition && s.inside && isClearlyAway(distance, fix.accuracy, place.radius)
+      if (coarseAway) transition = "DEPARTURE"
       if (!transition) continue
       if (transition === "DEPARTURE" && before && Math.abs(fix.timeMs - before.timeMs) / 1000 < DEPARTURE_CONFIRM_WINDOW_SEC) {
         const prevDistance = distanceMeters(before.latitude, before.longitude, place.latitude, place.longitude)
-        if (!confirmsDeparture({ distance: prevDistance, accuracy: before.accuracy }, place.radius)) continue
+        // Coarse departures only need the previous fix to be outside the radius
+        // (any accuracy); precise ones still need it to be trusted too.
+        const confirmed = coarseAway ? prevDistance > place.radius : confirmsDeparture({ distance: prevDistance, accuracy: before.accuracy }, place.radius)
+        if (!confirmed) continue
       }
       const atMs = geofenceEventTimeMs(fix.timeMs, nowMs)
       s.inside = transition === "ARRIVAL"

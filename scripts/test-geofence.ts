@@ -170,6 +170,27 @@ const fixAt = (north: number, acc: number, minAgo: number, queued = true) => ({
   assert.deepStrictEqual(transitions.map((t) => [t.transition, t.atMs]), [["ARRIVAL", NOW]])
 }
 
+{
+  // Regression (Nov 2): coarse GPS (200/51/100 m) on the drive out of home meant
+  // the departure was only logged an hour late. Far-away coarse fixes now count.
+  const HOMEP = { ...WORK, id: "home", wasInside: true, lastEventMs: NOW - 14 * 3600_000 }
+  const seq = [fixAt(0, 208, 10, false), fixAt(4000, 40, 6, false), fixAt(4300, 51, 0, false)]
+  let prev: ReturnType<typeof fixAt> | null = null
+  const out: string[] = []
+  const place = { ...HOMEP }
+  for (const f of seq) {
+    const r = planGeofenceTransitions([place], [f], prev, NOW)
+    for (const tr of r.transitions) { out.push(tr.transition); place.wasInside = tr.transition === "ARRIVAL" }
+    prev = f
+  }
+  assert.deepStrictEqual(out, ["DEPARTURE"], "left home despite coarse fixes; recorded once")
+  // A single far coarse fix right after a fix still inside does not fire (stray fix).
+  const stray = planGeofenceTransitions([{ ...HOMEP }], [fixAt(4000, 150, 0, false)], fixAt(0, 10, 3, false), NOW)
+  assert.deepStrictEqual(stray.transitions, [], "stray far fix needs an outside previous fix")
+  // Poor accuracy that does not clear 3 radii is still ignored.
+  const near = planGeofenceTransitions([{ ...HOMEP }], [fixAt(250, 100, 0, false)], fixAt(250, 100, 3, false), NOW)
+  assert.deepStrictEqual(near.transitions, [], "nearby coarse fix is not a departure")
+}
 // 11. Places for the phone's boost: position and radius only, rounded, once each, capped.
 {
   const rows = [
