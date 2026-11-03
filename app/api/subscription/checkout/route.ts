@@ -3,7 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { purchaseBlockedForRequest } from "@/lib/android-app"
 import { stripe, getPriceId } from "@/lib/stripe"
-import { buildCheckoutSessionParams, subscriptionUpdateTaxParams } from "@/lib/stripe-checkout"
+import { buildCheckoutSessionParams, planChangeBilling, subscriptionUpdateTaxParams } from "@/lib/stripe-checkout"
 import { appUrl as siteUrl } from '@/lib/app-url'
 import { resumeParams } from "@/lib/stripe-cancel"
 
@@ -116,10 +116,12 @@ export async function POST(request: NextRequest) {
 
     // Already paying through Stripe? Switch the existing subscription's
     // price instead of opening a second Checkout - a second checkout would
-    // create a duplicate subscription and double-bill. No proration: a plan
-    // change never creates partial-month charges or credits; the new price
-    // applies from the next invoice. The customer.subscription.updated
-    // webhook then syncs the new tier.
+    // create a duplicate subscription and double-bill. Billing of the switch
+    // is decided by planChangeBilling (lib/stripe-checkout.ts): an upgrade on
+    // the same interval charges the difference for the rest of the period
+    // immediately; downgrades and interval changes never create credits and
+    // the new price applies from the next invoice. The
+    // customer.subscription.updated webhook then syncs the new tier.
     const currentStripeSubId: string | null = subscription[0].stripe_subscription_id
     if (currentStripeSubId && subscription[0].status !== "CANCELLED") {
       try {
@@ -127,9 +129,12 @@ export async function POST(request: NextRequest) {
         if (current.status !== "canceled") {
           const item = current.items.data[0]
           if (item && item.price.id !== priceId) {
+            // Upgrades on the same interval charge the difference now;
+            // everything else starts the new price at the next invoice.
+            const nextPrice = await stripe.prices.retrieve(priceId)
             await stripe.subscriptions.update(currentStripeSubId, {
               items: [{ id: item.id, price: priceId }],
-              proration_behavior: "none",
+              ...planChangeBilling(item.price, nextPrice),
               // Switching plans also stops a pending cancellation.
               ...(resumeParams(current) ?? {}),
               metadata: { familyId, requestedTier: tier.toUpperCase(), billingCycle },
@@ -151,6 +156,14 @@ export async function POST(request: NextRequest) {
         // to a new Checkout. Any other error (network, rate limit) could leave
         // the old one running, and a second Checkout would bill twice.
         const code = (err as { code?: string })?.code
+        // An upgrade charges the difference immediately; if the card fails the
+        // plan does not change (payment_behavior: error_if_incomplete).
+        if ((err as { type?: string })?.type === "StripeCardError") {
+          return NextResponse.json(
+            { success: false, error: "Your card couldn't be charged for the upgrade, so your plan wasn't changed. Please update your payment method and try again." },
+            { status: 402 }
+          )
+        }
         if (code !== "resource_missing") {
           console.error("Existing subscription update failed:", err)
           return NextResponse.json(
