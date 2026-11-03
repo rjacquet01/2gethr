@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { useAuth, getAccessToken, authFetch } from '@/hooks/use-auth'
+import { syncShownNotifications } from '@/lib/shown-notifications'
 
 interface Notification {
   id: string
@@ -152,6 +153,11 @@ export default function NotificationsPage() {
   }
 
   const unreadCount = notifications.filter(n => !n.isRead).length
+
+  // Close phone notifications (and so the app icon badge) once read here.
+  useEffect(() => {
+    if (!loading) void syncShownNotifications(notifications, unreadCount)
+  }, [loading, notifications, unreadCount])
 
   if (loading) {
     return (

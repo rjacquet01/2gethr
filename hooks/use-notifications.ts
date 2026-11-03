@@ -1,8 +1,9 @@
 'use client'
 
 import useSWR from 'swr'
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { authFetch } from './use-auth'
+import { syncShownNotifications } from '@/lib/shown-notifications'
 
 export interface Notification {
   id: string
@@ -39,7 +40,13 @@ export function useNotifications(options: { limit?: number; unreadOnly?: boolean
   }>(`/api/notifications?${params.toString()}`, fetcher, {
     refreshInterval: 30000, // Refresh every 30 seconds
   })
-  
+
+  // Close phone notifications (and so the app icon badge) once read in the app.
+  useEffect(() => {
+    if (!data?.data || unreadOnly) return
+    void syncShownNotifications(data.data.notifications, data.data.unreadCount)
+  }, [data, unreadOnly])
+
   const markAsRead = useCallback(async (notificationId: string) => {
     try {
       const res = await authFetch('/api/notifications', {
