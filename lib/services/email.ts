@@ -101,7 +101,12 @@ export async function sendEmail(payload: EmailPayload): Promise<EmailResult> {
  * (new signups, support tickets, cancellations, tier changes) — distinct
  * from any user-facing email, which always goes to that user's own address.
  */
-export const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'rjacquet01@gmail.com'
+export const DEFAULT_ADMIN_EMAIL = 'admin@mytogethr.com'
+/** ADMIN_EMAIL if it holds an address, otherwise the admin mailbox. */
+export function resolveAdminEmail(value: string | undefined): string {
+  return value?.trim() || DEFAULT_ADMIN_EMAIL
+}
+export const ADMIN_EMAIL = resolveAdminEmail(process.env.ADMIN_EMAIL)
 
 /**
  * Send an operational alert to the admin address. Failures are logged but
@@ -643,6 +648,28 @@ export const EMAIL_TEMPLATES = {
       </div>
     `,
       text: [...lines, ...back, '', 'Details: Admin portal, System Health.'].join('\n'),
+    }
+  },
+
+  // Weekly report: how the Sunday family digest run went.
+  ADMIN_WEEKLY_DIGEST_SUMMARY: (r: { total: number; sent: number; failed: number; skipped: number; weekLabel: string }) => {
+    const problem = r.failed > 0
+    return {
+      subject: `Weekly digest ${problem ? 'finished with failures' : 'sent'}: ${r.sent} of ${r.total} (${r.weekLabel})`,
+      html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px;">
+        <h2 style="color: ${problem ? '#ef4444' : '#3b4563'};">Weekly family digest</h2>
+        <p><strong>Week:</strong> ${escapeHtml(r.weekLabel)}</p>
+        <ul>
+          <li>Eligible adults: ${r.total}</li>
+          <li>Sent: ${r.sent}</li>
+          <li>Failed: ${r.failed}</li>
+          <li>Skipped (nothing to report): ${r.skipped}</li>
+        </ul>
+        <p>Job status: Admin portal, System Health.</p>
+      </div>
+    `,
+      text: `Weekly family digest (${r.weekLabel})\nEligible: ${r.total}\nSent: ${r.sent}\nFailed: ${r.failed}\nSkipped: ${r.skipped}\n\nJob status: Admin portal, System Health.`,
     }
   },
 
