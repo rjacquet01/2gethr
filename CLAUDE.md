@@ -23,7 +23,7 @@ portal (support, legal requests). Preparing for a soft launch.
   error is `prefer-const` in `scripts/test-push-ownership.ts`. Add no new errors and
   no new warnings.
 - `npm run test:e2e`: Playwright smoke test of the public pages (`/`, `/login`,
-  `/privacy`, `/terms`), plus `/` and `/pricing` as the Android app sees them (no prices in the HTML).
+  `/privacy`, `/terms`), plus `/` and `/pricing` as the Android app sees them (no prices in the HTML), and `/iphone` as an iPhone in Safari and in Instagram.
   No sign-in, no writes. It starts `next dev` on port 3210.
   Next allows one `next dev` per checkout, so if one is already running use
   `E2E_PORT=<its port> npm run test:e2e`. The first time on a machine, run
@@ -45,7 +45,7 @@ real email. Read a script's header before running it.
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
   admin-created-email, admin-delete-child, admin-tier-breakdown, admin-token-refresh, adult-location-access, brand-logo, child-invite, coppa, cron-health,
   dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, free-tier-limits, geofence, kid-ping, launch-security, legal-hold-closure, location-history-delete,
-  legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-fixes, shown-notifications, event-heads-up, notification-link, site-data, push-ownership,
+  ios-setup, legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-fixes, shown-notifications, event-heads-up, notification-link, site-data, push-ownership,
   dictation, place-alerts, push-picker, quick-add, schema-snapshot, sms-allowance, sms-consent, stillness, stripe-cancel-pending, stripe-checkout-tax, task-due, trial-eligibility,
   stripe-webhook-events, telnyx-sms, twa-upgrade-links, upgrade-order, weather-prompt, weather-route.
 - **Board suites** (board-flyer-download, board-flyers, board-limits,
@@ -147,6 +147,9 @@ real email. Read a script's header before running it.
 - SMS provider: `SMS_PROVIDER` = `twilio` (default) or `telnyx` (`lib/services/sms.ts`). Gate sends on
   `isSmsConfigured()`, not a provider's own check. Inbound STOP/START/HELP for both providers is
   `lib/sms-inbound.ts`; Telnyx posts to `/api/webhooks/telnyx-sms` (Ed25519, `TELNYX_PUBLIC_KEY`).
+- iPhone has no app: mytogethr.com added to the Home Screen (iOS 16.4+ for push). `lib/ios-setup.ts` tells in-app browser
+  (Instagram, TikTok...) / Safari / Home Screen apart; steps on `/iphone`, a reminder card in the dashboard
+  (`IphoneSetupCard`), and an "open in Safari" strip in in-app browsers (`InAppBrowserNotice`). No background location on iPhone.
 - Logo: `components/brand/logo.tsx` (`Logo`, variant `logotype` | `mark`, tone `color` | `reversed` | `auto`).
   The logotype already spells "Togethr" with the T, so never put the T-mark or the word "Togethr" next to it;
   the mark alone only where width is under ~90px. Motto: `BRAND_MOTTO` ("Connect people, connect events.").
