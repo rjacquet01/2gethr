@@ -46,7 +46,7 @@ real email. Read a script's header before running it.
   admin-created-email, admin-delete-child, admin-tier-breakdown, admin-token-refresh, adult-location-access, brand-logo, child-invite, coppa, cron-health,
   dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, free-tier-limits, geofence, kid-ping, launch-security, legal-hold-closure, location-history-delete,
   ios-setup, legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-fixes, shown-notifications, event-heads-up, notification-link, site-data, push-ownership,
-  dictation, place-alerts, push-picker, quick-add, schema-snapshot, sms-allowance, sms-consent, stillness, stripe-cancel-pending, stripe-checkout-tax, task-due, trial-eligibility,
+  dictation, place-alerts, push-picker, quick-add, schema-snapshot, signup-source, sms-allowance, sms-consent, stillness, stripe-cancel-pending, stripe-checkout-tax, task-due, trial-eligibility,
   stripe-webhook-events, telnyx-sms, twa-upgrade-links, upgrade-order, weather-prompt, weather-route.
 - **Board suites** (board-flyer-download, board-flyers, board-limits,
   board-notify) need a disposable database in `BOARD_TEST_DATABASE_URL`.
@@ -150,6 +150,9 @@ real email. Read a script's header before running it.
 - iPhone has no app: mytogethr.com added to the Home Screen (iOS 16.4+ for push). `lib/ios-setup.ts` tells in-app browser
   (Instagram, TikTok...) / Safari / Home Screen apart; steps on `/iphone`, a reminder card in the dashboard
   (`IphoneSetupCard`), and an "open in Safari" strip in in-app browsers (`InAppBrowserNotice`). No background location on iPhone.
+- Sign-up source: `components/source-capture.tsx` keeps a short label for the first link with a clue (`?ref=`/`utm_source`,
+  referring site, Instagram/TikTok in-app browser, the Android app; `lib/signup-source.ts`) for 30 days in the browser; register
+  stores it on adults (`users.signup_source`, `signup_campaign`; "direct" when none). Admin dashboard: Sign-ups by Source.
 - Logo: `components/brand/logo.tsx` (`Logo`, variant `logotype` | `mark`, tone `color` | `reversed` | `auto`).
   The logotype already spells "Togethr" with the T, so never put the T-mark or the word "Togethr" next to it;
   the mark alone only where width is under ~90px. Motto: `BRAND_MOTTO` ("Connect people, connect events.").

@@ -83,6 +83,11 @@ export default function PrivacyPage() {
                 not offered on children&apos;s accounts.
               </li>
               <li>Basic usage and performance analytics</li>
+              <li>
+                How you found Togethr: when an adult signs up, a short label for the link that brought them (for
+                example &ldquo;tiktok&rdquo;, &ldquo;instagram&rdquo; or &ldquo;direct&rdquo;), kept with the account to see which
+                channels work. Not the page address or anything about the other site.
+              </li>
               <li>Security and audit logs of account actions</li>
             </ul>
 

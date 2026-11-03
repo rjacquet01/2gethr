@@ -12,6 +12,7 @@ import { usePushNotifications } from '@/hooks/use-push-notifications'
 import { authFetch } from '@/hooks/use-auth'
 import { currentIosSetupState, inAppBrowserName, iosSupportsWebPush, type IosSetupState } from '@/lib/ios-setup'
 import { cn } from '@/lib/utils'
+import { siteLinkWithSource } from '@/components/source-capture'
 
 const SITE = 'https://mytogethr.com'
 
@@ -28,7 +29,8 @@ function useIosState(): IosSetupState | null {
 
 async function copySiteLink() {
   try {
-    await navigator.clipboard.writeText(SITE)
+    // Keeps the TikTok/Instagram source when the link moves to Safari.
+    await navigator.clipboard.writeText(siteLinkWithSource(SITE))
     toast.success('Link copied. Paste it into Safari.')
   } catch {
     toast.error(`Couldn't copy. Type ${SITE.replace('https://', '')} into Safari.`)
