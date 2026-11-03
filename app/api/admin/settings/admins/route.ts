@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromToken, hashPassword, logAdminAction } from '@/lib/admin-auth'
 import { sql } from '@/lib/db'
+import { sendAdminCreatedEmails } from '@/lib/admin-created-email'
 
 // List all admin users (SUPER_ADMIN only)
 export async function GET(request: NextRequest) {
@@ -112,6 +113,11 @@ export async function POST(request: NextRequest) {
     // Log the action
     const ipAddress = request.headers.get('x-forwarded-for') || 'unknown'
     await logAdminAction(admin.id, 'CREATE_ADMIN', 'admin_user', newAdmin[0].id, { email, role }, ipAddress)
+
+    await sendAdminCreatedEmails(
+      { email, firstName, lastName, role },
+      `${admin.firstName} ${admin.lastName} (${admin.email})`
+    )
 
     return NextResponse.json({ success: true, adminId: newAdmin[0].id })
   } catch (error) {
