@@ -23,6 +23,7 @@ import { TwoFactorSettings } from '@/components/two-factor-settings'
 import { ChangePasswordButton } from '@/components/change-password-dialog'
 import { ActiveSessions } from '@/components/active-sessions'
 import { usePushNotifications } from '@/hooks/use-push-notifications'
+import { isIos } from '@/lib/ios-setup'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Bell, Lock, Shield, Globe, User, Camera, Trash2, Phone, Smartphone, Download, RotateCcw, Sun, Moon, RefreshCw, ChevronRight, Mail, MessageSquareOff } from 'lucide-react'
@@ -192,7 +193,13 @@ export default function SettingsPage() {
     if (key === 'pushNotifications') {
       if (newValue) {
         if (!pushNotifications.isSupported) {
-          toast.error('Push notifications are not supported in this browser')
+          if (isIos(navigator.userAgent, navigator.maxTouchPoints)) {
+            toast.error('On iPhone, add Togethr to your Home Screen first, then open it from there.', {
+              action: { label: 'How', onClick: () => router.push('/iphone') },
+            })
+          } else {
+            toast.error('Push notifications are not supported in this browser')
+          }
           return
         }
         const ok = await pushNotifications.subscribe()

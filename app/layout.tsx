@@ -4,6 +4,7 @@ import { PrivacyAnalytics } from '@/components/privacy-analytics'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/theme-provider'
 import { AndroidAppDetector } from '@/components/android-app-detector'
+import { InAppBrowserNotice } from '@/components/iphone-setup'
 import './globals.css'
 
 const _inter = Inter({ subsets: ["latin"], variable: '--font-inter' });
@@ -84,6 +85,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <InAppBrowserNotice />
           {children}
           <AndroidAppDetector />
           <Toaster position="top-center" richColors />

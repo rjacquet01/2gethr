@@ -209,8 +209,13 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               <li className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" />No credit card required</li>
               <li className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" />Cancel anytime</li>
             </ul>
-            <div className="mt-6 flex justify-center lg:justify-start">
+            <div className="mt-6 flex flex-col items-center gap-2 lg:items-start">
               <PlayStoreBadge />
+              <HideInAndroidApp>
+                <Link href="/iphone" className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground">
+                  On iPhone? Add Togethr to your Home Screen
+                </Link>
+              </HideInAndroidApp>
             </div>
           </div>
           <ProductPreview />
