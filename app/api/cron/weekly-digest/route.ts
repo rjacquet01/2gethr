@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { monitorCron } from "@/lib/cron-health"
 import { sql, type Row } from '@/lib/db'
-import { sendEmail, EMAIL_TEMPLATES } from "@/lib/services/email"
+import { sendEmail, notifyAdmin, EMAIL_TEMPLATES } from "@/lib/services/email"
 import { ACTIVE_TASK_STATUSES_DB } from "@/lib/task-due"
 
 // Verify the request is from Vercel Cron
@@ -211,6 +211,14 @@ async function runJob(request: NextRequest) {
 
     console.log(`[Cron] Weekly digest completed: ${results.sent} sent, ${results.failed} failed, ${results.skipped} skipped`)
 
+    // Weekly report to the admin mailbox. Runs only after a real digest run
+    // (the skipped-hour and already-ran paths return earlier). notifyAdmin
+    // never throws, so a mail problem can't fail the cron.
+    const adminReport = EMAIL_TEMPLATES.ADMIN_WEEKLY_DIGEST_SUMMARY({
+      ...results,
+      weekLabel: `${weekStartFormatted} - ${weekEndFormatted}`,
+    })
+    await notifyAdmin(adminReport.subject, adminReport.html, adminReport.text)
 
 
     return NextResponse.json({
