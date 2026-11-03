@@ -1,4 +1,3 @@
-import { ddl } from "./schema-snapshot"
 
 // Where a new adult came from ("tiktok", "instagram", "direct", ...), kept on
 // their account so the admin dashboard can count sign-ups by channel. Taken
