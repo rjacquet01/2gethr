@@ -28,6 +28,44 @@ export function subscriptionUpdateTaxParams(): Partial<Stripe.SubscriptionUpdate
   return stripeTaxEnabled() ? { automatic_tax: { enabled: true } } : {}
 }
 
+/** The bits of a Stripe Price that decide how a plan change is billed. */
+export type PlanChangePrice = {
+  unit_amount: number | null
+  recurring?: { interval?: string | null; interval_count?: number | null } | null
+}
+
+/**
+ * How a plan switch on an existing subscription is billed.
+ *
+ * An upgrade to a more expensive price on the SAME billing interval (Plus ->
+ * Premium, monthly or annual) unlocks the higher tier's limits right away
+ * (the customer.subscription.updated webhook syncs the tier), so the
+ * difference for the rest of the current period is invoiced and charged
+ * immediately. That stops "upgrade, use the bigger allowances, cancel before
+ * renewal" from costing us more than was paid. If the charge fails the update
+ * is rejected, so the plan does not change.
+ *
+ * Everything else (downgrades, same price, switching monthly <-> annual) keeps
+ * the original rule: no proration, the new price starts at the next invoice.
+ */
+export function planChangeBilling(
+  current: PlanChangePrice,
+  next: PlanChangePrice
+): Pick<Stripe.SubscriptionUpdateParams, "proration_behavior" | "payment_behavior"> {
+  const sameInterval =
+    !!current.recurring?.interval &&
+    current.recurring.interval === next.recurring?.interval &&
+    (current.recurring.interval_count ?? 1) === (next.recurring?.interval_count ?? 1)
+  const isUpgrade =
+    typeof current.unit_amount === "number" &&
+    typeof next.unit_amount === "number" &&
+    next.unit_amount > current.unit_amount
+  if (sameInterval && isUpgrade) {
+    return { proration_behavior: "always_invoice", payment_behavior: "error_if_incomplete" }
+  }
+  return { proration_behavior: "none" }
+}
+
 /** The subscription Checkout Session. With tax off this is exactly the pre-tax session. */
 export function buildCheckoutSessionParams(opts: {
   customerId: string
