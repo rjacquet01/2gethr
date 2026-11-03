@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { releasePushForThisDevice } from '@/lib/push-release'
 import { forgetLastFamily, readLastFamily, rememberLastFamily } from '@/lib/last-family'
 import { SITE_DATA_BLOCKED_MESSAGE, readStored, removeStored, siteDataBlocked, writeStored } from '@/lib/site-data'
+import { storedSignupSource } from '@/components/source-capture'
 
 // Token storage keys
 const ACCESS_TOKEN_KEY = 'safe_link_access_token'
@@ -287,7 +288,12 @@ export function useAuth(): AuthState & {
         headers: { 'Content-Type': 'application/json' },
         // Send the device's real timezone - without it every account was created
         // as UTC, which broke quiet hours and when tasks/reminders land on calendars.
-        body: JSON.stringify({ ...registerData, timezone: detectBrowserTimeZone() }),
+        body: JSON.stringify({
+          ...registerData,
+          timezone: detectBrowserTimeZone(),
+          // Where an adult came from (TikTok, Instagram...); not for children.
+          signupSource: registerData.childInviteCode ? undefined : storedSignupSource() ?? undefined,
+        }),
       })
       
       const data = await res.json()

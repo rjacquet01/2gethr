@@ -19,6 +19,8 @@ import { ensureConsentSchema } from "@/lib/consent-schema"
 import { TERMS_VERSION } from "@/lib/consent-text"
 import { alertFamilyAdults } from "@/lib/family-alerts"
 import { hitRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit"
+import { cleanSignupSource } from "@/lib/signup-source"
+import { ensureSignupSourceColumns } from "@/lib/signup-source-schema"
 
 const registerSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -42,6 +44,8 @@ const registerSchema = z.object({
   // A parent-made code for a child's own account (the parent gave consent
   // when making it). The only way an account is created for someone under 18.
   childInviteCode: z.string().trim().min(1).max(20).optional(),
+  // Where an adult came from (components/source-capture.tsx); re-checked below.
+  signupSource: z.object({ source: z.string().max(80), campaign: z.string().max(120).optional() }).optional(),
 }).superRefine((data, ctx) => {
   if (data.childInviteCode) {
     if (data.phone) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["phone"], message: "A child's account doesn't take a phone number" })
@@ -156,6 +160,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: "This account code is no longer valid. Ask a parent for a new one." }, { status: 400 })
       }
       throw err
+    }
+
+    // Which link brought an adult here (TikTok, Instagram, a ?ref= tag...), for
+    // the admin dashboard's sign-ups by source. Never fails the sign-up.
+    if (isAdult) {
+      const src = cleanSignupSource(validatedData.signupSource) ?? { source: "direct" }
+      try {
+        await ensureSignupSourceColumns()
+        await sql`UPDATE users SET signup_source = ${src.source}, signup_campaign = ${src.campaign ?? null} WHERE id = ${userId}`
+      } catch (err) {
+        console.error("[register] signup source not saved:", err)
+      }
     }
 
     // Create default reminder settings

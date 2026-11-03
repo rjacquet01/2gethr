@@ -26,6 +26,7 @@ interface DashboardStats {
   }
   riskFlags: { open: number; investigating: number; critical: number }
   closedAccounts: { total: number; last7d: number; last30d: number; avgTenureDays: number; withinFirstWeek: number }
+  signupSources?: Array<{ source: string; last30d: number; total: number; families: number; paying: number }>
   recentActivity: Array<{
     action: string
     targetType: string
@@ -280,6 +281,47 @@ export default function AdminDashboard() {
             <p className="text-xs text-muted-foreground mt-3">
               Churn rate: {(((stats.closedAccounts?.total ?? 0) / ((stats.users.total + (stats.closedAccounts?.total ?? 0)) || 1)) * 100).toFixed(1)}% of all signups
             </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Sign-ups by source */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Sign-ups by Source</CardTitle>
+          <CardDescription>
+            Adults, by the link that brought them (?ref= tag, referring site, or the app&apos;s browser). Tag bio links
+            like mytogethr.com/?ref=tiktok.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!stats.signupSources?.length ? (
+            <p className="text-sm text-muted-foreground">No tracked sign-ups yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-muted-foreground">
+                    <th className="py-1 pr-4 font-medium">Source</th>
+                    <th className="py-1 pr-4 font-medium text-right">Last 30 days</th>
+                    <th className="py-1 pr-4 font-medium text-right">All time</th>
+                    <th className="py-1 pr-4 font-medium text-right">Started a family</th>
+                    <th className="py-1 font-medium text-right">Paying</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.signupSources.map((r) => (
+                    <tr key={r.source} className="border-t">
+                      <td className="py-1.5 pr-4 font-medium">{r.source}</td>
+                      <td className="py-1.5 pr-4 text-right">{r.last30d}</td>
+                      <td className="py-1.5 pr-4 text-right">{r.total}</td>
+                      <td className="py-1.5 pr-4 text-right">{r.families}</td>
+                      <td className="py-1.5 text-right">{r.paying}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>

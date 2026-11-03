@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromToken } from '@/lib/admin-auth'
 import { sql } from '@/lib/db'
 import { computeTierBreakdown, type LatestFamilySubscription } from '@/lib/admin-tier-breakdown'
+import { ensureSignupSourceColumns } from '@/lib/signup-source-schema'
 
 // Get dashboard stats and metrics
 export async function GET(request: NextRequest) {
@@ -92,6 +93,37 @@ export async function GET(request: NextRequest) {
       WHERE email LIKE 'deleted-%@deleted.togethrapp.com'
     `
 
+    // Sign-ups by the link that brought them (lib/signup-source.ts), adults
+    // only, from when tracking started: how many started a family, and how
+    // many of those families now pay.
+    let signupSources: Record<string, unknown>[] = []
+    try {
+      await ensureSignupSourceColumns()
+      signupSources = await sql`
+        SELECT
+          u.signup_source AS source,
+          COUNT(*) FILTER (WHERE u.created_at > NOW() - INTERVAL '30 days') AS last_30d,
+          COUNT(*) AS total,
+          COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM families f WHERE f.owner_id = u.id)) AS families,
+          COUNT(*) FILTER (WHERE EXISTS (
+            SELECT 1 FROM families f
+            JOIN LATERAL (
+              SELECT s.tier, s.status FROM subscriptions s
+              WHERE s.family_id = f.id ORDER BY s.created_at DESC LIMIT 1
+            ) ls ON true
+            WHERE f.owner_id = u.id AND ls.status = 'ACTIVE' AND ls.tier <> 'FREE'
+          )) AS paying
+        FROM users u
+        WHERE u.signup_source IS NOT NULL
+          AND u.email NOT LIKE 'deleted-%@deleted.togethrapp.com'
+        GROUP BY u.signup_source
+        ORDER BY last_30d DESC, total DESC
+        LIMIT 20
+      `
+    } catch (err) {
+      console.error('Admin dashboard signup sources:', err)
+    }
+
     // Recent activity (last 10 admin actions)
     const recentActivity = await sql`
       SELECT 
@@ -146,6 +178,13 @@ export async function GET(request: NextRequest) {
         avgTenureDays: parseInt(closedStats[0].avg_tenure_days),
         withinFirstWeek: parseInt(closedStats[0].within_first_week),
       },
+      signupSources: signupSources.map(r => ({
+        source: String(r.source),
+        last30d: parseInt(String(r.last_30d)),
+        total: parseInt(String(r.total)),
+        families: parseInt(String(r.families)),
+        paying: parseInt(String(r.paying)),
+      })),
       recentActivity: recentActivity.map(a => ({
         action: a.action,
         targetType: a.target_type,

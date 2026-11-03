@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/theme-provider'
 import { AndroidAppDetector } from '@/components/android-app-detector'
 import { InAppBrowserNotice } from '@/components/iphone-setup'
+import { SourceCapture } from '@/components/source-capture'
 import './globals.css'
 
 const _inter = Inter({ subsets: ["latin"], variable: '--font-inter' });
@@ -88,6 +89,7 @@ export default function RootLayout({
           <InAppBrowserNotice />
           {children}
           <AndroidAppDetector />
+          <SourceCapture />
           <Toaster position="top-center" richColors />
         </ThemeProvider>
         <PrivacyAnalytics />
