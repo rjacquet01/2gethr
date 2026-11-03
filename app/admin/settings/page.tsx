@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
@@ -83,6 +84,7 @@ export default function AdminSettingsPage() {
   const [newAdminFirstName, setNewAdminFirstName] = useState('')
   const [newAdminLastName, setNewAdminLastName] = useState('')
   const [newAdminPassword, setNewAdminPassword] = useState('')
+  const [showNewAdminPassword, setShowNewAdminPassword] = useState(false)
   const [newAdminRole, setNewAdminRole] = useState('ADMIN')
   const [creatingAdmin, setCreatingAdmin] = useState(false)
 
@@ -265,6 +267,7 @@ export default function AdminSettingsPage() {
         setNewAdminFirstName('')
         setNewAdminLastName('')
         setNewAdminPassword('')
+        setShowNewAdminPassword(false)
         setNewAdminRole('ADMIN')
         loadOtherAdmins()
       } else {
@@ -632,12 +635,21 @@ export default function AdminSettingsPage() {
                         <Label htmlFor="newAdminPassword">Password</Label>
                         <Input
                           id="newAdminPassword"
-                          type="password"
+                          type={showNewAdminPassword ? 'text' : 'password'}
+                          autoComplete="new-password"
                           value={newAdminPassword}
                           onChange={(e) => setNewAdminPassword(e.target.value)}
                           required
                           minLength={8}
                         />
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id="showNewAdminPassword"
+                            checked={showNewAdminPassword}
+                            onCheckedChange={(c) => setShowNewAdminPassword(c === true)}
+                          />
+                          <Label htmlFor="showNewAdminPassword" className="text-sm font-normal">Show password</Label>
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="newAdminRole">Role</Label>

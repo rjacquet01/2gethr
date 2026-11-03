@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSuperAdmin } from '@/lib/admin-auth'
 import { sql } from '@/lib/db'
+import { sendAdminCreatedEmails } from '@/lib/admin-created-email'
 
 // One-time setup endpoint for creating the first super admin
 export async function POST(request: NextRequest) {
@@ -45,6 +46,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
     
+    await sendAdminCreatedEmails(
+      { email: result.email, firstName: result.firstName, lastName: result.lastName, role: 'SUPER_ADMIN' },
+      null
+    )
+
     return NextResponse.json({
       message: 'Super admin created successfully',
       admin: {
