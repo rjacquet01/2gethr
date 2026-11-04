@@ -184,7 +184,7 @@ const fetcher = async (url: string) => {
 export function useAuth(): AuthState & {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; requiresTwoFactor?: boolean; challengeToken?: string }>
   verifyTwoFactor: (challengeToken: string, code: string) => Promise<{ success: boolean; error?: string }>
-  register: (data: { email: string; password: string; displayName?: string; phone?: string; smsConsent?: boolean; ageConfirmed?: boolean; termsAccepted?: boolean; childInviteCode?: string }) => Promise<{ success: boolean; error?: string }>
+  register: (data: { email: string; password: string; displayName?: string; phone?: string; smsConsent?: boolean; ageConfirmed?: boolean; termsAccepted?: boolean; childInviteCode?: string; invited?: boolean }) => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
   updateProfile: (data: Partial<User>) => Promise<{ success: boolean; error?: string }>
   uploadPhoto: (file: File) => Promise<{ success: boolean; pathname?: string; error?: string }>
@@ -279,7 +279,7 @@ export function useAuth(): AuthState & {
     }
   }, [mutate])
 
-  const register = useCallback(async (registerData: { email: string; password: string; displayName?: string; phone?: string; smsConsent?: boolean; ageConfirmed?: boolean; termsAccepted?: boolean; childInviteCode?: string }) => {
+  const register = useCallback(async ({ invited, ...registerData }: { email: string; password: string; displayName?: string; phone?: string; smsConsent?: boolean; ageConfirmed?: boolean; termsAccepted?: boolean; childInviteCode?: string; invited?: boolean }) => {
     // Don't create an account the browser can't stay signed in to.
     if (siteDataBlocked()) return { success: false, error: SITE_DATA_BLOCKED_MESSAGE }
     try {
@@ -291,8 +291,13 @@ export function useAuth(): AuthState & {
         body: JSON.stringify({
           ...registerData,
           timezone: detectBrowserTimeZone(),
-          // Where an adult came from (TikTok, Instagram...); not for children.
-          signupSource: registerData.childInviteCode ? undefined : storedSignupSource() ?? undefined,
+          // Where an adult came from (TikTok, Instagram...; "invite" when a
+          // family member invited them); not for children.
+          signupSource: registerData.childInviteCode
+            ? undefined
+            : invited
+              ? { source: 'invite' }
+              : storedSignupSource() ?? undefined,
         }),
       })
       

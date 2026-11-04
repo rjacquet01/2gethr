@@ -38,7 +38,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 import { useState } from 'react'
 import { format, isToday, isTomorrow, parseISO, isPast } from 'date-fns'
-import { useAuth } from '@/hooks/use-auth'
+import { authFetch, useAuth } from '@/hooks/use-auth'
 import { useMyRole } from '@/hooks/use-my-role'
 import { Bell } from 'lucide-react'
 import { ComingUp, DashboardMiniMap, FloatingEmergencyButton } from '@/components/dashboard-extras'
@@ -51,11 +51,24 @@ import {
   DashboardShortcuts,
 } from '@/components/dashboard-widgets'
 import { FamilyNameTag } from '@/components/family-name-tag'
+import { GettingStartedCard } from '@/components/getting-started-card'
 import { isTaskOverdue, taskDueAt } from '@/lib/task-due'
 
+const pendingJoinsFetcher = async (url: string) => {
+  const res = await authFetch(url)
+  if (!res.ok) return []
+  const json = await res.json()
+  return (json.data || []) as Array<{ id: string; familyName: string }>
+}
+
 export default function DashboardPage() {
-  const { families, isLoading: familiesLoading } = useFamilies()
+  const { families, isLoading: familiesLoading, mutate: mutateFamilies } = useFamilies()
   const primaryFamily = families[0]
+  // No family yet: a parent who used an invite may be waiting for approval.
+  const { data: pendingJoins, mutate: mutatePendingJoins } = useSWR(
+    !familiesLoading && !primaryFamily ? '/api/families/join' : null,
+    pendingJoinsFetcher
+  )
   // Guests get calendar and tasks only: no family map, activity or SOS.
   const { isGuest, isSupervisor } = useMyRole()
   const { user } = useAuth()
@@ -229,6 +242,20 @@ export default function DashboardPage() {
   const visibleFamilyMembers = familyMembers.slice(0, 3)
   const extraFamilyMemberCount = familyMembers.length - visibleFamilyMembers.length
 
+  if (!primaryFamily && pendingJoins && pendingJoins.length > 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <Empty
+          title="Waiting for approval"
+          description={`You asked to join ${pendingJoins[0].familyName} as a parent. A parent in the family needs to approve you, and you'll get a notification when they do.`}
+        />
+        <div className="flex gap-3 mt-6">
+          <Button onClick={() => { mutateFamilies(); mutatePendingJoins() }}>Check again</Button>
+        </div>
+      </div>
+    )
+  }
+
   if (!primaryFamily) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
@@ -283,6 +310,14 @@ export default function DashboardPage() {
           </Button>
         </div>
       </div>
+
+      {/* A new family's first steps (parents and guardians) */}
+      {isSupervisor && (
+        <GettingStartedCard
+          familyId={primaryFamily.id}
+          hasOthers={familyMembers.length > 1 || (primaryFamily.children?.length ?? 0) > 0}
+        />
+      )}
 
       {/* Needs-attention banner (hidden when nothing is due) */}
       <AttentionBanner

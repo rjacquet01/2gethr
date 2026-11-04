@@ -194,10 +194,7 @@ export function InviteCodesCard({ familyId, familyName, canInviteChild = false, 
                   <Label htmlFor="invite-child-name">Child&apos;s name</Label>
                   <Input id="invite-child-name" value={childName} onChange={(e) => setChildName(e.target.value)} placeholder="Their first name" />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="invite-child-birthdate">Birthdate (optional)</Label>
-                  <BirthdateInput id="invite-child-birthdate" value={birthdate} onChange={setBirthdate} />
-                </div>
+                <BirthdateInput id="invite-child-birthdate" value={birthdate} onChange={setBirthdate} />
               </>
             )}
             <div className="space-y-1.5">

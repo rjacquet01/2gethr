@@ -152,7 +152,7 @@ real email. Read a script's header before running it.
   (`IphoneSetupCard`), and an "open in Safari" strip in in-app browsers (`InAppBrowserNotice`). No background location on iPhone.
 - Sign-up source: `components/source-capture.tsx` keeps a short label for the first link with a clue (`?ref=`/`utm_source`,
   referring site, Instagram/TikTok in-app browser, the Android app; `lib/signup-source.ts`) for 30 days in the browser; register
-  stores it on adults (`users.signup_source`, `signup_campaign`; "direct" when none). Admin dashboard: Sign-ups by Source.
+  stores it on adults (`users.signup_source`, `signup_campaign`; "invite" for an adult signing up with a parent/guest invite; "direct" when none). Admin dashboard: Sign-ups by Source.
 - Logo: `components/brand/logo.tsx` (`Logo`, variant `logotype` | `mark`, tone `color` | `reversed` | `auto`).
   The logotype already spells "Togethr" with the T, so never put the T-mark or the word "Togethr" next to it;
   the mark alone only where width is under ~90px. Motto: `BRAND_MOTTO` ("Connect people, connect events.").
