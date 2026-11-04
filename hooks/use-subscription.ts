@@ -20,6 +20,9 @@ export interface Subscription {
   /** A cancellation is pending: the plan ends on cancelAt (or currentPeriodEnd). */
   cancelAtPeriodEnd: boolean
   cancelAt: string | null
+  /** Paid through a Stripe subscription that isn't cancelled. */
+  stripeBilled: boolean
+  billingCycle: 'monthly' | 'annual'
 }
 
 /** Whether the owner may start a free trial now (one a year), or when they next can. */
@@ -78,6 +81,8 @@ interface APISubscriptionResponse {
     currentPeriodEnd?: string
     cancelAtPeriodEnd?: boolean
     cancelAt?: string | null
+    stripeBilled?: boolean
+    billingCycle?: 'monthly' | 'annual'
     trialEndsAt?: string
     /** Only for the owner of a family on Free. */
     trial?: TrialAvailability | null
@@ -147,6 +152,8 @@ const fetcher = async (url: string): Promise<SubscriptionData> => {
       trialEnd: data.trialEndsAt || null,
       cancelAtPeriodEnd: data.cancelAtPeriodEnd || false,
       cancelAt: data.cancelAt || null,
+      stripeBilled: !!data.stripeBilled,
+      billingCycle: data.billingCycle === 'annual' ? 'annual' : 'monthly',
     } : null,
     trial: data.trial ?? null,
     access: {

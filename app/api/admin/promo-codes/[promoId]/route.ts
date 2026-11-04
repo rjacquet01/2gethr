@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { getAdminFromToken, hasPermission, logAdminAction } from "@/lib/admin-auth"
 import { stripe } from "@/lib/stripe"
-import { promoCodeRow } from "@/lib/promo-codes"
+import { promoCodeRow, promoStripeError } from "@/lib/promo-codes"
 
 const schema = z.object({ active: z.boolean() })
 
@@ -28,7 +28,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ success: true, data: promoCodeRow(promo) })
   } catch (error) {
     console.error("Update promo code error:", error)
-    const message = (error as { message?: string })?.message
-    return NextResponse.json({ error: message ? `Stripe: ${message}` : "Couldn't update the code" }, { status: 502 })
+    const { status, error: message } = promoStripeError(error, "Couldn't update the code")
+    return NextResponse.json({ error: message }, { status })
   }
 }

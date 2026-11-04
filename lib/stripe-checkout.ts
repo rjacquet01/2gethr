@@ -66,6 +66,28 @@ export function planChangeBilling(
   return { proration_behavior: "none" }
 }
 
+const TIER_RANK: Record<string, number> = { PREMIUM: 1, PREMIUM_PLUS: 2 }
+
+const perMonthCents = (p: PlanChangePrice) =>
+  (p.unit_amount ?? 0) / ((p.recurring?.interval === "year" ? 12 : 1) * (p.recurring?.interval_count ?? 1))
+
+/**
+ * A switch to a lower plan (Premium -> Plus). Decided by tier when both prices
+ * map to one (so monthly <-> annual is never a downgrade), else by the price
+ * per month.
+ */
+export function isPlanDowngrade(
+  currentTier: string | null,
+  nextTier: string | null,
+  current: PlanChangePrice,
+  next: PlanChangePrice
+): boolean {
+  const from = currentTier ? TIER_RANK[currentTier] : undefined
+  const to = nextTier ? TIER_RANK[nextTier] : undefined
+  if (from && to) return to < from
+  return perMonthCents(next) < perMonthCents(current)
+}
+
 /** The subscription Checkout Session. With tax off this is exactly the pre-tax session. */
 export function buildCheckoutSessionParams(opts: {
   customerId: string

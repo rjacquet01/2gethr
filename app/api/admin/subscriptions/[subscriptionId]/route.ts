@@ -3,6 +3,7 @@ import { getAdminFromToken, hasPermission, logAdminAction } from '@/lib/admin-au
 import { sql } from '@/lib/db'
 import { stripe, getPriceId } from '@/lib/stripe'
 import { TRIAL_DAYS, getTierDefinition } from '@/lib/subscription-tiers'
+import { STRIPE_SUBSCRIPTION_TRIAL_ERROR, trialBlockedByStripe } from '@/lib/trial-eligibility'
 
 // History is an audit nicety: a failure to write it must never fail the change.
 async function safeHistory(run: () => Promise<unknown>) {
@@ -105,6 +106,9 @@ export async function PATCH(
     }
     
     if (action === 'grant_trial') {
+      if (trialBlockedByStripe(subscription)) {
+        return NextResponse.json({ error: STRIPE_SUBSCRIPTION_TRIAL_ERROR }, { status: 409 })
+      }
       const days = parseInt(trialDays) || TRIAL_DAYS
       const trialEnd = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
       

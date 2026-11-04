@@ -143,6 +143,13 @@ export async function GET(request: NextRequest) {
         cancelAtPeriodEnd: subscription.cancel_at_period_end,
         // When a pending cancellation takes effect (lib/stripe-cancel.ts).
         cancelAt: subscription.cancel_at ?? null,
+        // Paying through Stripe, and on which cycle (the upgrade page preselects it).
+        stripeBilled: !!subscription.stripe_subscription_id && subscription.status !== "CANCELLED",
+        billingCycle:
+          subscription.stripe_price_id &&
+          (subscription.stripe_price_id === process.env.STRIPE_PRICE_BASIC_ANNUAL || subscription.stripe_price_id === process.env.STRIPE_PRICE_PREMIUM_ANNUAL)
+            ? "annual"
+            : "monthly",
         trialEndsAt: subscription.trial_ends_at,
         tierInfo,
         familyId,

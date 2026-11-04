@@ -125,8 +125,9 @@ export async function POST(request: NextRequest) {
         break
 
       default:
-        // Unhandled event types are fine to ignore — we only listen for
-        // the events registered on this webhook endpoint in Stripe.
+        // Unhandled event types are fine to ignore, but logged so an endpoint
+        // sending events we don't handle is visible.
+        console.info(`Stripe webhook: ignored event type ${event.type}`)
         break
     }
 
@@ -333,6 +334,8 @@ async function recordInvoicePayment(invoice: Stripe.Invoice, status: "COMPLETED"
           UPDATE subscriptions SET status = 'PAST_DUE', updated_at = NOW()
           WHERE family_id = ${existing[0].family_id}
         `
+      } else {
+        await clearPastDue(invoice, existing[0])
       }
       return
     }
@@ -355,5 +358,28 @@ async function recordInvoicePayment(invoice: Stripe.Invoice, status: "COMPLETED"
       UPDATE subscriptions SET status = 'PAST_DUE', updated_at = NOW()
       WHERE family_id = ${existing[0].family_id}
     `
+  } else {
+    await clearPastDue(invoice, existing[0])
   }
+}
+
+// A paid invoice for the family's own subscription ends PAST_DUE, even if the
+// customer.subscription.updated (past_due -> active) never arrives.
+async function clearPastDue(invoice: Stripe.Invoice, row: Record<string, unknown>) {
+  if (row.status !== "PAST_DUE" || !row.stripe_subscription_id) return
+  const parentSub = invoice.parent?.subscription_details?.subscription
+  const invoiceSubId = typeof parentSub === "string" ? parentSub : parentSub?.id
+  if (invoiceSubId !== row.stripe_subscription_id) return
+  await sql`
+    UPDATE subscriptions SET status = 'ACTIVE', updated_at = NOW()
+    WHERE id = ${row.id} AND status = 'PAST_DUE'
+  `
+  await sql`
+    INSERT INTO subscription_status_history (
+      id, subscription_id, old_status, new_status, source, notes, changed_at
+    ) VALUES (
+      gen_random_uuid(), ${row.id}, 'PAST_DUE', 'ACTIVE',
+      'WEBHOOK', 'invoice.paid', NOW()
+    )
+  `
 }

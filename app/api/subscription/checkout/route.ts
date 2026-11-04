@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { purchaseBlockedForRequest } from "@/lib/android-app"
-import { stripe, getPriceId } from "@/lib/stripe"
-import { buildCheckoutSessionParams, planChangeBilling, subscriptionUpdateTaxParams } from "@/lib/stripe-checkout"
+import { stripe, getPriceId, getTierFromPriceId } from "@/lib/stripe"
+import { buildCheckoutSessionParams, isPlanDowngrade, planChangeBilling, subscriptionUpdateTaxParams } from "@/lib/stripe-checkout"
 import { appUrl as siteUrl } from '@/lib/app-url'
 import { resumeParams } from "@/lib/stripe-cancel"
 import { findUsablePromoCode, type PromoTierKey } from "@/lib/promo-codes"
@@ -59,6 +59,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Only family owners can manage subscriptions" }, { status: 403 })
     }
 
+    // Get or create the subscription row for this family, and reuse an
+    // existing Stripe Customer if we already created one for it.
+    let subscription = await sql`
+      SELECT * FROM subscriptions WHERE family_id = ${familyId}
+    `
+
+    // Continue on the plan the family already pays for, with nothing to
+    // resume: there is nothing to do, so Stripe isn't called at all.
+    const row = subscription[0]
+    if (row?.stripe_subscription_id && row.status !== "CANCELLED" && row.stripe_price_id === priceId && !row.cancel_at_period_end && !row.cancel_at) {
+      return NextResponse.json({ success: true, alreadyOnPlan: true, message: "You are already on this plan" })
+    }
+
     // A promo code entered on the upgrade page: checked before anything is
     // created, so a bad code changes nothing.
     let promotionCodeId: string | undefined
@@ -71,12 +84,6 @@ export async function POST(request: NextRequest) {
       if (!found.ok) return NextResponse.json({ error: found.error }, { status: 400 })
       promotionCodeId = found.promotionCodeId
     }
-
-    // Get or create the subscription row for this family, and reuse an
-    // existing Stripe Customer if we already created one for it.
-    let subscription = await sql`
-      SELECT * FROM subscriptions WHERE family_id = ${familyId}
-    `
 
     if (subscription.length === 0) {
       subscription = await sql`
@@ -148,13 +155,32 @@ export async function POST(request: NextRequest) {
             )
           }
           const item = current.items.data[0]
+          let change = "resume"
           if (item && item.price.id !== priceId) {
+            const nextPrice = await stripe.prices.retrieve(priceId)
+            const currentTier = getTierFromPriceId(item.price.id)
+            const nextTier = String(tier).toUpperCase()
+            // A lower plan is never switched on one click: the upgrade page
+            // asks first and sends confirmDowngrade.
+            if (isPlanDowngrade(currentTier, nextTier, item.price, nextPrice)) {
+              if (body.confirmDowngrade !== true) {
+                return NextResponse.json(
+                  { success: false, code: "CONFIRM_DOWNGRADE", error: "This is a downgrade to a lower plan. It takes effect right away, with no credit for the rest of this billing period. Confirm the downgrade to continue. Nothing was changed." },
+                  { status: 400 }
+                )
+              }
+              change = "downgrade"
+            }
             // Upgrades on the same interval charge the difference now;
             // everything else starts the new price at the next invoice.
-            const nextPrice = await stripe.prices.retrieve(priceId)
+            const billing = planChangeBilling(item.price, nextPrice)
+            if (change !== "downgrade") {
+              change = !currentTier || currentTier === nextTier ? "billing"
+                : billing.proration_behavior === "always_invoice" ? "upgrade" : "upgrade_next_bill"
+            }
             await stripe.subscriptions.update(currentStripeSubId, {
               items: [{ id: item.id, price: priceId }],
-              ...planChangeBilling(item.price, nextPrice),
+              ...billing,
               // Switching plans also stops a pending cancellation.
               ...(resumeParams(current) ?? {}),
               metadata: { familyId, requestedTier: tier.toUpperCase(), billingCycle },
@@ -168,7 +194,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({
             success: true,
             updated: true,
-            url: `${appUrl}/subscription/confirmation?updated=1`,
+            url: `${appUrl}/subscription/confirmation?updated=1&tier=${encodeURIComponent(String(tier).toUpperCase())}&change=${change}`,
           })
         }
       } catch (err) {
