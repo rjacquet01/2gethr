@@ -37,6 +37,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { TRIAL_DAYS } from '@/lib/subscription-tiers'
 import { planName, describeTierCount, type TierBreakdown } from '@/lib/admin-tier-breakdown'
+import {
+  ExtendedTrialDialog,
+  extendedTrialBlockedReason,
+  hasActiveExtendedTrial,
+  type ExtendedTrialMode,
+  type ExtendedTrialTarget,
+} from '@/components/admin-extended-trial-dialog'
 
 interface SubscriptionData {
   id: string
@@ -49,7 +56,21 @@ interface SubscriptionData {
   currentPeriodEnd: string | null
   trialEndsAt: string | null
   cancelAtPeriodEnd: boolean
+  stripeBilled: boolean
+  trialSource: string | null
   createdAt: string
+}
+
+function trialTargetFor(sub: SubscriptionData): ExtendedTrialTarget {
+  return {
+    familyId: sub.familyId,
+    familyName: sub.familyName,
+    tier: sub.tier,
+    status: sub.status,
+    trialEndsAt: sub.trialEndsAt,
+    trialSource: sub.trialSource,
+    stripeBilled: sub.stripeBilled,
+  }
 }
 
 const tierColors: Record<string, string> = {
@@ -84,6 +105,7 @@ export default function AdminSubscriptionsPage() {
   const [trialDays, setTrialDays] = useState(String(TRIAL_DAYS))
   const [newTier, setNewTier] = useState('PREMIUM')
   const [actionLoading, setActionLoading] = useState(false)
+  const [trialDialog, setTrialDialog] = useState<{ target: ExtendedTrialTarget; mode: ExtendedTrialMode } | null>(null)
 
   useEffect(() => {
     loadSubscriptions()
@@ -272,6 +294,25 @@ export default function AdminSubscriptionsPage() {
                           >
                             Change Tier
                           </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!!extendedTrialBlockedReason(trialTargetFor(sub))}
+                            title={extendedTrialBlockedReason(trialTargetFor(sub)) ?? undefined}
+                            onClick={() => setTrialDialog({ target: trialTargetFor(sub), mode: 'grant' })}
+                          >
+                            Grant extended trial
+                          </Button>
+                          {hasActiveExtendedTrial(trialTargetFor(sub)) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setTrialDialog({ target: trialTargetFor(sub), mode: 'revoke' })}
+                            >
+                              Cancel extended trial
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -379,6 +420,13 @@ export default function AdminSubscriptionsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ExtendedTrialDialog
+        target={trialDialog?.target ?? null}
+        mode={trialDialog?.mode ?? 'grant'}
+        onClose={() => setTrialDialog(null)}
+        onDone={loadSubscriptions}
+      />
     </div>
   )
 }

@@ -24,6 +24,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { planName } from '@/lib/admin-tier-breakdown'
+import {
+  ExtendedTrialDialog,
+  extendedTrialBlockedReason,
+  hasActiveExtendedTrial,
+  type ExtendedTrialMode,
+  type ExtendedTrialTarget,
+} from '@/components/admin-extended-trial-dialog'
 
 interface FamilyDetail {
   id: string
@@ -68,6 +75,8 @@ interface Subscription {
   currentPeriodEnd: string | null
   trialEndsAt: string | null
   cancelAtPeriodEnd: boolean
+  stripeBilled: boolean
+  trialSource: string | null
 }
 
 interface SubscriptionHistoryEntry {
@@ -131,6 +140,8 @@ export default function AdminFamilyDetailPage() {
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const canUpdateSubscription = hasPermission('subscriptions.update')
+  const [trialMode, setTrialMode] = useState<ExtendedTrialMode | null>(null)
 
   function openDelete(child: Child) {
     setDeleteChild(child)
@@ -215,6 +226,17 @@ export default function AdminFamilyDetailPage() {
       </div>
     )
   }
+
+  const trialTarget: ExtendedTrialTarget | null = family ? {
+    familyId: family.id,
+    familyName: family.name,
+    tier: subscription?.tier ?? null,
+    status: subscription?.status ?? null,
+    trialEndsAt: subscription?.trialEndsAt ?? null,
+    trialSource: subscription?.trialSource ?? null,
+    stripeBilled: subscription?.stripeBilled ?? false,
+  } : null
+  const grantBlocked = trialTarget ? extendedTrialBlockedReason(trialTarget) : null
 
   if (notFound || !family) {
     return (
@@ -318,6 +340,25 @@ export default function AdminFamilyDetailPage() {
               </div>
             ) : (
               <p className="text-muted-foreground">No subscription on file</p>
+            )}
+            {canUpdateSubscription && trialTarget && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTrialMode('grant')}
+                  disabled={!!grantBlocked}
+                  title={grantBlocked ?? undefined}
+                >
+                  Grant extended trial
+                </Button>
+                {hasActiveExtendedTrial(trialTarget) && (
+                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setTrialMode('revoke')}>
+                    Cancel extended trial
+                  </Button>
+                )}
+                {grantBlocked && <span className="text-xs text-muted-foreground">{grantBlocked}</span>}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -464,6 +505,13 @@ export default function AdminFamilyDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      <ExtendedTrialDialog
+        target={trialMode ? trialTarget : null}
+        mode={trialMode ?? 'grant'}
+        onClose={() => setTrialMode(null)}
+        onDone={loadFamily}
+      />
 
       <Dialog open={!!deleteChild} onOpenChange={(open) => { if (!open && !deleting) setDeleteChild(null) }}>
         <DialogContent>

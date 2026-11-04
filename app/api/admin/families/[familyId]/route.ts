@@ -131,6 +131,8 @@ export async function GET(
         currentPeriodEnd: subscriptionResult[0].current_period_end,
         trialEndsAt: subscriptionResult[0].trial_ends_at,
         cancelAtPeriodEnd: subscriptionResult[0].cancel_at_period_end,
+        stripeBilled: !!subscriptionResult[0].stripe_subscription_id && subscriptionResult[0].status !== 'CANCELLED',
+        trialSource: subscriptionResult[0].trial_source ?? null,
       } : null,
       subscriptionHistory: subscriptionHistory.map(h => ({
         id: h.id,

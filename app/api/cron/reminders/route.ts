@@ -6,6 +6,7 @@ import { sendEmail, isResendConfigured } from "@/lib/services/email"
 import { sendSMSMetered, isSmsConfigured } from "@/lib/services/sms"
 import { isQuietNow } from "@/lib/quiet-hours"
 import { tierHasFeature } from "@/lib/subscription-tiers"
+import { endExpiredTrials } from "@/lib/extended-trial"
 
 // This endpoint processes event reminders, refreshes the digest recipients
 // cache (stats only - it does not send anything), and auto-archives old
@@ -33,18 +34,11 @@ async function runJob(request: NextRequest) {
     // never subscribed through Stripe drops back to the Free plan. (Access is
     // also cut off immediately by checkFamilySubscription; this keeps the
     // stored tier/status honest for the subscription page and admin views.)
+    // Admin-granted extended trials end the same way.
     try {
-      const expiredTrials = await sql`
-        UPDATE subscriptions
-        SET tier = 'FREE', status = 'ACTIVE', updated_at = NOW()
-        WHERE status = 'TRIALING'
-          AND trial_ends_at IS NOT NULL
-          AND trial_ends_at < NOW()
-          AND stripe_subscription_id IS NULL
-        RETURNING id
-      `
-      if (expiredTrials.length > 0) {
-        console.log(`[Cron] Ended ${expiredTrials.length} expired free trial(s)`)
+      const ended = await endExpiredTrials()
+      if (ended > 0) {
+        console.log(`[Cron] Ended ${ended} expired free trial(s)`)
       }
     } catch (trialError) {
       console.error("[Cron] Failed to end expired trials:", trialError)

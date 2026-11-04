@@ -12,6 +12,7 @@
 import { sql } from '@/lib/db'
 import { ddl } from '../schema-snapshot'
 import { getTierDefinition, TRIAL_SMS_QUOTA } from '@/lib/subscription-tiers'
+import { extendedTrialTier } from '@/lib/extended-trial'
 import { formatSmsBody, hasSmsConsent, optOutNumber, toE164 } from '@/lib/sms-consent'
 
 interface SMSPayload {
@@ -248,7 +249,9 @@ export async function smsQuotaForFamily(familyId: string): Promise<{ quota: numb
   `
   const s = rows[0]
   if (s && s.status === 'TRIALING' && (!s.trial_ends_at || new Date(s.trial_ends_at).getTime() > Date.now())) {
-    return { quota: TRIAL_SMS_QUOTA, trial: true }
+    // An admin's extended trial gets the granted plan's allowance.
+    const extended = await extendedTrialTier(familyId)
+    return { quota: extended ? getTierDefinition(extended).limits.smsMonthlyQuota : TRIAL_SMS_QUOTA, trial: true }
   }
   // A trial that has ended (the daily cleanup hasn't flipped the row yet)
   // gets the Free allowance, not the paid plan's.

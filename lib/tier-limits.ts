@@ -3,23 +3,28 @@ import { sql } from "./db"
 import { ddl } from "./schema-snapshot"
 import { checkFamilySubscription } from "./auth"
 import { getTierDefinition, type SubscriptionTierKey } from "./subscription-tiers"
+import { extendedTrialTier } from "./extended-trial"
 import { capFor, evaluateLimit, planLimitBody, type PlanLimitKind, type PlanLimitResult } from "./plan-limits"
 
 // Server-side plan caps (numbers: lib/subscription-tiers.ts; rules and
 // wording: lib/plan-limits.ts). A family over a cap keeps everything it has;
 // it just can't add more until it is back under the cap or upgrades. Trials
-// get Premium's caps until the trial ends. Safety features are never capped:
+// get Premium's caps until the trial ends (an admin's extended trial gets
+// the caps of the plan it granted). Safety features are never capped:
 // arrival/departure alerts, SOS, emergency alerts, approval requests and
 // account email don't go through here, and only pushes marked routine count
 // toward the push quota.
 
 export * from "./plan-limits"
 
-/** The family's tier for plan caps: its plan, or Premium while on a trial. */
+/**
+ * The family's tier for plan caps: its plan, or Premium while on a trial
+ * (an admin's extended trial: the plan it granted).
+ */
 export async function limitTier(familyId: string): Promise<{ tier: SubscriptionTierKey; trial: boolean }> {
   const sub = await checkFamilySubscription(familyId)
   const trial = sub.trial === true
-  const tier = trial ? "PREMIUM_PLUS" : getTierDefinition(sub.tier).key
+  const tier = trial ? ((await extendedTrialTier(familyId)) ?? "PREMIUM_PLUS") : getTierDefinition(sub.tier).key
   return { tier, trial }
 }
 
