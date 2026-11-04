@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { detectSignupSource, type SignupSource } from '@/lib/signup-source'
+import { normalizePromoCode } from '@/lib/promo-code-format'
 
 // Remembers the first link that brought this browser here (lib/signup-source.ts)
 // for 30 days, the first one with a clue winning, so sign-up can say where the
@@ -35,8 +36,26 @@ export function siteLinkWithSource(base = 'https://mytogethr.com'): string {
   return s ? `${base}/?ref=${encodeURIComponent(s.source)}` : base
 }
 
+// A promo code from a link (?promo=LAUNCH20), kept for the upgrade page.
+// The newest link wins; only the code is kept, in this browser.
+const PROMO_KEY = 'togethr-promo'
+
+/** The promo code from a recent link, or null. */
+export function storedPromoCode(): string | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(PROMO_KEY) || 'null') as { code?: string; at?: number } | null
+    return v && typeof v.code === 'string' && typeof v.at === 'number' && Date.now() - v.at < KEEP_MS ? v.code : null
+  } catch {
+    return null
+  }
+}
+
 export function SourceCapture() {
   useEffect(() => {
+    const promo = normalizePromoCode(new URLSearchParams(window.location.search).get('promo'))
+    if (promo) {
+      try { localStorage.setItem(PROMO_KEY, JSON.stringify({ code: promo, at: Date.now() })) } catch { /* not kept */ }
+    }
     if (readStored()) return
     const found = detectSignupSource({
       search: window.location.search,

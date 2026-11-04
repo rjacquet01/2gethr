@@ -26,6 +26,8 @@ const BEFORE = {
   mode: "subscription",
   customer: "cus_test",
   line_items: [{ price: "price_test", quantity: 1 }],
+  // Stripe's own promo code field (no code entered on our page).
+  allow_promotion_codes: true,
   subscription_data: { metadata: meta },
   metadata: meta,
   integration_identifier: "togethr_abcdefgh",

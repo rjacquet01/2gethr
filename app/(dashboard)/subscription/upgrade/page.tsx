@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useEffect } from 'react'
+import { Suspense, useState, useEffect, useSyncExternalStore } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { usePurchaseUi } from '@/hooks/use-purchase-ui'
 import Link from 'next/link'
@@ -24,6 +24,12 @@ import { cn } from '@/lib/utils'
 import { SUBSCRIPTION_TIERS, annualSavingsPercent, displayPrice, priceTaxNote } from '@/lib/subscription-tiers'
 import { parseUpgradeParams, orderSummaryCents, centsToDollars, type PaidTierKey, type BillingCycle } from '@/lib/upgrade-order'
 import { FamilyNameTag } from '@/components/family-name-tag'
+import { Input } from '@/components/ui/input'
+import { useSubscription } from '@/hooks/use-subscription'
+import { storedPromoCode } from '@/components/source-capture'
+import { describeDiscount, discountCents, type PromoDiscount } from '@/lib/promo-discount'
+
+const noSubscribe = () => () => {}
 
 // Sourced from lib/subscription-tiers.ts rather than a hand-typed copy, so
 // this checkout page can't go out of sync with what /pricing and
@@ -87,6 +93,20 @@ function UpgradeForm() {
   const primaryFamily = families?.[0]
   const tier = tiers[selectedTier] ?? tiers.PREMIUM
 
+  // Promo codes are for new subscriptions only, so a family already paying
+  // gets no field. A code from a link (?promo=, remembered by
+  // SourceCapture) is filled in.
+  const { subscription } = useSubscription(primaryFamily?.id || null)
+  const alreadyPaying = !!subscription && subscription.tier !== 'FREE' && (subscription.status === 'ACTIVE' || subscription.status === 'PAST_DUE')
+  const linkPromo = useSyncExternalStore(noSubscribe, () => searchParams.get('promo') || storedPromoCode(), () => null)
+  const [promoTyped, setPromoTyped] = useState<string | null>(null)
+  const promoInput = (promoTyped ?? linkPromo ?? '').toUpperCase()
+  const [promo, setPromo] = useState<{ code: string; description: string; discount: PromoDiscount; tier: PaidTierKey; billing: BillingCycle } | null>(null)
+  const [promoError, setPromoError] = useState<string | null>(null)
+  const [promoChecking, setPromoChecking] = useState(false)
+  // A code checked for another plan or billing cycle isn't shown as applied.
+  const appliedPromo = promo && promo.tier === selectedTier && promo.billing === billingCycle && promo.code === promoInput ? promo : null
+
   if (!ready || !canPurchase) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -123,7 +143,34 @@ function UpgradeForm() {
   }
 
   const summary = orderSummaryCents(selectedTier, billingCycle)
+  const promoOffCents = appliedPromo ? discountCents(appliedPromo.discount, summary.totalCents) : 0
   const taxNote = priceTaxNote()
+
+  const applyPromo = async () => {
+    const code = promoInput.trim()
+    if (!code) return
+    setPromoChecking(true)
+    setPromoError(null)
+    try {
+      const res = await authFetch('/api/subscription/promo-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, tier: selectedTier, billingCycle }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.success) {
+        setPromo({ code: data.data.code, description: data.data.description, discount: data.data.discount, tier: selectedTier, billing: billingCycle })
+        setPromoTyped(data.data.code)
+      } else {
+        setPromo(null)
+        setPromoError(data.error || "That promo code isn't valid.")
+      }
+    } catch {
+      setPromoError("Couldn't check that code. Try again.")
+    } finally {
+      setPromoChecking(false)
+    }
+  }
 
   // Redirects to Stripe Checkout. Stripe collects and stores the card
   // details directly on its hosted page — no payment data is ever
@@ -144,6 +191,8 @@ function UpgradeForm() {
           familyId: primaryFamily.id,
           tier: selectedTier,
           billingCycle,
+          // Checked again on the server; a bad code stops here with its reason.
+          ...(!alreadyPaying && promoInput.trim() ? { promoCode: promoInput.trim() } : {}),
         }),
       })
 
@@ -276,13 +325,40 @@ function UpgradeForm() {
                     <span>-{centsToDollars(summary.discountCents)}</span>
                   </div>
                 )}
+                {appliedPromo && promoOffCents > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Promo {appliedPromo.code}</span>
+                    <span>-{centsToDollars(promoOffCents)}</span>
+                  </div>
+                )}
               </div>
+
+              {!alreadyPaying && (
+                <div className="space-y-1.5">
+                  <div className="flex gap-2">
+                    <Input
+                      aria-label="Promo code"
+                      placeholder="Promo code"
+                      value={promoInput}
+                      onChange={(e) => { setPromoTyped(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '')); setPromoError(null) }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') applyPromo() }}
+                      maxLength={30}
+                      className="h-9 font-mono"
+                    />
+                    <Button type="button" variant="outline" size="sm" className="h-9 shrink-0" onClick={applyPromo} disabled={!promoInput.trim() || promoChecking}>
+                      {promoChecking ? <Spinner className="h-4 w-4" /> : 'Apply'}
+                    </Button>
+                  </div>
+                  {appliedPromo && <p className="text-xs text-green-600">{describeDiscount(appliedPromo.discount)}</p>}
+                  {promoError && <p className="text-xs text-destructive">{promoError}</p>}
+                </div>
+              )}
 
               <Separator />
 
               <div className="flex justify-between text-lg font-semibold">
-                <span>Total</span>
-                <span>{centsToDollars(summary.totalCents)}</span>
+                <span>{appliedPromo ? 'Due today' : 'Total'}</span>
+                <span>{centsToDollars(summary.totalCents - promoOffCents)}</span>
               </div>
               {taxNote && <p className="-mt-2 text-right text-xs text-muted-foreground">{taxNote}</p>}
               {billingCycle === 'annual' && (

@@ -76,8 +76,10 @@ export function buildCheckoutSessionParams(opts: {
   userId: string
   appUrl: string
   randomSuffix: string
+  /** A promo code entered on our upgrade page (lib/promo-codes.ts). */
+  promotionCodeId?: string
 }): Stripe.Checkout.SessionCreateParams {
-  const { customerId, priceId, familyId, tier, billingCycle, userId, appUrl, randomSuffix } = opts
+  const { customerId, priceId, familyId, tier, billingCycle, userId, appUrl, randomSuffix, promotionCodeId } = opts
   const metadata = {
     familyId,
     requestedTier: tier.toUpperCase(),
@@ -90,6 +92,11 @@ export function buildCheckoutSessionParams(opts: {
     // Intentionally no payment_method_types here — Stripe determines
     // eligible payment methods dynamically from the Dashboard config.
     line_items: [{ price: priceId, quantity: 1 }],
+    // A code from our page is applied up front; otherwise Stripe's page
+    // offers its own promo code field. Stripe allows one or the other.
+    ...(promotionCodeId
+      ? { discounts: [{ promotion_code: promotionCodeId }] }
+      : { allow_promotion_codes: true }),
     subscription_data: { metadata: { ...metadata } },
     metadata: { ...metadata },
     integration_identifier: `togethr_${randomSuffix}`,
