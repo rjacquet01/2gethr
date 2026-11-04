@@ -82,11 +82,12 @@ export default function OnboardingPage() {
       router.push('/dashboard')
     } else if (/unauthor|authenticat|token/i.test(result.error || '')) {
       // Opened an invite link without being signed in. The code stays saved
-      // on this device; signing in returns here (registering does too), so
-      // an existing user's invite isn't lost on the way to the dashboard.
+      // on this device; registering returns here (signing in does too), so
+      // the invite isn't lost on the way. Most people opening an invite have
+      // no account yet, so go to sign-up, which offers sign-in for the rest.
       // A parent's code for a child's own account is used while creating
-      // that account, so go straight to sign-up for it. A code typed in here
-      // (not from a link) isn't saved yet, so save it before leaving.
+      // that account. A code typed in here (not from a link) isn't saved
+      // yet, so save it before leaving.
       try { localStorage.setItem('togethr-pending-invite', inviteCode.trim().toUpperCase()) } catch {}
       let childCode = false
       try {
@@ -101,8 +102,7 @@ export default function OnboardingPage() {
       if (childCode) {
         router.push(`/register?code=${encodeURIComponent(inviteCode.trim().toUpperCase())}`)
       } else {
-        toast.info('Sign in (or create an account) first - your invite code will be waiting.')
-        router.push('/login?redirect=%2Fonboarding')
+        router.push('/register')
       }
     } else {
       toast.error(result.error || 'Failed to join family')

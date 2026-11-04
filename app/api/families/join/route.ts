@@ -12,6 +12,31 @@ const joinFamilySchema = z.object({
   nickname: z.string().max(50).optional(),
 })
 
+// GET - the signed-in user's own parent join requests still waiting for a
+// parent's approval, so a new parent sees "waiting" instead of "no family".
+export async function GET(request: NextRequest) {
+  try {
+    const { user, error } = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ success: false, error: error || "Not authenticated" }, { status: 401 })
+    }
+    await ensureInviteTables()
+    const rows = await sql`
+      SELECT r.id, r.created_at, f.name AS family_name
+      FROM family_join_requests r JOIN families f ON f.id = r.family_id
+      WHERE r.user_id = ${user.id} AND r.status = 'PENDING'
+      ORDER BY r.created_at DESC
+    `
+    return NextResponse.json({
+      success: true,
+      data: rows.map((r) => ({ id: r.id, familyName: r.family_name, createdAt: r.created_at })),
+    })
+  } catch (error) {
+    console.error("List own join requests error:", error)
+    return NextResponse.json({ success: false, error: "Failed to load join requests" }, { status: 500 })
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { user, error } = await getUserFromRequest(request)

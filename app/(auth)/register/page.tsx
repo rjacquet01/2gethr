@@ -37,6 +37,9 @@ export default function RegisterPage() {
   // then this form creates the child's account instead of an adult's.
   const [childInvite, setChildInvite] = useState<{ code: string; childName: string; familyName: string } | null>(null)
   const [childInviteError, setChildInviteError] = useState<string | null>(null)
+  // Any other saved code (a parent or guest invite): the family is joined
+  // right after sign-up, on /onboarding.
+  const [adultInvite, setAdultInvite] = useState(false)
 
   useEffect(() => {
     let code = ''
@@ -60,6 +63,7 @@ export default function RegisterPage() {
           markChildDevice(true) // no analytics from here on (components/privacy-analytics.tsx)
         }
         else if (json.data.kind === 'CHILD_ACCOUNT_UNUSABLE') setChildInviteError(json.data.error)
+        else setAdultInvite(true)
       } catch {}
     })()
     return () => { cancelled = true }
@@ -111,6 +115,7 @@ export default function RegisterPage() {
             smsConsent: formData.phone ? smsConsent : undefined,
             ageConfirmed,
             termsAccepted,
+            invited: adultInvite,
           }
     )
 
@@ -140,11 +145,15 @@ export default function RegisterPage() {
 
         <Card className="border-border/50 shadow-lg">
           <CardHeader className="text-center">
-            <CardTitle className="text-xl">{isChildSignup ? `Create ${childInvite.childName}'s account` : 'Create your account'}</CardTitle>
+            <CardTitle className="text-xl">
+              {isChildSignup ? `Create ${childInvite.childName}'s account` : adultInvite ? 'Create your account to join your family' : 'Create your account'}
+            </CardTitle>
             <CardDescription>
               {isChildSignup
                 ? `A parent in ${childInvite.familyName} set this up. This account joins the family as ${childInvite.childName}.`
-                : 'Togethr accounts are for adults 18 and older. Children are added by a parent.'}
+                : adultInvite
+                  ? 'Your invite is saved. Create your account and you will join the family next. Togethr accounts are for adults 18 and older.'
+                  : 'Togethr accounts are for adults 18 and older. Children are added by a parent.'}
             </CardDescription>
             {childInviteError && <p className="text-xs text-destructive">{childInviteError}</p>}
           </CardHeader>
@@ -292,7 +301,7 @@ export default function RegisterPage() {
               </Button>
               <p className="text-sm text-center text-muted-foreground">
                 Already have an account?{' '}
-                <Link href="/login" className="text-primary font-medium hover:underline">
+                <Link href={adultInvite ? '/login?redirect=%2Fonboarding' : '/login'} className="text-primary font-medium hover:underline">
                   Sign in
                 </Link>
               </p>
