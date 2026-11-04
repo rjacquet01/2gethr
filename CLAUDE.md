@@ -46,7 +46,7 @@ real email. Read a script's header before running it.
   admin-created-email, admin-delete-child, admin-tier-breakdown, admin-token-refresh, adult-location-access, brand-logo, child-invite, coppa, cron-health,
   dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, free-tier-limits, geofence, kid-ping, launch-security, legal-hold-closure, location-history-delete,
   ios-setup, legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-fixes, shown-notifications, event-heads-up, notification-link, site-data, push-ownership,
-  dictation, place-alerts, push-picker, quick-add, schema-snapshot, signup-source, sms-allowance, sms-consent, stillness, stripe-cancel-pending, stripe-checkout-tax, task-due, trial-eligibility,
+  dictation, place-alerts, promo-codes, push-picker, quick-add, schema-snapshot, signup-source, sms-allowance, sms-consent, stillness, stripe-cancel-pending, stripe-checkout-tax, task-due, trial-eligibility,
   stripe-webhook-events, telnyx-sms, twa-upgrade-links, upgrade-order, weather-prompt, weather-route.
 - **Board suites** (board-flyer-download, board-flyers, board-limits,
   board-notify) need a disposable database in `BOARD_TEST_DATABASE_URL`.
@@ -150,6 +150,13 @@ real email. Read a script's header before running it.
 - iPhone has no app: mytogethr.com added to the Home Screen (iOS 16.4+ for push). `lib/ios-setup.ts` tells in-app browser
   (Instagram, TikTok...) / Safari / Home Screen apart; steps on `/iphone`, a reminder card in the dashboard
   (`IphoneSetupCard`), and an "open in Safari" strip in in-app browsers (`InAppBrowserNotice`). No background location on iPhone.
+- Promo codes: Stripe holds them (a Coupon plus one Promotion Code each; nothing in our database). Admin > Promo Codes
+  (`/admin/promo-codes`, subscriptions.read to see, subscriptions.update to create or turn off; audit-logged) creates them
+  via `lib/promo-codes.ts`. Customers enter one on `/subscription/upgrade` (checked by `/api/subscription/promo-check`, then
+  Checkout `discounts`), or on Stripe's page (`allow_promotion_codes` when none was entered). `?promo=CODE` on any link is
+  remembered 30 days (`components/source-capture.tsx`). New subscriptions only: a family already paying gets no field, and
+  the checkout route refuses a code on a plan switch. Browser code imports `lib/promo-code-format.ts` / `lib/promo-discount.ts`, not
+  `lib/promo-codes.ts` (zod).
 - Sign-up source: `components/source-capture.tsx` keeps a short label for the first link with a clue (`?ref=`/`utm_source`,
   referring site, Instagram/TikTok in-app browser, the Android app; `lib/signup-source.ts`) for 30 days in the browser; register
   stores it on adults (`users.signup_source`, `signup_campaign`; "invite" for an adult signing up with a parent/guest invite; "direct" when none). Admin dashboard: Sign-ups by Source.

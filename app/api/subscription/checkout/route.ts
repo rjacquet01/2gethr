@@ -6,6 +6,7 @@ import { stripe, getPriceId } from "@/lib/stripe"
 import { buildCheckoutSessionParams, planChangeBilling, subscriptionUpdateTaxParams } from "@/lib/stripe-checkout"
 import { appUrl as siteUrl } from '@/lib/app-url'
 import { resumeParams } from "@/lib/stripe-cancel"
+import { findUsablePromoCode, type PromoTierKey } from "@/lib/promo-codes"
 
 // POST - Create a Stripe Checkout Session for a subscription upgrade.
 //
@@ -56,6 +57,19 @@ export async function POST(request: NextRequest) {
 
     if (membership[0].owner_id !== user.id) {
       return NextResponse.json({ error: "Only family owners can manage subscriptions" }, { status: 403 })
+    }
+
+    // A promo code entered on the upgrade page: checked before anything is
+    // created, so a bad code changes nothing.
+    let promotionCodeId: string | undefined
+    if (body.promoCode) {
+      const price = await stripe.prices.retrieve(priceId)
+      const found = await findUsablePromoCode(stripe, body.promoCode, {
+        tier: String(tier).toUpperCase() as PromoTierKey,
+        productId: typeof price.product === "string" ? price.product : price.product.id,
+      })
+      if (!found.ok) return NextResponse.json({ error: found.error }, { status: 400 })
+      promotionCodeId = found.promotionCodeId
     }
 
     // Get or create the subscription row for this family, and reuse an
@@ -127,6 +141,12 @@ export async function POST(request: NextRequest) {
       try {
         const current = await stripe.subscriptions.retrieve(currentStripeSubId)
         if (current.status !== "canceled") {
+          if (promotionCodeId) {
+            return NextResponse.json(
+              { success: false, error: "Promo codes are for new subscriptions. You already have a plan, so nothing was changed." },
+              { status: 400 }
+            )
+          }
           const item = current.items.data[0]
           if (item && item.price.id !== priceId) {
             // Upgrades on the same interval charge the difference now;
@@ -191,6 +211,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         appUrl,
         randomSuffix,
+        promotionCodeId,
       })
     )
 
