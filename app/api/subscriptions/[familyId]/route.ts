@@ -3,7 +3,8 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { SUBSCRIPTION_TIERS } from "../route"
-import { TRIAL_DAYS } from "@/lib/subscription-tiers"
+import { TRIAL_DAYS, getTierDefinition } from "@/lib/subscription-tiers"
+import { changedFields, notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 import { getTrialEligibility, formatTrialDate, STRIPE_SUBSCRIPTION_TRIAL_ERROR, trialBlockedByStripe } from "@/lib/trial-eligibility"
 
 const updateSubscriptionSchema = z.object({
@@ -29,7 +30,7 @@ export async function POST(
 
     // Verify user is family owner
     const families = await sql`
-      SELECT owner_id FROM families WHERE id = ${familyId}
+      SELECT owner_id, name FROM families WHERE id = ${familyId}
     `
 
     if (families.length === 0) {
@@ -146,6 +147,16 @@ export async function POST(
         userAgent: request.headers.get("user-agent") || undefined,
       })
 
+      await notifyAccountChange({
+        actor: user.email,
+        actorType: "user",
+        accountEmail: user.email,
+        familyName: families[0].name,
+        change: "Free trial started",
+        details: { plan: getTierDefinition(trialTier).name, trialEnds: trialEnd.toISOString().slice(0, 10) },
+        ipAddress: requestIp(request),
+      })
+
       return NextResponse.json({
         success: true,
         subscription: { tier: trialTier, status: "TRIALING", trialEnd: trialEnd.toISOString() },
@@ -198,6 +209,16 @@ export async function POST(
         newValue: { tier: "FREE", status: "CANCELLED" },
         ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
         userAgent: request.headers.get("user-agent") || undefined,
+      })
+
+      await notifyAccountChange({
+        actor: user.email,
+        actorType: "user",
+        accountEmail: user.email,
+        familyName: families[0].name,
+        change: "Free trial cancelled",
+        details: { plan: { from: getTierDefinition(trialSubs[0].tier).name, to: "Free" } },
+        ipAddress: requestIp(request),
       })
 
       return NextResponse.json({ success: true, message: "Your free trial has been cancelled" })
@@ -306,6 +327,16 @@ export async function POST(
       newValue: { tier, billingPeriod },
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
+    })
+
+    await notifyAccountChange({
+      actor: user.email,
+      actorType: "user",
+      accountEmail: user.email,
+      familyName: families[0].name,
+      change: "Plan changed",
+      details: changedFields({ plan: getTierDefinition(currentTier).name }, { plan: getTierDefinition(tier).name }),
+      ipAddress: requestIp(request),
     })
 
     return NextResponse.json({

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
+import { changedFields, notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 // Your own "Name shown to this family" (family_members.nickname), per family.
 // Blank goes back to your account first name. Nobody sets another adult's
@@ -35,6 +36,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   await logAuditEvent(user.id, "UPDATE", "family_member", me[0].id as string, {
     oldValue: { nickname: me[0].nickname ?? null },
     newValue: { nickname: nickname || null },
+  })
+  const family = await sql`SELECT name FROM families WHERE id = ${familyId}`
+  await notifyAccountChange({
+    actor: user.email,
+    actorType: "user",
+    accountEmail: user.email,
+    familyName: family[0]?.name,
+    change: "Name shown to family changed",
+    details: changedFields({ nickname: me[0].nickname }, { nickname: nickname || null }),
+    ipAddress: requestIp(request),
   })
   return NextResponse.json({ success: true, data: { nickname } })
 }

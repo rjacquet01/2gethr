@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { clearSmsConsentIfNumberChanges, getSmsConsent } from "@/lib/sms-consent"
+import { changedFields, notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 // Get user's reminder and notification settings
 export async function GET(request: NextRequest) {
@@ -82,6 +83,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Turn on text messages in Settings to agree to texts first" }, { status: 400 })
     }
 
+    const [beforeUser, beforeSettings] = await Promise.all([
+      sql`SELECT phone FROM users WHERE id = ${user.id}`,
+      sql`SELECT push_enabled, email_enabled, sms_enabled FROM reminder_settings WHERE user_id = ${user.id}`,
+    ])
+    const before = beforeSettings[0] ?? { push_enabled: true, email_enabled: true, sms_enabled: false }
+    const asBool = (v: unknown) => (typeof v === "boolean" ? v : undefined)
+
     // Update phone number if provided (a new number needs consent again)
     if (phoneNumber !== undefined) {
       await clearSmsConsentIfNumberChanges(user.id, phoneNumber || null)
@@ -112,6 +120,23 @@ export async function PUT(request: NextRequest) {
         quiet_hours_end = ${quietHoursEnd || null},
         updated_at = NOW()
     `
+
+    await notifyAccountChange({
+      actor: user.email,
+      actorType: "user",
+      accountEmail: user.email,
+      change: "Notification channels changed",
+      details: changedFields(
+        { phone: beforeUser[0]?.phone, pushNotifications: before.push_enabled, emailNotifications: before.email_enabled, smsNotifications: before.sms_enabled },
+        {
+          phone: phoneNumber === undefined ? undefined : phoneNumber || null,
+          pushNotifications: asBool(pushEnabled),
+          emailNotifications: asBool(emailEnabled),
+          smsNotifications: asBool(smsEnabled),
+        }
+      ),
+      ipAddress: requestIp(request),
+    })
 
     return NextResponse.json({ success: true, message: "Settings updated" })
   } catch (error) {

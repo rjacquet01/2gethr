@@ -5,6 +5,7 @@ import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { canManageFamily } from "@/lib/permissions"
 import { hasParentalConsentRecord, listParentalConsents, recordParentalConsent, withdrawChildConsent } from "@/lib/parental-consent"
 import { ACCOUNT_CLOSURE_BLOCKED_MESSAGE, LegalHoldError } from "@/lib/account-closure"
+import { memberAccount, notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 type Params = { params: Promise<{ familyId: string; memberId: string }> }
 
@@ -94,6 +95,8 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     if (!g.ok) return g.res
     withdrawSchema.parse(await request.json().catch(() => ({})))
 
+    // Looked up first: withdrawing deletes the child's profile.
+    const account = await memberAccount(memberId)
     const result = await withdrawChildConsent({
       familyId,
       childMemberId: memberId,
@@ -105,6 +108,16 @@ export async function DELETE(request: NextRequest, { params }: Params) {
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
     })
+    if (account) {
+      await notifyAccountChange({
+        actor: g.user.email,
+        actorType: "user",
+        accountEmail: account.accountEmail,
+        familyName: account.familyName,
+        change: result.closedUserId ? "Parental consent withdrawn, child login closed" : "Parental consent withdrawn, child profile deleted",
+        ipAddress: requestIp(request),
+      })
+    }
     return NextResponse.json({
       success: true,
       data: { deleted: result.deleted },

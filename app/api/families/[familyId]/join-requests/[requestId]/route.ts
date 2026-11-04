@@ -4,6 +4,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/lib/auth"
 import { ensureInviteTables, canManageInvites, activateMember, belongsToOtherFamily, CROSS_FAMILY_ROLES, type MemberRole } from "@/lib/family-invites"
 import { createNotification } from "@/lib/notifications"
+import { notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 // grantRole only matters for someone who already belongs to another family:
 // they are approved as a Guardian or a Guest (default Guest), never a Parent.
@@ -70,6 +71,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
     })
+
+    if (action === "approve") {
+      const joiner = await sql`SELECT email FROM users WHERE id = ${r.user_id}`
+      await notifyAccountChange({
+        actor: user.email,
+        actorType: "user",
+        accountEmail: joiner[0]?.email || "unknown account",
+        familyName: r.family_name,
+        change: "Join request approved, joined family",
+        details: { role: grantedRole },
+        ipAddress: requestIp(request),
+      })
+    }
     return NextResponse.json({ success: true, data: { status: action === "approve" ? "APPROVED" : "DENIED" } })
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ success: false, error: error.errors[0].message }, { status: 400 })

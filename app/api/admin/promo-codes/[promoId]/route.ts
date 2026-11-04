@@ -3,6 +3,7 @@ import { z } from "zod"
 import { getAdminFromToken, hasPermission, logAdminAction } from "@/lib/admin-auth"
 import { stripe } from "@/lib/stripe"
 import { promoCodeRow, promoStripeError } from "@/lib/promo-codes"
+import { notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 const schema = z.object({ active: z.boolean() })
 
@@ -24,6 +25,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const promo = await stripe.promotionCodes.update(promoId, { active: parsed.data.active, expand: ["promotion.coupon"] })
     await logAdminAction(admin.id, parsed.data.active ? "ENABLE_PROMO_CODE" : "DISABLE_PROMO_CODE", "promo_code", promo.id, {
       code: promo.code,
+    })
+    await notifyAccountChange({
+      actor: admin.email,
+      actorType: "admin",
+      accountEmail: promo.code,
+      change: parsed.data.active ? "Promo code turned on" : "Promo code turned off",
+      ipAddress: requestIp(request),
     })
     return NextResponse.json({ success: true, data: promoCodeRow(promo) })
   } catch (error) {

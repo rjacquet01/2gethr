@@ -7,6 +7,7 @@ import {
   logAuditEvent,
 } from '@/lib/auth'
 import { ACCOUNT_CLOSURE_BLOCKED_MESSAGE, LegalHoldError, closeUserAccount } from '@/lib/account-closure'
+import { notifyAccountChange, requestIp } from '@/lib/admin-account-alerts'
 
 // Real account deletion, required by Google Play's Data Safety policy (the
 // "Delete account URL" declared in the Play Console must lead to a working
@@ -42,6 +43,14 @@ export async function POST(request: Request) {
       metadata: { reason: 'user_requested_account_deletion' },
       ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
       userAgent: request.headers.get('user-agent') || undefined,
+    })
+
+    await notifyAccountChange({
+      actor: user.email,
+      actorType: 'user',
+      accountEmail: user.email,
+      change: 'Account deleted',
+      ipAddress: requestIp(request),
     })
 
     await clearAuthCookies()

@@ -7,6 +7,7 @@ import { ensureAgeColumns } from '@/lib/age-schema'
 import { ageFromDob, dobError, childAgeInfo } from '@/lib/age'
 import { setChildName } from '@/lib/member-names'
 import { ACTIVE_TASK_STATUSES_DB } from '@/lib/task-due'
+import { changedFields, memberAccount, notifyAccountChange, requestIp } from '@/lib/admin-account-alerts'
 
 const updateChildSchema = z.object({
   displayName: z.string().min(1).max(100).optional(),
@@ -178,7 +179,8 @@ export async function PATCH(
     await ensureAgeColumns()
 
     const rows = await sql`
-      SELECT cp.id, fm.family_id, fm.id AS member_id
+      SELECT cp.id, fm.family_id, fm.id AS member_id,
+        cp.display_name, cp.date_of_birth, cp.age, cp.school, cp.grade, cp.emergency_notes
       FROM child_profiles cp JOIN family_members fm ON cp.family_member_id = fm.id
       WHERE cp.id = ${childId}
     `
@@ -227,6 +229,35 @@ export async function PATCH(
       ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
       userAgent: request.headers.get('user-agent') || undefined,
     })
+
+    // A child's details stay out of the email: only which fields changed.
+    const b = rows[0]
+    const day = (v: unknown) => (v ? new Date(v as string).toISOString().slice(0, 10) : null)
+    const changed = Object.keys(
+      changedFields(
+        { displayName: b.display_name, dateOfBirth: day(b.date_of_birth), age: b.age, school: b.school, grade: b.grade, emergencyNotes: b.emergency_notes },
+        {
+          displayName: data.displayName,
+          dateOfBirth: dobProvided ? dob : undefined,
+          age: ageProvided ? newAge : undefined,
+          school: data.school,
+          grade: data.grade,
+          emergencyNotes: data.emergencyNotes,
+        }
+      )
+    )
+    const account = changed.length ? await memberAccount(rows[0].member_id as string) : null
+    if (account) {
+      await notifyAccountChange({
+        actor: user.email,
+        actorType: 'user',
+        accountEmail: account.accountEmail,
+        familyName: account.familyName,
+        change: 'Child profile updated',
+        details: { fieldsChanged: changed.join(', ') },
+        ipAddress: requestIp(request),
+      })
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

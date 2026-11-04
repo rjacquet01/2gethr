@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { getAdminFromToken, logAdminAction } from '@/lib/admin-auth'
 import { sql } from '@/lib/db'
+import { notifyAccountChange, requestIp } from '@/lib/admin-account-alerts'
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,6 +51,13 @@ export async function POST(request: NextRequest) {
     // Log the action
     const ipAddress = request.headers.get('x-forwarded-for') || 'unknown'
     await logAdminAction(admin.id, 'CHANGE_PASSWORD', 'admin_user', admin.id, {}, ipAddress)
+    await notifyAccountChange({
+      actor: admin.email,
+      actorType: 'admin',
+      accountEmail: admin.email,
+      change: 'Admin password changed',
+      ipAddress: requestIp(request),
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

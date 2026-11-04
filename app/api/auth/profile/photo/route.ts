@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { put, del } from "@vercel/blob"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
+import { notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"]
@@ -82,6 +83,14 @@ export async function POST(request: NextRequest) {
       userAgent: request.headers.get("user-agent") || undefined,
     })
 
+    await notifyAccountChange({
+      actor: user.email,
+      actorType: "user",
+      accountEmail: user.email,
+      change: "Profile photo updated",
+      ipAddress: requestIp(request),
+    })
+
     return NextResponse.json({
       success: true,
       data: {
@@ -144,6 +153,14 @@ export async function DELETE(request: NextRequest) {
     await logAuditEvent(user.id, "DELETE", "profile_photo", user.id, {
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
+    })
+
+    await notifyAccountChange({
+      actor: user.email,
+      actorType: "user",
+      accountEmail: user.email,
+      change: "Profile photo removed",
+      ipAddress: requestIp(request),
     })
 
     return NextResponse.json({

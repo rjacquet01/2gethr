@@ -4,6 +4,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { clearSmsConsentIfNumberChanges } from "@/lib/sms-consent"
 import { isChildLogin, syncAdultNicknames } from "@/lib/member-names"
+import { changedFields, notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 import { z } from "zod"
 
 const updateProfileSchema = z.object({
@@ -136,6 +137,11 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    const before = (
+      await sql`SELECT first_name, last_name, phone, timezone, date_of_birth FROM users WHERE id = ${user.id}`
+    )[0]
+    const day = (v: unknown) => (v ? new Date(v as string).toISOString().slice(0, 10) : null)
+
     // Consent to texts was for the old number: a new one needs it again.
     if (validatedData.phone !== undefined && (await clearSmsConsentIfNumberChanges(user.id, validatedData.phone))) {
       await logAuditEvent(user.id, "DELETE", "sms_consent", user.id, {
@@ -165,6 +171,30 @@ export async function PATCH(request: NextRequest) {
       newValue: validatedData as Record<string, unknown>,
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
+    })
+
+    await notifyAccountChange({
+      actor: user.email,
+      actorType: "user",
+      accountEmail: user.email,
+      change: "Profile updated",
+      details: changedFields(
+        {
+          firstName: before?.first_name,
+          lastName: before?.last_name,
+          phone: before?.phone,
+          timezone: before?.timezone,
+          dateOfBirth: day(before?.date_of_birth),
+        },
+        {
+          firstName: validatedData.firstName,
+          lastName: validatedData.lastName,
+          phone: validatedData.phone,
+          timezone: validatedData.timezone,
+          dateOfBirth: validatedData.dateOfBirth === undefined ? undefined : day(validatedData.dateOfBirth),
+        }
+      ),
+      ipAddress: requestIp(request),
     })
 
     return NextResponse.json({

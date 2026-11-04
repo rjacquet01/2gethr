@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromToken, logAdminAction } from '@/lib/admin-auth'
 import { sql } from '@/lib/db'
+import { changedFields, notifyAccountChange, requestIp } from '@/lib/admin-account-alerts'
 
 export async function PATCH(request: NextRequest) {
   try {
@@ -28,6 +29,14 @@ export async function PATCH(request: NextRequest) {
     // Log the action
     const ipAddress = request.headers.get('x-forwarded-for') || 'unknown'
     await logAdminAction(admin.id, 'UPDATE_PROFILE', 'admin_user', admin.id, { firstName, lastName }, ipAddress)
+    await notifyAccountChange({
+      actor: admin.email,
+      actorType: 'admin',
+      accountEmail: admin.email,
+      change: 'Admin profile updated',
+      details: changedFields({ firstName: admin.firstName, lastName: admin.lastName }, { firstName, lastName }),
+      ipAddress: requestIp(request),
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

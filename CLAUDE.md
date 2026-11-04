@@ -43,7 +43,7 @@ real email. Read a script's header before running it.
 
 - **Safe, with no database and no network.** These use pure logic, or the
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
-  admin-created-email, admin-delete-child, admin-tier-breakdown, admin-token-refresh, adult-location-access, brand-logo, child-invite, coppa, cron-health,
+  account-change-emails, admin-created-email, admin-delete-child, admin-tier-breakdown, admin-token-refresh, adult-location-access, brand-logo, child-invite, coppa, cron-health,
   dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, family-invite, free-tier-limits, geofence, kid-ping, launch-security, legal-hold-closure, location-history-delete,
   ios-setup, legal-ping, location-dedupe, location-share-now, member-names, notification-dedupe, notification-fixes, shown-notifications, event-heads-up, notification-link, site-data, push-ownership,
   dictation, place-alerts, promo-codes, push-picker, quick-add, schema-snapshot, signup-source, sms-allowance, sms-consent, stillness, stripe-cancel-pending, stripe-checkout-tax, task-due, trial-eligibility,
@@ -164,6 +164,9 @@ real email. Read a script's header before running it.
   The logotype already spells "Togethr" with the T, so never put the T-mark or the word "Togethr" next to it;
   the mark alone only where width is under ~90px. Motto: `BRAND_MOTTO` ("Connect people, connect events.").
   Emails get the hosted logotype PNG (`lib/services/email.ts`, `brandEmailHtml`).
+- Account changes (profile, sign-in, family membership, plan; user or admin side) email admin@mytogethr.com through
+  `notifyAccountChange` (`lib/admin-account-alerts.ts`), after the change and only when something changed. Secrets and
+  birthdates show only "changed"; email/phone are masked. Stripe webhook tier changes and cancellations keep their own notices.
 - Cold-start schema setup is skipped when the catalog snapshot shows it is
   already applied (`lib/schema-snapshot.ts`, the `ddl` tag).
 

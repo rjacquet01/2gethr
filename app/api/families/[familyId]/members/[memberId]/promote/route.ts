@@ -7,6 +7,7 @@ import { getRolePermissions } from "@/lib/family-invites"
 import { createNotification } from "@/lib/notifications"
 import { ensureAgeColumns } from "@/lib/age-schema"
 import { ADULT_AGE, ageFromDob, birthdayDate } from "@/lib/age"
+import { memberAccount, notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 const schema = z.object({ to: z.enum(["GUARDIAN", "ADULT"]) })
 const ROLE_WORD = { GUARDIAN: "Guardian", ADULT: "Adult" } as const
@@ -88,6 +89,19 @@ export async function POST(
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
     })
+
+    const account = await memberAccount(memberId)
+    if (account) {
+      await notifyAccountChange({
+        actor: user.email,
+        actorType: "user",
+        accountEmail: account.accountEmail,
+        familyName: account.familyName,
+        change: "Family role changed (turned 18)",
+        details: { role: { from: "CHILD", to } },
+        ipAddress: requestIp(request),
+      })
+    }
 
     await createNotification({
       userId: m.user_id,
