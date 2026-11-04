@@ -100,6 +100,8 @@ export async function GET(request: NextRequest) {
         currentPeriodEnd: s.current_period_end,
         trialEndsAt: s.trial_ends_at,
         cancelAtPeriodEnd: s.cancel_at_period_end,
+        stripeBilled: !!s.stripe_subscription_id && s.status !== 'CANCELLED',
+        trialSource: s.trial_source ?? null,
         createdAt: s.created_at,
       })),
       pagination: {
