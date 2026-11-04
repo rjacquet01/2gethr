@@ -5,6 +5,19 @@ import { TRIAL_DAYS } from "./subscription-tiers"
 // owned, so deleting a family and starting a new one doesn't reset it) and per
 // family (so handing the family to another parent doesn't either).
 
+export const STRIPE_SUBSCRIPTION_TRIAL_ERROR =
+  "This family has a Stripe subscription. Use Change tier or a Stripe coupon instead."
+
+/**
+ * A trial is written over the family's subscription row and never reaches
+ * Stripe, so it is refused while that row has a Stripe subscription that
+ * isn't cancelled (Stripe would keep billing the old plan, and the next
+ * webhook would put it back).
+ */
+export function trialBlockedByStripe(row: { stripe_subscription_id?: string | null; status?: string | null } | undefined): boolean {
+  return !!row?.stripe_subscription_id && row.status !== "CANCELLED"
+}
+
 /** Days from the start of one free trial until another may start. */
 export const TRIAL_COOLDOWN_DAYS = 365
 

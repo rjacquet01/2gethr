@@ -5,6 +5,8 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { SUBSCRIPTION_TIERS } from '@/lib/subscription-tiers'
+import { confirmationCopy } from '@/lib/upgrade-order'
 import {
   CheckCircle2,
   ArrowRight,
@@ -25,6 +27,9 @@ export default function ConfirmationPage() {
 function ConfirmationContent() {
   const searchParams = useSearchParams()
   const sessionId = searchParams.get('session_id')
+  const tierParam = searchParams.get('tier')
+  const tierName = tierParam === 'PREMIUM' || tierParam === 'PREMIUM_PLUS' ? SUBSCRIPTION_TIERS[tierParam].name : null
+  const copy = confirmationCopy({ sessionId, updated: searchParams.get('updated'), tierName, change: searchParams.get('change') })
 
   return (
     <div className="container max-w-2xl py-16">
@@ -33,18 +38,15 @@ function ConfirmationContent() {
           <div className="mx-auto mb-4 p-4 rounded-full bg-green-100 dark:bg-green-900/20">
             <CheckCircle2 className="h-12 w-12 text-green-600" />
           </div>
-          <CardTitle className="text-2xl">Payment Successful!</CardTitle>
+          <CardTitle className="text-2xl">{copy.title}</CardTitle>
           <CardDescription className="text-base">
-            Thank you for upgrading your Togethr plan
+            {copy.description}
           </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-6">
           <p className="text-sm text-muted-foreground">
-            Your subscription is now active. Stripe processed your payment securely, and your
-            new plan&apos;s features are available right away. You&apos;ll get an email receipt
-            from Stripe, and you can manage your billing details (payment method, invoices,
-            cancellation) any time from the Subscription page.
+            {copy.body}
           </p>
 
           {sessionId && (

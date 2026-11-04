@@ -4,7 +4,7 @@ import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { z } from "zod"
 import { SUBSCRIPTION_TIERS } from "../route"
 import { TRIAL_DAYS } from "@/lib/subscription-tiers"
-import { getTrialEligibility, formatTrialDate } from "@/lib/trial-eligibility"
+import { getTrialEligibility, formatTrialDate, STRIPE_SUBSCRIPTION_TRIAL_ERROR, trialBlockedByStripe } from "@/lib/trial-eligibility"
 
 const updateSubscriptionSchema = z.object({
   tier: z.enum(["FREE", "PREMIUM", "PREMIUM_PLUS"]),
@@ -78,11 +78,19 @@ export async function POST(
       }
 
       const existing = await sql`
-        SELECT id, tier, status FROM subscriptions
+        SELECT id, tier, status, stripe_subscription_id FROM subscriptions
         WHERE family_id = ${familyId}
         ORDER BY created_at DESC
         LIMIT 1
       `
+      // Past due (or any other state) on a live Stripe subscription: a trial
+      // here would overwrite the plan Stripe is billing.
+      if (trialBlockedByStripe(existing[0])) {
+        return NextResponse.json(
+          { success: false, error: STRIPE_SUBSCRIPTION_TRIAL_ERROR },
+          { status: 409 }
+        )
+      }
       const onPaidOrTrial =
         existing.length > 0 &&
         existing[0].tier !== "FREE" &&

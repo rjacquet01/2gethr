@@ -22,7 +22,17 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SUBSCRIPTION_TIERS, annualSavingsPercent, displayPrice, priceTaxNote } from '@/lib/subscription-tiers'
-import { parseUpgradeParams, orderSummaryCents, centsToDollars, type PaidTierKey, type BillingCycle } from '@/lib/upgrade-order'
+import { parseUpgradeParams, orderSummaryCents, centsToDollars, planChange, upgradePageCopy, downgradeNotice, type CurrentPlan, type PaidTierKey, type BillingCycle } from '@/lib/upgrade-order'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { FamilyNameTag } from '@/components/family-name-tag'
 import { Input } from '@/components/ui/input'
 import { useSubscription } from '@/hooks/use-subscription'
@@ -79,25 +89,38 @@ function UpgradeForm() {
   const { user, isLoading: authLoading } = useAuth()
   const { families, isLoading: familiesLoading } = useFamilies()
 
-  const [selectedTier, setSelectedTier] = useState<PaidTierKey>(() => parseUpgradeParams(tierParam, billingParam).tier)
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>(() => parseUpgradeParams(tierParam, billingParam).billing)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-
-  // A new ?tier=/&billing= (e.g. navigating here again) resets the selection.
-  useEffect(() => {
-    const p = parseUpgradeParams(tierParam, billingParam)
-    setSelectedTier(p.tier)
-    setBillingCycle(p.billing)
-  }, [tierParam, billingParam])
-
   const primaryFamily = families?.[0]
-  const tier = tiers[selectedTier] ?? tiers.PREMIUM
 
   // Promo codes are for new subscriptions only, so a family already paying
   // gets no field. A code from a link (?promo=, remembered by
   // SourceCapture) is filled in.
-  const { subscription } = useSubscription(primaryFamily?.id || null)
+  const { subscription, isLoading: subscriptionLoading } = useSubscription(primaryFamily?.id || null)
   const alreadyPaying = !!subscription && subscription.tier !== 'FREE' && (subscription.status === 'ACTIVE' || subscription.status === 'PAST_DUE')
+  // A family paying through Stripe starts on its own plan, so Continue
+  // without a ?tier= never switches it to another one.
+  const currentPlan: CurrentPlan = alreadyPaying && subscription.stripeBilled
+    ? { tier: subscription.tier as PaidTierKey, billing: subscription.billingCycle }
+    : null
+  const currentKey = currentPlan ? `${currentPlan.tier}/${currentPlan.billing}` : ''
+  const cancelPending = !!subscription && (subscription.cancelAtPeriodEnd || !!subscription.cancelAt)
+
+  const [selectedTier, setSelectedTier] = useState<PaidTierKey>(() => parseUpgradeParams(tierParam, billingParam).tier)
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>(() => parseUpgradeParams(tierParam, billingParam).billing)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [confirmingDowngrade, setConfirmingDowngrade] = useState(false)
+
+  // A new ?tier=/&billing= (e.g. navigating here again), or the family's plan
+  // arriving, resets the selection.
+  useEffect(() => {
+    const [t, b] = currentKey.split('/')
+    const p = parseUpgradeParams(tierParam, billingParam, currentKey ? { tier: t as PaidTierKey, billing: b as BillingCycle } : null)
+    setSelectedTier(p.tier)
+    setBillingCycle(p.billing)
+  }, [tierParam, billingParam, currentKey])
+
+  const tier = tiers[selectedTier] ?? tiers.PREMIUM
+  const change = planChange(currentPlan, { tier: selectedTier, billing: billingCycle }, cancelPending)
+  const copy = upgradePageCopy(change, tier.name, billingCycle)
   const linkPromo = useSyncExternalStore(noSubscribe, () => searchParams.get('promo') || storedPromoCode(), () => null)
   const [promoTyped, setPromoTyped] = useState<string | null>(null)
   const promoInput = (promoTyped ?? linkPromo ?? '').toUpperCase()
@@ -175,12 +198,21 @@ function UpgradeForm() {
   // Redirects to Stripe Checkout. Stripe collects and stores the card
   // details directly on its hosted page — no payment data is ever
   // handled by or sent to our own backend.
-  const handleCheckout = async () => {
+  const handleCheckout = async (confirmDowngrade = false) => {
     if (!primaryFamily?.id) {
       toast.error('No family found')
       return
     }
+    if (change === 'same') {
+      toast.info('You are already on this plan')
+      return
+    }
+    if (change === 'downgrade' && !confirmDowngrade) {
+      setConfirmingDowngrade(true)
+      return
+    }
 
+    setConfirmingDowngrade(false)
     setIsSubmitting(true)
 
     try {
@@ -193,6 +225,7 @@ function UpgradeForm() {
           billingCycle,
           // Checked again on the server; a bad code stops here with its reason.
           ...(!alreadyPaying && promoInput.trim() ? { promoCode: promoInput.trim() } : {}),
+          ...(confirmDowngrade ? { confirmDowngrade: true } : {}),
         }),
       })
 
@@ -200,6 +233,12 @@ function UpgradeForm() {
 
       if (res.ok && data.url) {
         window.location.href = data.url
+      } else if (res.ok && data.alreadyOnPlan) {
+        toast.info(data.message || 'You are already on this plan')
+        setIsSubmitting(false)
+      } else if (data.code === 'CONFIRM_DOWNGRADE') {
+        setConfirmingDowngrade(true)
+        setIsSubmitting(false)
       } else {
         toast.error(data.error || 'Failed to start checkout')
         setIsSubmitting(false)
@@ -210,7 +249,7 @@ function UpgradeForm() {
     }
   }
 
-  if (authLoading || familiesLoading) {
+  if (authLoading || familiesLoading || (primaryFamily && subscriptionLoading)) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Spinner className="h-8 w-8" />
@@ -233,7 +272,7 @@ function UpgradeForm() {
           </Link>
         </Button>
         <div className="min-w-0">
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Upgrade to {tier.name}</h1>
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{copy.title}</h1>
           <FamilyNameTag name={primaryFamily?.name} className="mt-1" />
         </div>
       </div>
@@ -290,7 +329,9 @@ function UpgradeForm() {
               <div className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
                 <Shield className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
-                  You&apos;ll enter your card on Stripe&apos;s secure checkout in the next step. We never see or store your card number.
+                  {currentPlan
+                    ? 'Plan changes use the card already on file with Stripe. We never see or store your card number.'
+                    : <>You&apos;ll enter your card on Stripe&apos;s secure checkout in the next step. We never see or store your card number.</>}
                 </span>
               </div>
             </CardContent>
@@ -365,10 +406,19 @@ function UpgradeForm() {
                 <p className="text-center text-xs text-muted-foreground">That&apos;s {displayPrice(SUBSCRIPTION_TIERS[selectedTier], 'annual').sub}</p>
               )}
 
-              <Button className="w-full" size="lg" onClick={handleCheckout} disabled={isSubmitting}>
-                {isSubmitting ? <Spinner className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
-                Continue to secure checkout
+              <Button
+                className="w-full"
+                size="lg"
+                variant={change === 'downgrade' ? 'outline' : 'default'}
+                onClick={() => handleCheckout()}
+                disabled={isSubmitting || change === 'same'}
+              >
+                {isSubmitting ? <Spinner className="mr-2 h-4 w-4" /> : change === 'same' ? <Check className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
+                {copy.button}
               </Button>
+              {change === 'downgrade' && currentPlan && (
+                <p className="text-center text-xs text-muted-foreground">{downgradeNotice(tiers[currentPlan.tier].name, tier.name)}</p>
+              )}
 
               <ul className="space-y-1 border-t pt-3">
                 {tier.features.slice(0, 5).map((feature) => (
@@ -382,6 +432,23 @@ function UpgradeForm() {
           </Card>
         </div>
       </div>
+
+      <AlertDialog open={confirmingDowngrade} onOpenChange={(open) => { if (!open && !isSubmitting) setConfirmingDowngrade(false) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch to {tier.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {downgradeNotice(currentPlan ? tiers[currentPlan.tier].name : 'your current plan', tier.name)}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting}>Keep my plan</AlertDialogCancel>
+            <AlertDialogAction disabled={isSubmitting} onClick={() => handleCheckout(true)}>
+              Switch to {tier.name} now
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

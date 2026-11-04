@@ -7,6 +7,7 @@ import {
   promoCodeRow,
   promoCreateSchema,
   promotionCodeParamsFor,
+  promoStripeError,
   type PromoTierKey,
 } from "@/lib/promo-codes"
 
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: promoCodeRow(full) })
   } catch (error) {
     console.error("Create promo code error:", error)
-    const message = (error as { message?: string })?.message
-    return NextResponse.json({ error: message ? `Stripe: ${message}` : "Couldn't create the code" }, { status: 502 })
+    const { status, error: message } = promoStripeError(error, "Couldn't create the code")
+    return NextResponse.json({ error: message }, { status })
   }
 }

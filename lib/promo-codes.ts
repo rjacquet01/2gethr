@@ -158,3 +158,22 @@ export function promoCodeRow(p: Stripe.PromotionCode): PromoCodeRow {
     createdAt: new Date(p.created * 1000).toISOString(),
   }
 }
+
+export const PROMO_PERMISSION_ERROR =
+  "Stripe key can't create promo codes. In Stripe, give the restricted key Coupons: Write and Promotion codes: Write."
+
+/**
+ * A Stripe error from the admin promo routes as a status and a message safe to
+ * show: a missing key permission is a 403 with what to fix, and no key prefix
+ * or account id is ever echoed.
+ */
+export function promoStripeError(error: unknown, fallback: string): { status: number; error: string } {
+  const e = error as { type?: string; statusCode?: number; message?: string } | null
+  if (e?.type === "StripePermissionError" || (e?.statusCode === 403 && /permission/i.test(e.message ?? ""))) {
+    return { status: 403, error: PROMO_PERMISSION_ERROR }
+  }
+  const message = e?.message
+    ?.replace(/\b[a-z]{2,4}_(live|test)_[^\s'"]*/g, "[key]")
+    .replace(/\bacct_[A-Za-z0-9]+/g, "[account]")
+  return { status: 502, error: message ? `Stripe: ${message}` : fallback }
+}
