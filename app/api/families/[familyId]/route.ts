@@ -9,6 +9,7 @@ import { removeFamilyFlyers } from "@/lib/board-flyers"
 import { deleteFamilyChildren, familyChildAccountUnderHold } from "@/lib/parental-consent"
 import { FAMILY_DELETION_BLOCKED_MESSAGE } from "@/lib/account-closure"
 import { memberName } from "@/lib/member-names"
+import { changedFields, notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 const updateFamilySchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -199,7 +200,7 @@ export async function PATCH(
 
     // Verify ownership
     const families = await sql`
-      SELECT owner_id FROM families WHERE id = ${familyId}
+      SELECT owner_id, name FROM families WHERE id = ${familyId}
     `
 
     if (families.length === 0) {
@@ -232,6 +233,16 @@ export async function PATCH(
       newValue: { name },
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
+    })
+
+    await notifyAccountChange({
+      actor: user.email,
+      actorType: "user",
+      accountEmail: user.email,
+      familyName: name || families[0].name,
+      change: "Family renamed",
+      details: changedFields({ familyName: families[0].name }, { familyName: name || undefined }),
+      ipAddress: requestIp(request),
     })
 
     return NextResponse.json({
@@ -364,6 +375,15 @@ export async function DELETE(
       oldValue: { name: families[0].name },
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
+    })
+
+    await notifyAccountChange({
+      actor: user.email,
+      actorType: "user",
+      accountEmail: user.email,
+      familyName: families[0].name,
+      change: "Family deleted",
+      ipAddress: requestIp(request),
     })
 
     return NextResponse.json({

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { sql } from '@/lib/db'
 import { getUserFromRequest, hashPassword, verifyPassword, logAuditEvent } from '@/lib/auth'
 import { hitRateLimit, tooManyRequests } from '@/lib/rate-limit'
+import { notifyAccountChange, requestIp } from '@/lib/admin-account-alerts'
 
 // Lets a signed-in user change their own password (Settings > Security >
 // Change Password). Requires the current password, and uses the same
@@ -80,6 +81,14 @@ export async function POST(request: NextRequest) {
     } catch (auditError) {
       console.error('Change password audit log failed:', auditError)
     }
+
+    await notifyAccountChange({
+      actor: user.email,
+      actorType: 'user',
+      accountEmail: user.email,
+      change: 'Password changed',
+      ipAddress: requestIp(request),
+    })
 
     return NextResponse.json({
       success: true,

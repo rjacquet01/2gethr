@@ -4,6 +4,7 @@ import { sql } from '@/lib/db'
 import { stripe, getPriceId } from '@/lib/stripe'
 import { TRIAL_DAYS, getTierDefinition } from '@/lib/subscription-tiers'
 import { STRIPE_SUBSCRIPTION_TRIAL_ERROR, trialBlockedByStripe } from '@/lib/trial-eligibility'
+import { familyOwnerAccount, notifyAccountChange, requestIp } from '@/lib/admin-account-alerts'
 
 // History is an audit nicety: a failure to write it must never fail the change.
 async function safeHistory(run: () => Promise<unknown>) {
@@ -41,7 +42,20 @@ export async function PATCH(
     }
     
     const subscription = current[0]
-    
+    const alertAdmin = async (change: string, details: Record<string, string | number | null | { from: string; to: string }>) => {
+      const owner = await familyOwnerAccount(subscription.family_id)
+      if (!owner) return
+      await notifyAccountChange({
+        actor: admin.email,
+        actorType: 'admin',
+        accountEmail: owner.accountEmail,
+        familyName: owner.familyName,
+        change,
+        details: { ...details, ...(reason ? { reason: String(reason) } : {}), ...(ticketId ? { ticket: String(ticketId) } : {}) },
+        ipAddress: requestIp(request),
+      })
+    }
+
     if (action === 'change_tier') {
       if (!tier || !['FREE', 'PREMIUM', 'PREMIUM_PLUS'].includes(tier)) {
         return NextResponse.json({ error: 'Invalid tier' }, { status: 400 })
@@ -101,7 +115,15 @@ export async function PATCH(
         reason,
         ticketId,
       }, ipAddress, userAgent, ticketId))
-      
+
+      // Cancelling a Stripe subscription (move to Free) already sends the
+      // webhook's "Subscription cancelled" notice.
+      if (subscription.tier !== tier && !(tier === 'FREE' && subscription.stripe_subscription_id)) {
+        await alertAdmin('Plan changed by admin', {
+          plan: { from: getTierDefinition(subscription.tier).name, to: getTierDefinition(tier).name },
+        })
+      }
+
       return NextResponse.json({ success: true, message: `Tier changed to ${getTierDefinition(tier).name}` })
     }
     
@@ -141,7 +163,13 @@ export async function PATCH(
         reason,
         ticketId,
       }, ipAddress, userAgent, ticketId))
-      
+
+      await alertAdmin('Trial granted by admin', {
+        plan: getTierDefinition('PREMIUM_PLUS').name,
+        trialDays: days,
+        trialEnds: trialEnd.toISOString().slice(0, 10),
+      })
+
       return NextResponse.json({ success: true, message: `${days}-day trial granted` })
     }
     
@@ -172,7 +200,11 @@ export async function PATCH(
         reason,
         ticketId,
       }, ipAddress, userAgent, ticketId))
-      
+
+      if (subscription.status !== 'CANCELLED') {
+        await alertAdmin('Subscription cancelled by admin', { status: { from: subscription.status, to: 'CANCELLED' } })
+      }
+
       return NextResponse.json({ success: true, message: 'Subscription cancelled' })
     }
     
@@ -203,7 +235,11 @@ export async function PATCH(
         reason,
         ticketId,
       }, ipAddress, userAgent, ticketId))
-      
+
+      if (subscription.status !== 'ACTIVE' || subscription.cancel_at_period_end) {
+        await alertAdmin('Subscription reactivated by admin', { status: { from: subscription.status, to: 'ACTIVE' } })
+      }
+
       return NextResponse.json({ success: true, message: 'Subscription reactivated' })
     }
     

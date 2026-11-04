@@ -4,6 +4,7 @@ import { getUserFromRequest, checkFamilySubscription, logAuditEvent } from "@/li
 import { z } from "zod"
 import { ensureInviteTables, activateMember, INVITE_ROLES, type InviteRole } from "@/lib/family-invites"
 import { alertFamilyAdults } from "@/lib/family-alerts"
+import { notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 // The role is decided by the invite code, never by the person joining, so a
 // "role" sent in the body is ignored (zod strips unknown keys).
@@ -147,6 +148,14 @@ export async function POST(request: NextRequest) {
           console.error("join request alert failed (non-fatal):", e)
         }
         await logAuditEvent(user.id, "CREATE", "family_join_request", requestId, { newValue: { familyId, role }, ipAddress: ip, userAgent: ua })
+        await notifyAccountChange({
+          actor: user.email,
+          actorType: "user",
+          accountEmail: user.email,
+          familyName: invite.family_name,
+          change: "Parent invite used, waiting for approval",
+          ipAddress: requestIp(request),
+        })
         return NextResponse.json({
           success: true,
           data: { familyId, familyName: invite.family_name, role, status: "PENDING_APPROVAL", requestId },
@@ -172,6 +181,15 @@ export async function POST(request: NextRequest) {
           console.error("guest joined alert failed (non-fatal):", e)
         }
         await logAuditEvent(user.id, "CREATE", "family_member", memberId, { newValue: { familyId, role, nickname: displayName }, ipAddress: ip, userAgent: ua })
+        await notifyAccountChange({
+          actor: user.email,
+          actorType: "user",
+          accountEmail: user.email,
+          familyName: invite.family_name,
+          change: "Invite accepted, joined family",
+          details: { role },
+          ipAddress: requestIp(request),
+        })
         return NextResponse.json({
           success: true,
           data: { familyId, familyName: invite.family_name, membershipId: memberId, role, status: "JOINED" },

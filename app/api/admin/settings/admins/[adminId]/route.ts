@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromToken, logAdminAction } from '@/lib/admin-auth'
 import { sql } from '@/lib/db'
+import { notifyAccountChange, requestIp } from '@/lib/admin-account-alerts'
 
 // Deactivate an admin (SUPER_ADMIN only)
 export async function DELETE(
@@ -29,7 +30,7 @@ export async function DELETE(
     }
 
     // Check if target admin exists
-    const targetAdmin = await sql`SELECT id, email FROM admin_users WHERE id = ${adminId}`
+    const targetAdmin = await sql`SELECT id, email, status FROM admin_users WHERE id = ${adminId}`
     if (targetAdmin.length === 0) {
       return NextResponse.json({ error: 'Admin not found' }, { status: 404 })
     }
@@ -43,6 +44,15 @@ export async function DELETE(
     // Log the action
     const ipAddress = request.headers.get('x-forwarded-for') || 'unknown'
     await logAdminAction(admin.id, 'DEACTIVATE_ADMIN', 'admin_user', adminId, { email: targetAdmin[0].email }, ipAddress)
+    if (targetAdmin[0].status !== 'SUSPENDED') {
+      await notifyAccountChange({
+        actor: admin.email,
+        actorType: 'admin',
+        accountEmail: targetAdmin[0].email,
+        change: 'Admin user deactivated',
+        ipAddress: requestIp(request),
+      })
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

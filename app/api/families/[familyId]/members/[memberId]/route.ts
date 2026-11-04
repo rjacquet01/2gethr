@@ -6,6 +6,7 @@ import { isParentInOtherFamily, getRolePermissions } from "@/lib/family-invites"
 import { canManageFamily } from "@/lib/permissions"
 import { deleteChildData } from "@/lib/parental-consent"
 import { ACCOUNT_CLOSURE_BLOCKED_MESSAGE, LegalHoldError } from "@/lib/account-closure"
+import { changedFields, memberAccount, notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 const updateMemberSchema = z.object({
   role: z.enum(["PARENT", "GUARDIAN", "ADULT", "CHILD", "GUEST"]).optional(),
@@ -50,7 +51,9 @@ export async function PATCH(
 
     // Get target member
     const targetMember = await sql`
-      SELECT fm.id, fm.user_id, fm.role, f.owner_id
+      SELECT fm.id, fm.user_id, fm.role, f.owner_id,
+        fm.can_create_events, fm.requires_event_approval, fm.can_override_conflicts,
+        fm.can_view_family_calendar, fm.can_invite_members
       FROM family_members fm
       JOIN families f ON fm.family_id = f.id
       WHERE fm.id = ${memberId} AND fm.family_id = ${familyId}
@@ -126,6 +129,31 @@ export async function PATCH(
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
     })
+
+    const t = targetMember[0]
+    const details = changedFields(
+      {
+        role: t.role,
+        canCreateEvents: t.can_create_events,
+        requiresEventApproval: t.requires_event_approval,
+        canOverrideConflicts: t.can_override_conflicts,
+        canViewFamilyCalendar: t.can_view_family_calendar,
+        canInviteMembers: t.can_invite_members,
+      },
+      validatedData
+    )
+    const account = Object.keys(details).length ? await memberAccount(memberId) : null
+    if (account) {
+      await notifyAccountChange({
+        actor: user.email,
+        actorType: "user",
+        accountEmail: account.accountEmail,
+        familyName: account.familyName,
+        change: details.role ? "Family role changed" : "Family member permissions changed",
+        details,
+        ipAddress: requestIp(request),
+      })
+    }
 
     return NextResponse.json({
       success: true,
@@ -213,6 +241,9 @@ export async function DELETE(
       }
     }
 
+    // Looked up first: removing a child deletes their profile.
+    const account = await memberAccount(memberId)
+
     if (member.role === "CHILD") {
       // A child's data is deleted, not just hidden: their profile (name,
       // birthdate, school, notes), location settings and, if this was their
@@ -253,6 +284,18 @@ export async function DELETE(
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
     })
+
+    if (account) {
+      await notifyAccountChange({
+        actor: user.email,
+        actorType: "user",
+        accountEmail: account.accountEmail,
+        familyName: account.familyName,
+        change: isSelf ? "Left family" : "Removed from family",
+        details: { role: member.role },
+        ipAddress: requestIp(request),
+      })
+    }
 
     return NextResponse.json({
       success: true,

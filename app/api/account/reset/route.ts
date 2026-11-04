@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { neon } from '@neondatabase/serverless'
 import type { Row } from '@/lib/db'
 import { verifyAccessToken, getUserById } from '@/lib/auth'
+import { notifyAccountChange, requestIp } from '@/lib/admin-account-alerts'
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -117,8 +118,17 @@ export async function POST(request: Request) {
       WHERE id = ${user.id}
     `
 
-    return NextResponse.json({ 
-      success: true, 
+    await notifyAccountChange({
+      actor: user.email,
+      actorType: 'user',
+      accountEmail: user.email,
+      change: 'Account data reset',
+      details: { familiesLeft: familyIds.length },
+      ipAddress: requestIp(request),
+    })
+
+    return NextResponse.json({
+      success: true,
       message: 'Account data has been reset. You can now set up your profile again.' 
     })
   } catch (error) {

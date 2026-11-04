@@ -18,6 +18,7 @@ import {
 import { ensureConsentSchema } from "@/lib/consent-schema"
 import { TERMS_VERSION } from "@/lib/consent-text"
 import { alertFamilyAdults } from "@/lib/family-alerts"
+import { notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 import { hitRateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit"
 import { cleanSignupSource } from "@/lib/signup-source"
 import { ensureSignupSourceColumns } from "@/lib/signup-source-schema"
@@ -246,6 +247,14 @@ export async function POST(request: NextRequest) {
       } catch (e) {
         console.error("child account alert failed (non-fatal):", e)
       }
+      await notifyAccountChange({
+        actor: validatedData.email.toLowerCase(),
+        actorType: "user",
+        accountEmail: validatedData.email.toLowerCase(),
+        familyName: childInvite.familyName,
+        change: "Child invite accepted, child account linked",
+        ipAddress: requestIp(request),
+      })
     }
 
     // Record proof of SMS opt-in separately (TCPA / toll-free verification

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { hashPassword, revokeAllUserTokens } from '@/lib/auth'
+import { notifyAccountChange, requestIp } from '@/lib/admin-account-alerts'
 import crypto from 'crypto'
 import { z } from 'zod'
 
@@ -61,9 +62,10 @@ export async function POST(request: NextRequest) {
 
     const passwordHash = await hashPassword(password)
 
-    await sql`
+    const updated = await sql`
       UPDATE users SET password_hash = ${passwordHash}, updated_at = NOW()
       WHERE id = ${resetToken.user_id}
+      RETURNING email
     `
 
     await sql`
@@ -72,6 +74,16 @@ export async function POST(request: NextRequest) {
 
     // Invalidate any existing sessions so a stolen session can't survive a reset.
     await revokeAllUserTokens(resetToken.user_id)
+
+    if (updated[0]?.email) {
+      await notifyAccountChange({
+        actor: updated[0].email,
+        actorType: 'user',
+        accountEmail: updated[0].email,
+        change: 'Password reset by email link',
+        ipAddress: requestIp(request),
+      })
+    }
 
     return NextResponse.json({
       success: true,

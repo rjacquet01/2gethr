@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { put, del } from "@vercel/blob"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
+import { memberAccount, notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"]
@@ -39,6 +40,19 @@ async function authorize(
     return { res: NextResponse.json({ success: false, error: "Only parents can change someone else's photo" }, { status: 403 }) }
   }
   return { user, target: target[0] }
+}
+
+async function alertPhotoChange(request: NextRequest, actor: string, memberId: string, change: string) {
+  const account = await memberAccount(memberId)
+  if (!account) return
+  await notifyAccountChange({
+    actor,
+    actorType: "user",
+    accountEmail: account.accountEmail,
+    familyName: account.familyName,
+    change,
+    ipAddress: requestIp(request),
+  })
 }
 
 export async function POST(
@@ -82,6 +96,8 @@ export async function POST(
       try { await del(oldPath) } catch (e) { console.warn("Failed to delete old member photo:", e) }
     }
 
+    await alertPhotoChange(request, auth.user.email, memberId, "Profile photo updated")
+
     return NextResponse.json({ success: true, data: { pathname: blob.pathname } })
   } catch (err) {
     console.error("Upload member photo error:", err)
@@ -113,6 +129,7 @@ export async function DELETE(
     if (oldPath && oldPath.startsWith("member-photos/")) {
       try { await del(oldPath) } catch (e) { console.warn("Failed to delete member photo:", e) }
     }
+    await alertPhotoChange(request, auth.user.email, memberId, "Profile photo removed")
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error("Delete member photo error:", err)

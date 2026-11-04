@@ -4,6 +4,8 @@ import { stripe, getTierFromPriceId } from "@/lib/stripe"
 import { notifyAdmin, EMAIL_TEMPLATES } from "@/lib/services/email"
 import { handleChargeRefunded, handleDisputeClosed, handleDisputeCreated } from "@/lib/stripe-disputes"
 import { ensureSubscriptionCancelAtColumn, pendingCancelFrom } from "@/lib/stripe-cancel"
+import { notifyAccountChange } from "@/lib/admin-account-alerts"
+import { getTierDefinition } from "@/lib/subscription-tiers"
 import type Stripe from "stripe"
 
 // Looks up the family name and the owning user's email for the admin
@@ -265,6 +267,22 @@ async function syncSubscriptionFromStripe(sub: Stripe.Subscription) {
     if (info) {
       const notice = EMAIL_TEMPLATES.ADMIN_TIER_CHANGED(info.ownerEmail, info.familyName, previousTier, tier)
       await notifyAdmin(notice.subject, notice.html, notice.text)
+    }
+  }
+
+  // A cancellation set in the billing portal, or stopped there or by a plan
+  // switch. Resume in the app clears the row itself and sends its own notice.
+  if (Boolean(existing[0].cancel_at_period_end) !== cancel.pending && newStatus !== "CANCELLED") {
+    const info = await getFamilyOwnerInfo(existing[0].family_id)
+    if (info) {
+      await notifyAccountChange({
+        actor: "family owner (Stripe billing)",
+        actorType: "user",
+        accountEmail: info.ownerEmail,
+        familyName: info.familyName,
+        change: cancel.pending ? "Subscription set to cancel" : "Subscription cancellation stopped",
+        details: { plan: getTierDefinition(tier).name, ...(cancel.pending ? { ends: cancel.endsAt?.slice(0, 10) ?? null } : {}) },
+      })
     }
   }
 }

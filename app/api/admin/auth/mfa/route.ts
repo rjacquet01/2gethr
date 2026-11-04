@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getAdminFromRequest, logAdminAction, verifyPassword } from '@/lib/admin-auth'
 import { adminMfaStatus, startAdminMfa, confirmAdminMfa, disableAdminMfa } from '@/lib/admin-mfa'
+import { notifyAccountChange } from '@/lib/admin-account-alerts'
 
 // The signed-in admin's own two-step sign-in (authenticator app).
 // GET: status. POST { action: 'setup' | 'enable' (code) | 'disable' (password) }.
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest) {
       const result = await confirmAdminMfa(admin.id, body.code)
       if ('error' in result) return NextResponse.json(result, { status: 400 })
       await logAdminAction(admin.id, 'MFA_ENABLED', null, null, {}, ip, ua)
+      await notifyAccountChange({ actor: admin.email, actorType: 'admin', accountEmail: admin.email, change: 'Admin two-factor sign-in turned on', ipAddress: ip })
       return NextResponse.json(result)
     }
 
@@ -41,6 +43,7 @@ export async function POST(request: NextRequest) {
       if (!ok) return NextResponse.json({ error: 'Wrong password' }, { status: 403 })
       await disableAdminMfa(admin.id)
       await logAdminAction(admin.id, 'MFA_DISABLED', null, null, {}, ip, ua)
+      await notifyAccountChange({ actor: admin.email, actorType: 'admin', accountEmail: admin.email, change: 'Admin two-factor sign-in turned off', ipAddress: ip })
       return NextResponse.json({ success: true })
     }
 

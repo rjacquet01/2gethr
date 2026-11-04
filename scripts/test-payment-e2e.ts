@@ -131,7 +131,7 @@ async function main() {
       return []
     }],
     // self-service trial (app/api/subscriptions/[familyId])
-    ["SELECT owner_id FROM families WHERE id", (v) => (families[v[0] as string] ? [{ owner_id: families[v[0] as string].owner_id }] : [])],
+    ["SELECT owner_id, name FROM families WHERE id", (v) => (families[v[0] as string] ? [{ owner_id: families[v[0] as string].owner_id, name: families[v[0] as string].name }] : [])],
     ["SELECT id, tier, status, stripe_subscription_id FROM subscriptions", (v) => subBy("family_id", v[0])],
     ["UPDATE subscriptions SET tier = ?, status = 'TRIALING'", (v) => {
       for (const s of subBy("id", v[v.length - 1])) Object.assign(s, { tier: v[0], status: "TRIALING", trial_ends_at: v[1] })

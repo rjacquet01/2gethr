@@ -7,6 +7,7 @@ import { z } from "zod"
 import { TRIAL_DAYS } from "@/lib/subscription-tiers"
 import { getTrialEligibility } from "@/lib/trial-eligibility"
 import { memberName } from "@/lib/member-names"
+import { notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 const createFamilySchema = z.object({
   name: z.string().min(1, "Family name is required").max(100),
@@ -275,6 +276,15 @@ export async function POST(request: NextRequest) {
       newValue: { name, ownerId: user.id },
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
+    })
+
+    await notifyAccountChange({
+      actor: user.email,
+      actorType: "user",
+      accountEmail: user.email,
+      familyName: name,
+      change: trialStarted ? "Family created, free trial started" : "Family created",
+      ipAddress: requestIp(request),
     })
 
     return NextResponse.json({

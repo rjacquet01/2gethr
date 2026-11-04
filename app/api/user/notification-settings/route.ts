@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { SMS_CONSENT_TEXT, getSmsConsent, recordSmsConsent } from "@/lib/sms-consent"
+import { changedFields, notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 // GET - Get user notification settings
 export async function GET(request: NextRequest) {
@@ -133,8 +134,12 @@ export async function PATCH(request: NextRequest) {
 
     // Check if settings exist
     const existing = await sql`
-      SELECT id FROM reminder_settings WHERE user_id = ${user.id}
+      SELECT id, email_enabled, push_enabled, sms_enabled, phone_alerts, weekly_digest
+      FROM reminder_settings WHERE user_id = ${user.id}
     `
+    // No row yet: the defaults GET shows.
+    const before = existing[0] ?? { email_enabled: true, push_enabled: true, sms_enabled: false, phone_alerts: false, weekly_digest: false }
+    const asBool = (v: unknown) => (typeof v === "boolean" ? v : undefined)
 
     if (existing.length === 0) {
       // Create new settings
@@ -175,6 +180,30 @@ export async function PATCH(request: NextRequest) {
         WHERE user_id = ${user.id}
       `
     }
+
+    await notifyAccountChange({
+      actor: user.email,
+      actorType: "user",
+      accountEmail: user.email,
+      change: "Notification channels changed",
+      details: changedFields(
+        {
+          emailNotifications: before.email_enabled,
+          pushNotifications: before.push_enabled,
+          smsNotifications: before.sms_enabled,
+          phoneAlerts: before.phone_alerts,
+          weeklyDigest: before.weekly_digest,
+        },
+        {
+          emailNotifications: asBool(emailNotifications),
+          pushNotifications: asBool(pushNotifications),
+          smsNotifications: asBool(smsNotifications),
+          phoneAlerts: asBool(phoneAlerts),
+          weeklyDigest: asBool(weeklyDigest),
+        }
+      ),
+      ipAddress: requestIp(request),
+    })
 
     return NextResponse.json({
       success: true,

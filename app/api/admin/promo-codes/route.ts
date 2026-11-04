@@ -10,6 +10,8 @@ import {
   promoStripeError,
   type PromoTierKey,
 } from "@/lib/promo-codes"
+import { getTierDefinition } from "@/lib/subscription-tiers"
+import { notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 async function adminFrom(request: NextRequest) {
   const authHeader = request.headers.get("authorization")
@@ -84,6 +86,20 @@ export async function POST(request: NextRequest) {
       maxRedemptions: input.maxRedemptions ?? null,
       expiresOn: input.expiresOn ?? null,
       firstTimeOnly: input.firstTimeOnly,
+    })
+    await notifyAccountChange({
+      actor: admin.email,
+      actorType: "admin",
+      accountEmail: promo.code,
+      change: "Promo code created",
+      details: {
+        discount: input.kind === "percent" ? `${input.value}% off` : `$${input.value} off`,
+        duration: input.duration === "repeating" ? `${input.months} months` : input.duration,
+        appliesTo: input.appliesTo === "ALL" ? "All plans" : getTierDefinition(input.appliesTo).name,
+        maxRedemptions: input.maxRedemptions ?? null,
+        expiresOn: input.expiresOn ?? null,
+      },
+      ipAddress: requestIp(request),
     })
 
     const full = await stripe.promotionCodes.retrieve(promo.id, { expand: ["promotion.coupon"] })

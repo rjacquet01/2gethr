@@ -7,6 +7,7 @@ import { getTierDefinition } from "@/lib/subscription-tiers"
 import { ensureAgeColumns } from "@/lib/age-schema"
 import { ageFromDob, dobError, childAgeInfo, GUEST_AGE_INFO } from "@/lib/age"
 import { recordParentalConsent } from "@/lib/parental-consent"
+import { memberAccount, notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 const addChildSchema = z.object({
   displayName: z.string().min(1, "Display name is required").max(100),
@@ -287,6 +288,19 @@ export async function POST(
         userAgent: request.headers.get("user-agent") || undefined,
       })
 
+      const account = await memberAccount(memberId)
+      if (account) {
+        await notifyAccountChange({
+          actor: user.email,
+          actorType: "user",
+          accountEmail: account.accountEmail,
+          familyName: account.familyName,
+          change: "Family member made a child",
+          details: { role: { from: existingMember[0].role, to: "CHILD" } },
+          ipAddress: requestIp(request),
+        })
+      }
+
       return NextResponse.json({
         success: true,
         data: {
@@ -378,6 +392,18 @@ export async function POST(
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
     })
+
+    const account = await memberAccount(memberId)
+    if (account) {
+      await notifyAccountChange({
+        actor: user.email,
+        actorType: "user",
+        accountEmail: account.accountEmail,
+        familyName: account.familyName,
+        change: userId ? "Child added with own login" : "Child profile added",
+        ipAddress: requestIp(request),
+      })
+    }
 
     return NextResponse.json({
       success: true,

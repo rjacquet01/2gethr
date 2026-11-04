@@ -4,6 +4,7 @@ import { getAdminFromToken, hasPermission, logAdminAction } from '@/lib/admin-au
 import { sql } from '@/lib/db'
 import { withdrawChildConsent } from '@/lib/parental-consent'
 import { ACCOUNT_CLOSURE_BLOCKED_ADMIN_MESSAGE, LegalHoldError } from '@/lib/account-closure'
+import { memberAccount, notifyAccountChange, requestIp } from '@/lib/admin-account-alerts'
 
 const schema = z.object({
   reason: z.string({ required_error: 'A reason is required' }).trim().min(1, 'A reason is required').max(1000),
@@ -59,7 +60,8 @@ export async function DELETE(
       )
     }
 
-    // Audit first, while the child's name still exists.
+    // Looked up and audited first, while the child's name still exists.
+    const account = await memberAccount(memberId)
     await logAdminAction(
       admin.id,
       'DELETE_CHILD_PROFILE',
@@ -70,6 +72,17 @@ export async function DELETE(
       request.headers.get('user-agent') || undefined
     )
     const result = await withdrawChildConsent({ familyId, childMemberId: memberId, withdrawnBy: admin.id })
+    if (account) {
+      await notifyAccountChange({
+        actor: admin.email,
+        actorType: 'admin',
+        accountEmail: account.accountEmail,
+        familyName: account.familyName,
+        change: 'Child profile deleted by admin',
+        details: { reason },
+        ipAddress: requestIp(request),
+      })
+    }
 
     return NextResponse.json({ success: true, deleted: result.deleted, message: 'Child profile deleted' })
   } catch (error) {

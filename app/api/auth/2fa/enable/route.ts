@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { confirmEnrollment } from "@/lib/services/two-factor"
+import { notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 import { z } from "zod"
 
 const enableSchema = z.object({
@@ -29,6 +30,14 @@ export async function POST(request: NextRequest) {
       metadata: { action: "2fa_enabled" },
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
       userAgent: request.headers.get("user-agent") || undefined,
+    })
+
+    await notifyAccountChange({
+      actor: user.email,
+      actorType: "user",
+      accountEmail: user.email,
+      change: "Two-factor sign-in turned on",
+      ipAddress: requestIp(request),
     })
 
     return NextResponse.json({ success: true, data: { backupCodes: result.backupCodes } })

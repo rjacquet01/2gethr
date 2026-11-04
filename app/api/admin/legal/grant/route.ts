@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getAdminFromRequest } from "@/lib/admin-auth"
 import { ensureLegalTables, legalLog, LEGAL_ROLE } from "@/lib/legal"
+import { notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
 
 // Only a SUPER_ADMIN assigns the Legal Compliance role. Every change is logged.
 async function guard(request: NextRequest) {
@@ -44,19 +45,28 @@ export async function POST(request: NextRequest) {
     const target = await sql`SELECT id::text AS id, email, status FROM admin_users WHERE id::text = ${String(adminId)} LIMIT 1`
     if (target.length === 0) return NextResponse.json({ success: false, error: "Admin not found" }, { status: 404 })
     if (grant && target[0].status !== "ACTIVE") return NextResponse.json({ success: false, error: "Admin is not active" }, { status: 400 })
-    if (grant) {
-      await sql`
+    const changed = grant
+      ? await sql`
         INSERT INTO admin_user_roles (admin_user_id, role_id, granted_by)
         SELECT ${String(adminId)}::uuid, r.id, ${g.admin.id}::uuid FROM admin_roles r WHERE r.name = ${LEGAL_ROLE}
         ON CONFLICT (admin_user_id, role_id) DO NOTHING
+        RETURNING admin_user_id
       `
-    } else {
-      await sql`
+      : await sql`
         DELETE FROM admin_user_roles WHERE admin_user_id = ${String(adminId)}::uuid
           AND role_id = (SELECT id FROM admin_roles WHERE name = ${LEGAL_ROLE})
+        RETURNING admin_user_id
       `
-    }
     await legalLog("SYSTEM", g.admin.id, grant ? "LEGAL_ROLE_GRANTED" : "LEGAL_ROLE_REVOKED", { target: target[0].email, selfGrant: g.admin.id === String(adminId) }, request)
+    if (changed.length > 0) {
+      await notifyAccountChange({
+        actor: g.admin.email,
+        actorType: "admin",
+        accountEmail: target[0].email,
+        change: grant ? "Admin role granted: Legal Compliance" : "Admin role removed: Legal Compliance",
+        ipAddress: requestIp(request),
+      })
+    }
     return NextResponse.json({ success: true })
   } catch (e) {
     console.error("legal grant error:", e)

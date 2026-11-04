@@ -4,6 +4,7 @@ import { revokeAllUserTokens } from '@/lib/auth'
 import { ACCOUNT_CLOSURE_BLOCKED_ADMIN_MESSAGE, LegalHoldError, assertAccountCanBeClosed, closeUserAccount } from '@/lib/account-closure'
 import { sql } from '@/lib/db'
 import { sendPasswordResetLink } from '@/lib/password-reset'
+import { notifyAccountChange, requestIp } from '@/lib/admin-account-alerts'
 
 // Get user details
 export async function GET(
@@ -126,11 +127,22 @@ export async function PATCH(
 
     const ipAddress = request.headers.get('x-forwarded-for') || undefined
     const userAgent = request.headers.get('user-agent') || undefined
+    const alertAdmin = (accountEmail: string, change: string, details?: Record<string, string | boolean | null>) =>
+      notifyAccountChange({
+        actor: admin.email,
+        actorType: 'admin',
+        accountEmail,
+        change,
+        details: { ...(reason ? { reason: String(reason) } : {}), ...details },
+        ipAddress: requestIp(request),
+      })
 
     if (action === 'suspend') {
       if (!hasPermission(admin, 'users.suspend')) {
         return NextResponse.json({ error: 'No suspend permission' }, { status: 403 })
       }
+
+      const before = await sql`SELECT email, is_active FROM users WHERE id = ${userId}`
 
       await sql`
         UPDATE users SET is_active = false, updated_at = NOW()
@@ -141,6 +153,7 @@ export async function PATCH(
       try { await revokeAllUserTokens(userId) } catch (e) { console.error('revoke tokens failed', e) }
 
       await logAdminAction(admin.id, 'SUSPEND_USER', 'user', userId, { reason }, ipAddress, userAgent)
+      if (before[0]?.is_active) await alertAdmin(before[0].email, 'Account suspended')
 
       return NextResponse.json({ success: true, message: 'User suspended' })
     }
@@ -150,7 +163,7 @@ export async function PATCH(
         return NextResponse.json({ error: 'No suspend permission' }, { status: 403 })
       }
 
-      const target = await sql`SELECT email FROM users WHERE id = ${userId}`
+      const target = await sql`SELECT email, is_active FROM users WHERE id = ${userId}`
       if (target.length === 0) {
         return NextResponse.json({ error: 'User not found' }, { status: 404 })
       }
@@ -164,6 +177,7 @@ export async function PATCH(
       `
 
       await logAdminAction(admin.id, 'UNSUSPEND_USER', 'user', userId, { reason }, ipAddress, userAgent)
+      if (!target[0].is_active) await alertAdmin(target[0].email, 'Account reactivated')
 
       return NextResponse.json({ success: true, message: 'User unsuspended' })
     }
@@ -189,6 +203,7 @@ export async function PATCH(
       // Audit first: the closure anonymises the email.
       await logAdminAction(admin.id, 'CLOSE_USER', 'user', userId, { reason, email: target[0].email }, ipAddress, userAgent)
       await closeUserAccount({ id: target[0].id, email: target[0].email })
+      await alertAdmin(target[0].email, 'Account closed by admin')
       return NextResponse.json({ success: true, message: 'Account closed' })
     }
 
@@ -212,17 +227,20 @@ export async function PATCH(
       }
 
       await logAdminAction(admin.id, 'SEND_PASSWORD_RESET', 'user', userId, { reason }, ipAddress, userAgent)
+      await alertAdmin(target[0].email, 'Password reset link sent by admin')
 
       return NextResponse.json({ success: true, message: `Password reset link sent to ${target[0].email}` })
     }
 
     if (action === 'verify_email') {
+      const before = await sql`SELECT email, email_verified FROM users WHERE id = ${userId}`
       await sql`
         UPDATE users SET email_verified = true, updated_at = NOW()
         WHERE id = ${userId}
       `
 
       await logAdminAction(admin.id, 'VERIFY_USER_EMAIL', 'user', userId, { reason }, ipAddress, userAgent)
+      if (before[0] && !before[0].email_verified) await alertAdmin(before[0].email, 'Email marked verified by admin')
 
       return NextResponse.json({ success: true, message: 'Email verified' })
     }
