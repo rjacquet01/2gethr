@@ -58,7 +58,7 @@ async function runJob(request: NextRequest) {
     let recurred = 0
 
     for (const reminder of due) {
-      const channels: string[] = reminder.notify_channels || ['in_app', 'push', 'email']
+      const channels: string[] = reminder.notify_channels || ['in_app', 'push', 'email', 'sms']
       // Reminders set for a child who has no login of their own go to the
       // parent who created them, so name the child in the message.
       const displayTitle: string =
