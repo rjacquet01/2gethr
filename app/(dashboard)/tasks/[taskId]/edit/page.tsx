@@ -10,6 +10,7 @@ import { useTask, updateTask } from '@/hooks/use-tasks'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { TimeSelect } from '@/components/ui/time-select'
 import { CategoryPicker } from '@/components/category-picker'
 import { NotificationChannelsPicker, type NotificationChannelValue } from '@/components/notification-channels-picker'
 import { cleanCustomCategory } from '@/lib/categories'
@@ -250,11 +251,10 @@ export default function EditTaskPage({ params }: { params: Promise<{ taskId: str
               </div>
               <div className="space-y-2">
                 <Label htmlFor="dueTime">Due Time</Label>
-                <Input
+                <TimeSelect
                   id="dueTime"
-                  type="time"
                   value={dueTime}
-                  onChange={(e) => setDueTime(e.target.value)}
+                  onChange={(v) => setDueTime(v)}
                 />
               </div>
             </div>

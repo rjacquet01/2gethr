@@ -8,6 +8,7 @@ import { authFetch } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { TimeSelect } from '@/components/ui/time-select'
 import { CategoryPicker } from '@/components/category-picker'
 import { NotificationChannelsPicker, type NotificationChannelValue } from '@/components/notification-channels-picker'
 import { ColorPicker } from '@/components/customization'
@@ -296,11 +297,10 @@ export default function EditEventPage() {
               {!formData.allDay && (
                 <div className="space-y-2">
                   <Label htmlFor="startTime">Start Time</Label>
-                  <Input
+                  <TimeSelect
                     id="startTime"
-                    type="time"
                     value={formData.startTime}
-                    onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                    onChange={(v) => setFormData({ ...formData, startTime: v })}
                   />
                 </div>
               )}
@@ -316,11 +316,10 @@ export default function EditEventPage() {
               {!formData.allDay && (
                 <div className="space-y-2">
                   <Label htmlFor="endTime">End Time</Label>
-                  <Input
+                  <TimeSelect
                     id="endTime"
-                    type="time"
                     value={formData.endTime}
-                    onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                    onChange={(v) => setFormData({ ...formData, endTime: v })}
                   />
                 </div>
               )}
