@@ -100,8 +100,9 @@ const NOTIFY_CHANNEL_OPTIONS: { value: NotifyChannel; label: string; icon: typeo
   { value: 'sms', label: 'Text', icon: MessageSquare },
 ]
 
-// SMS stays opt-in since not everyone has it enabled or a phone number on file.
-const DEFAULT_NOTIFY_CHANNELS: NotifyChannel[] = ['in_app', 'push', 'email']
+// SMS is on by default so a reminder texts people who turned texts on. The server
+// still only sends when the person has a phone, consent, SMS enabled and quota.
+const DEFAULT_NOTIFY_CHANNELS: NotifyChannel[] = ['in_app', 'push', 'email', 'sms']
 
 interface FamilyMember {
   id: string
