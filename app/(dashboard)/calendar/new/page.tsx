@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { localDateTimeToISO, localStartOfDayToISO, localEndOfDayToISO } from '@/lib/datetime'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { TimeSelect } from '@/components/ui/time-select'
 import { CategoryPicker } from '@/components/category-picker'
 import { ColorPicker } from '@/components/customization'
 import { cleanCustomCategory } from '@/lib/categories'
@@ -499,11 +500,10 @@ function NewEventForm() {
                     <Clock className="h-4 w-4 inline mr-1" />
                     Start Time *
                   </Label>
-                  <Input
+                  <TimeSelect
                     id="startTime"
-                    type="time"
                     value={formData.startTime}
-                    onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
+                    onChange={(v) => setFormData(prev => ({ ...prev, startTime: v }))}
                     required
                   />
                 </div>
@@ -524,11 +524,10 @@ function NewEventForm() {
               {!allDay && (
                 <div className="space-y-2">
                   <Label htmlFor="endTime">End Time *</Label>
-                  <Input
+                  <TimeSelect
                     id="endTime"
-                    type="time"
                     value={formData.endTime}
-                    onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
+                    onChange={(v) => setFormData(prev => ({ ...prev, endTime: v }))}
                     required
                   />
                 </div>

@@ -7,6 +7,7 @@ import { createTask } from '@/hooks/use-tasks'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { TimeSelect } from '@/components/ui/time-select'
 import { CategoryPicker } from '@/components/category-picker'
 import { cleanCustomCategory } from '@/lib/categories'
 import { Textarea } from '@/components/ui/textarea'
@@ -255,11 +256,10 @@ export default function NewTaskPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="dueTime">Due Time</Label>
-                <Input
+                <TimeSelect
                   id="dueTime"
-                  type="time"
                   value={dueTime}
-                  onChange={(e) => setDueTime(e.target.value)}
+                  onChange={(v) => setDueTime(v)}
                 />
               </div>
             </div>
