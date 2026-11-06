@@ -4,7 +4,7 @@ import { Suspense, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { mutate } from 'swr'
-import { ArrowLeft, Camera, Check, AlertTriangle, Loader2, Repeat, Sparkles, X } from 'lucide-react'
+import { ArrowLeft, Camera, Check, ImageIcon, AlertTriangle, Loader2, Repeat, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -51,6 +51,25 @@ const CONFIDENCE: Record<ImportConfidence, { label: string; className: string }>
   low: { label: 'Unsure', className: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' },
 }
 
+// Phone cameras make 4-12 MB photos, over what one request can carry. Shrink to
+// 2000 px JPEG in the browser first; anything that can't be decoded goes as is.
+async function shrinkPhoto(file: File, maxPx = 2000): Promise<File> {
+  try {
+    const bmp = await createImageBitmap(file)
+    const scale = Math.min(1, maxPx / Math.max(bmp.width, bmp.height))
+    if (scale === 1 && file.size < 3_000_000) { bmp.close?.(); return file }
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(bmp.width * scale)
+    canvas.height = Math.round(bmp.height * scale)
+    canvas.getContext('2d')?.drawImage(bmp, 0, 0, canvas.width, canvas.height)
+    bmp.close?.()
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.88))
+    if (!blob || blob.size >= file.size) return file
+    return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' })
+  } catch {
+    return file
+  }
+}
 export default function ImportEventsPage() {
   return (
     <Suspense fallback={<div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>}>
@@ -83,6 +102,12 @@ function ImportEvents() {
   const [who, setWho] = useState<Who[]>([])
   const [adding, setAdding] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = e.target.files?.[0]
+    setText('')
+    setPhoto(picked ? await shrinkPhoto(picked) : null)
+  }
 
   const people: Who[] = useMemo(() => {
     if (!family) return []
@@ -242,14 +267,31 @@ function ImportEvents() {
                       type="file"
                       accept="image/jpeg,image/png,image/webp"
                       className="hidden"
-                      onChange={(e) => { setPhoto(e.target.files?.[0] ?? null); setText('') }}
+                      onChange={onPick}
                     />
-                    <Button type="button" variant="outline" className="w-full justify-start" onClick={() => fileRef.current?.click()}>
-                      <Camera className="mr-2 h-4 w-4" />
-                      {photo ? photo.name : 'Choose a photo'}
-                    </Button>
+                    <input
+                      ref={cameraRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={onPick}
+                    />
+                    {photo ? (
+                      <p className="truncate rounded-md border px-3 py-2 text-sm">{photo.name}</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button type="button" variant="outline" onClick={() => cameraRef.current?.click()}>
+                          <Camera className="mr-2 h-4 w-4" /> Take a photo
+                        </Button>
+                        <Button type="button" variant="outline" onClick={() => fileRef.current?.click()}>
+                          <ImageIcon className="mr-2 h-4 w-4" /> Choose a photo
+                        </Button>
+                      </div>
+                    )}
+                    {!photo && <p className="text-xs text-muted-foreground">Fill the frame and hold steady so the dates are sharp.</p>}
                     {photo && (
-                      <button type="button" className="text-xs text-muted-foreground underline" onClick={() => { setPhoto(null); if (fileRef.current) fileRef.current.value = '' }}>
+                      <button type="button" className="text-xs text-muted-foreground underline" onClick={() => { setPhoto(null); if (fileRef.current) fileRef.current.value = ''; if (cameraRef.current) cameraRef.current.value = '' }}>
                         Remove photo
                       </button>
                     )}
