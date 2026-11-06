@@ -20,7 +20,11 @@ function Empty({ className, icon: Icon, title, description, children, ...props }
     >
       {(Icon || title || description) && (
         <div className="flex max-w-sm flex-col items-center gap-2 text-center">
-          {Icon && <Icon className="h-10 w-10 text-muted-foreground" />}
+          {Icon && (
+            <span className="mb-1 flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Icon className="size-7" />
+            </span>
+          )}
           {title && <div className="text-lg font-medium tracking-tight">{title}</div>}
           {description && <p className="text-sm text-muted-foreground">{description}</p>}
         </div>
