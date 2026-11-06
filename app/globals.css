@@ -254,7 +254,9 @@
   .lift {
     transition:
       transform 0.2s var(--ease-out-soft),
-      box-shadow 0.2s var(--ease-out-soft);
+      box-shadow 0.2s var(--ease-out-soft),
+      background-color 0.2s ease,
+      border-color 0.2s ease;
   }
   @media (hover: hover) {
     .lift:hover {

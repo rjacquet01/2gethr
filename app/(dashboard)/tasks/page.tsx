@@ -275,7 +275,7 @@ export default function TasksPage() {
       <div
         key={task.id}
         className={cn(
-          'flex items-start gap-3 rounded-lg border p-3 transition-colors sm:items-center',
+          'lift flex items-start gap-3 rounded-lg border bg-card p-3 shadow-xs sm:items-center',
           status === 'pending_approval'
             ? 'border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/20'
             : overdue
