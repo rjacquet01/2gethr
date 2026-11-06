@@ -376,7 +376,7 @@ export default function SubscriptionPage() {
                     'relative flex flex-col overflow-hidden transition-all',
                     isPopular && 'border-primary shadow-md',
                     isCurrentTier && 'ring-2 ring-primary',
-                    !isCurrentTier && tier.name !== 'Free' && 'cursor-pointer hover:border-primary/50 hover:shadow-md'
+                    !isCurrentTier && tier.name !== 'Free' && 'lift cursor-pointer hover:border-primary/50'
                   )}
                 >
                   {isPopular && (
