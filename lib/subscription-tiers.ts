@@ -67,6 +67,8 @@ export const HISTORY_DAYS = { FREE: 30, PLUS: 90, PREMIUM: 90 } as const
 export const LOCATION_TRAIL_DAYS = { FREE: 0, PLUS: 90, PREMIUM: 90 } as const
 /** Text messages a month (opt-in; urgent safety alerts don't count). */
 export const SMS_PER_MONTH = { FREE: 20, PLUS: 60, PREMIUM: 300 } as const
+/** Smart Import (photo or text to events) per family per calendar month; TRIAL: the 7-day trial. */
+export const SMART_IMPORTS_PER_MONTH = { FREE: 3, PLUS: 20, PREMIUM: 60, TRIAL: 10 } as const
 /** Show a soft "nearly at your limit" nudge from this share of a cap. */
 export const NEAR_LIMIT_RATIO = 0.8
 

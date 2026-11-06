@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
-import { ImageMinus, Magnet, Pin, PinOff, RefreshCw, Trash2, ZoomIn, ZoomOut } from 'lucide-react'
+import { CalendarPlus, ImageMinus, Magnet, Pin, PinOff, RefreshCw, Trash2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -24,6 +24,7 @@ export function PostDetail({
   onPin,
   onReplacePhoto,
   onRemovePhoto,
+  onAddToCalendar,
   extra,
 }: {
   post: BoardPost | null
@@ -38,6 +39,8 @@ export function PostDetail({
   onPin: (post: BoardPost, pinned: boolean) => void
   onReplacePhoto: (post: BoardPost) => void
   onRemovePhoto: (post: BoardPost) => void
+  /** Smart Import: read the flyer into events to review (only when it is on). */
+  onAddToCalendar?: (post: BoardPost) => void
   /** Optional extra block under the flyer (e.g. add-ons). */
   extra?: (post: BoardPost) => ReactNode
 }) {
@@ -99,8 +102,13 @@ export function PostDetail({
 
             {keepUp && <KeepUpRow post={post} {...keepUp} />}
 
-            {(post.flyer?.downloadUrl || canModerate || canDelete || canEditPhoto) && (
+            {(post.flyer?.downloadUrl || canModerate || canDelete || canEditPhoto || (post.flyer && onAddToCalendar)) && (
               <div className="flex flex-wrap gap-2">
+                {post.flyer && onAddToCalendar && (
+                  <Button size="sm" variant="outline" onClick={() => onAddToCalendar(post)}>
+                    <CalendarPlus className="mr-1.5 h-4 w-4" /> Add to calendar
+                  </Button>
+                )}
                 {post.flyer?.downloadUrl && <FlyerDownloadButton url={post.flyer.downloadUrl} />}
                 {canModerate && (
                   <Button size="sm" variant="outline" onClick={() => onPin(post, !post.pinned)}>

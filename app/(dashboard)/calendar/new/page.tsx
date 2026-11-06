@@ -2,9 +2,10 @@
 
 import { Suspense, useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import useSWR, { mutate } from 'swr'
 import { format, addHours } from 'date-fns'
-import { Calendar as CalendarIcon, Clock, MapPin, Users, Tag, Eye, ArrowLeft, Loader2, Check, X, Bell, Star, UserCheck } from 'lucide-react'
+import { Calendar as CalendarIcon, Sparkles, Clock, MapPin, Users, Tag, Eye, ArrowLeft, Loader2, Check, X, Bell, Star, UserCheck } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { localDateTimeToISO, localStartOfDayToISO, localEndOfDayToISO } from '@/lib/datetime'
@@ -20,6 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { PlanLimitNotice, refreshPlanUsage } from '@/components/plan-limit-notice'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useSubscription } from '@/hooks/use-subscription'
+import { useSmartImport } from '@/hooks/use-smart-import'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -143,6 +145,8 @@ function NewEventForm() {
   // Plan gates (Free: standard reminder only, simple repeats only). Permissive
   // until the plan has loaded; the server enforces regardless.
   const { access: tierAccess, isLoading: tierLoading } = useSubscription(formData.familyId || null)
+  // Smart Import (photo or text to events): only when the server has it on.
+  const { status: smartImport } = useSmartImport(isGuest || isChild ? null : formData.familyId || null)
   const planKnown = !!formData.familyId && !tierLoading
   const canCustomReminders = !planKnown || !!tierAccess.featureFlags.customReminderTimes
   const canAdvancedRecurrence = !planKnown || !!tierAccess.featureFlags.advancedRecurrence
@@ -406,6 +410,14 @@ function NewEventForm() {
         </CardHeader>
         <CardContent>
           <PlanLimitNotice familyId={formData.familyId || null} kind="eventsPerMonth" className="mb-6" />
+          {smartImport && (
+            <Button variant="outline" className="mb-6 w-full" asChild>
+              <Link href={`/calendar/import?familyId=${formData.familyId}`}>
+                <Sparkles className="h-4 w-4 mr-2" />
+                Import from photo or text
+              </Link>
+            </Button>
+          )}
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Family Selection */}
             {families.length > 1 && (

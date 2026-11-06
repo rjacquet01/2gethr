@@ -15,6 +15,7 @@
     "demo:frame": "npx tsx --tsconfig tsconfig.json scripts/demo/frame-store-screens.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
     "@hookform/resolvers": "^3.9.1",
     "@neondatabase/serverless": "^0.10.4",
     "@radix-ui/react-accordion": "1.2.12",
