@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Empty } from '@/components/ui/empty'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Select,
@@ -549,16 +550,14 @@ export default function CalendarPage() {
           
           <div className="overflow-y-auto h-full pb-20">
             {selectedDate && selectedDayEvents.length === 0 ? (
-              <div className="text-center py-12">
-                <Calendar className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-                <p className="text-muted-foreground mb-4">No events on this day</p>
+              <Empty icon={Calendar} title="No events on this day" description="A free day. Add something if plans come up.">
                 <Button asChild>
                   <Link href={`/calendar/new?date=${format(selectedDate, 'yyyy-MM-dd')}`}>
                     <Plus className="w-4 h-4 mr-2" />
                     Add Event
                   </Link>
                 </Button>
-              </div>
+              </Empty>
             ) : (
               <div className="space-y-3">
                 {selectedDayEvents.map((event) => (

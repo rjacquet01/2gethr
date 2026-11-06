@@ -554,14 +554,16 @@ export default function TasksPage() {
         </div>
       ) : nothing ? (
         <Card>
-          <CardContent className="py-12 text-center">
-            <ListTodo className="mx-auto mb-3 h-12 w-12 text-muted-foreground/50" />
-            <p className="text-muted-foreground">
-              {tab === 'approval' ? 'Nothing is waiting for approval' : tab === 'mine' ? 'Nothing assigned to you' : 'No tasks here'}
-            </p>
-            <Button variant="link" asChild className="mt-2">
-              <Link href="/tasks/new">Create a task</Link>
-            </Button>
+          <CardContent className="py-8">
+            <Empty
+              icon={ListTodo}
+              title={tab === 'approval' ? 'Nothing is waiting for approval' : tab === 'mine' ? 'Nothing assigned to you' : 'No tasks here'}
+              description="Tasks you add show up here, and kids can mark them done for your approval."
+            >
+              <Button asChild>
+                <Link href="/tasks/new">Create a task</Link>
+              </Button>
+            </Empty>
           </CardContent>
         </Card>
       ) : (
