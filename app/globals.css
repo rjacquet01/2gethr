@@ -224,3 +224,57 @@
     gap: 0.5rem;
   }
 }
+
+/* Depth: layered, navy-tinted shadows and gentle motion.
+   Subtle on purpose. Every shadow-xs/sm/md/lg/xl in the app picks these up.
+   Motion is switched off for people who ask for reduced motion. */
+:root {
+  --shadow-ink: oklch(0.25 0.06 260 / 0.07);
+  --shadow-ink-strong: oklch(0.25 0.06 260 / 0.12);
+  --shadow-ink-deep: oklch(0.25 0.06 260 / 0.18);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dark {
+  --shadow-ink: oklch(0 0 0 / 0.3);
+  --shadow-ink-strong: oklch(0 0 0 / 0.4);
+  --shadow-ink-deep: oklch(0 0 0 / 0.55);
+}
+
+@theme inline {
+  --shadow-xs: 0 1px 1px var(--shadow-ink);
+  --shadow-sm: 0 1px 2px var(--shadow-ink), 0 2px 6px var(--shadow-ink);
+  --shadow-md: 0 2px 4px var(--shadow-ink), 0 6px 16px var(--shadow-ink-strong);
+  --shadow-lg: 0 4px 8px var(--shadow-ink), 0 12px 32px var(--shadow-ink-strong);
+  --shadow-xl: 0 8px 16px var(--shadow-ink), 0 24px 48px var(--shadow-ink-deep);
+}
+
+@layer utilities {
+  /* Cards and rows that can be tapped: rise a little on hover, settle on press. */
+  .lift {
+    transition:
+      transform 0.2s var(--ease-out-soft),
+      box-shadow 0.2s var(--ease-out-soft);
+  }
+  @media (hover: hover) {
+    .lift:hover {
+      transform: translateY(-2px);
+      box-shadow:
+        0 2px 4px var(--shadow-ink),
+        0 6px 16px var(--shadow-ink-strong);
+    }
+  }
+  .lift:active {
+    transform: translateY(0) scale(0.995);
+    box-shadow: 0 1px 1px var(--shadow-ink);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lift,
+  .lift:hover,
+  .lift:active {
+    transition: none;
+    transform: none;
+  }
+}
