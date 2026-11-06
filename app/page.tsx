@@ -15,6 +15,9 @@ import {
   CheckCircle2,
   ArrowRight,
   Lock,
+  Camera,
+  Pin,
+  ListChecks,
   Check,
   UserPlus,
   CalendarPlus,
@@ -53,6 +56,21 @@ const features = [
     title: 'Privacy First',
     description: 'Your family data is encrypted and secure. Location sharing is always optional.',
   },
+  {
+    icon: Camera,
+    title: 'Photo to Calendar',
+    description: 'Snap a photo of a flyer, school newsletter or handwritten note, or paste a message. Togethr suggests the events and you check them before anything is added.',
+  },
+  {
+    icon: Pin,
+    title: 'Family Board',
+    description: 'Pin flyers and photos where the whole family can see them, then turn their dates into calendar events.',
+  },
+  {
+    icon: ListChecks,
+    title: 'Tasks and Chores',
+    description: 'Assign tasks to family members and keep track of what is done.',
+  },
 ]
 
 const steps = [
@@ -64,7 +82,7 @@ const steps = [
   {
     icon: CalendarPlus,
     title: 'Plan together',
-    description: 'Add events, tasks and reminders. Everyone sees what matters to them.',
+    description: 'Add events, tasks and reminders, or snap a photo of a flyer and let Togethr suggest the events. Everyone sees what matters to them.',
   },
   {
     icon: ShieldCheck,
