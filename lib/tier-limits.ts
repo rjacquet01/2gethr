@@ -34,7 +34,7 @@ export function usagePeriod(now: Date = new Date()): string {
 }
 
 let usageEnsured: Promise<void> | null = null
-function ensurePlanUsageTable(): Promise<void> {
+export function ensurePlanUsageTable(): Promise<void> {
   if (!usageEnsured) {
     usageEnsured = (async () => {
       await ddl`

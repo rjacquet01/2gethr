@@ -24,7 +24,7 @@ function todayLocal(): string {
 }
 
 /** Decode a picked photo (phone rotation applied) and shrink it to CLIENT_MAX_PX. */
-async function loadWorkCanvas(file: File): Promise<HTMLCanvasElement> {
+export async function loadWorkCanvas(file: File): Promise<HTMLCanvasElement> {
   let source: CanvasImageSource & { width: number; height: number }
   try {
     source = await createImageBitmap(file, { imageOrientation: 'from-image' })

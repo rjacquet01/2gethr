@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'
+import { useRouter } from 'next/navigation'
 import useSWRInfinite from 'swr/infinite'
 import { toast } from 'sonner'
 import { AlertTriangle, Archive, Camera, Images, StickyNote } from 'lucide-react'
 import { authFetch, useAuth } from '@/hooks/use-auth'
 import { useMyRole } from '@/hooks/use-my-role'
+import { useSmartImport } from '@/hooks/use-smart-import'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -54,6 +56,8 @@ export default function BoardPage() {
 
 function FamilyBoard({ familyId }: { familyId: string }) {
   const { user } = useAuth()
+  const router = useRouter()
+  const { status: smartImport } = useSmartImport(familyId)
   const base = `/api/families/${familyId}/board`
 
   // Pages: the first has pinned posts too; later pages follow ?before=.
@@ -343,6 +347,7 @@ function FamilyBoard({ familyId }: { familyId: string }) {
         onPin={setPinned}
         onReplacePhoto={(p) => pickPhoto('gallery', p)}
         onRemovePhoto={removePhoto}
+        onAddToCalendar={smartImport ? (p) => router.push(`/calendar/import?familyId=${familyId}&postId=${p.id}`) : undefined}
       />
 
       <FlyerEditor
