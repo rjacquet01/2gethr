@@ -1,4 +1,4 @@
-import { listTierDefinitions, type TierDefinition } from '@/lib/subscription-tiers'
+import { listTierDefinitions, SMART_IMPORTS_PER_MONTH, type TierDefinition } from '@/lib/subscription-tiers'
 
 // Plan-by-plan limits for /pricing. Every number comes from
 // lib/subscription-tiers.ts, so this table can't drift from what the
@@ -18,6 +18,7 @@ const ROWS: { label: string; value: (t: TierDefinition) => string }[] = [
   { label: 'New events a month', value: (t) => n(t.limits.maxEventsPerMonth) },
   { label: 'Active reminders', value: (t) => n(t.limits.maxActiveReminders) },
   { label: 'Family board photo uploads', value: (t) => n(t.limits.maxBoardUploads) },
+  { label: 'Photo-to-calendar imports a month', value: (t) => String(SMART_IMPORTS_PER_MONTH[t.key === 'PREMIUM_PLUS' ? 'PREMIUM' : t.key === 'PREMIUM' ? 'PLUS' : 'FREE']) },
   { label: 'Notifications a month', value: (t) => n(t.limits.pushMonthlyQuota) },
   { label: 'Location trail', value: (t) => (t.limits.locationTrailDays > 0 ? `${t.limits.locationTrailDays} days` : 'Latest location only') },
   { label: 'Past events & archives', value: (t) => `${t.limits.historyDays} days` },
