@@ -269,7 +269,7 @@ export default function DashboardLayout({
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <FamilySwitcher variant="compact" />
-            <FavoritesDropdown />
+            <FavoritesDropdown className="border-sidebar-border bg-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />
             <NotificationBell />
             <Avatar className="w-8 h-8 ring-2 ring-sidebar-primary touch-target">
               <AvatarImage 
