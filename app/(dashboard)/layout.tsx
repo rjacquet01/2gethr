@@ -252,7 +252,7 @@ export default function DashboardLayout({
       </aside>
 
       {/* Mobile Header */}
-      <header className="fixed top-0 left-0 right-0 z-40 h-14 border-b border-sidebar-border bg-sidebar text-sidebar-foreground shadow-[inset_0_-2px_0_0_var(--sidebar-primary)] lg:hidden safe-area-top">
+      <header className="fixed top-0 left-0 right-0 z-40 h-14 border-b border-sidebar-border bg-sidebar text-sidebar-foreground shadow-[inset_0_-2px_0_0_color-mix(in_oklab,var(--sidebar-foreground)_60%,transparent)] lg:hidden safe-area-top">
         <div className="flex h-full items-center justify-between gap-1 px-3">
           <div className="flex min-w-0 items-center gap-2">
             <Button
@@ -354,7 +354,7 @@ export default function DashboardLayout({
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-sidebar-border bg-sidebar/95 backdrop-blur-sm shadow-[inset_0_2px_0_0_var(--sidebar-primary)] lg:hidden safe-area-bottom">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-sidebar-border bg-sidebar/95 backdrop-blur-sm shadow-[inset_0_2px_0_0_color-mix(in_oklab,var(--sidebar-foreground)_60%,transparent)] lg:hidden safe-area-bottom">
         <div className="flex h-16 items-center justify-around px-1 landscape-compact">
           {[
             { href: '/dashboard', icon: Home, label: 'Home' },
