@@ -322,7 +322,7 @@ function ImportEvents() {
               )}
 
               <Button className="w-full" onClick={find} disabled={reading || (!postId && !photo && !text.trim()) || overCap}>
-                {reading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Reading…</> : 'Find events'}
+                {reading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Reading…</> : 'Import'}
               </Button>
               {overCap ? (
                 <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-center text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
