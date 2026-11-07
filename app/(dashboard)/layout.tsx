@@ -252,7 +252,7 @@ export default function DashboardLayout({
       </aside>
 
       {/* Mobile Header */}
-      <header className="fixed top-0 left-0 right-0 z-40 h-14 border-b border-border bg-background lg:hidden safe-area-top">
+      <header className="fixed top-0 left-0 right-0 z-40 h-14 border-b border-sidebar-border bg-sidebar text-sidebar-foreground shadow-[inset_0_-2px_0_0_var(--sidebar-primary)] lg:hidden safe-area-top">
         <div className="flex h-full items-center justify-between gap-1 px-3">
           <div className="flex min-w-0 items-center gap-2">
             <Button
@@ -265,18 +265,18 @@ export default function DashboardLayout({
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </Button>
             {/* Phone header: the T-mark alone (the logotype needs more width). */}
-            <Logo variant="mark" height={26} priority />
+            <Logo variant="mark" tone="reversed" height={26} priority />
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <FamilySwitcher variant="compact" />
-            <FavoritesDropdown />
+            <FavoritesDropdown className="border-sidebar-border bg-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />
             <NotificationBell />
-            <Avatar className="w-8 h-8 ring-2 ring-border touch-target">
+            <Avatar className="w-8 h-8 ring-2 ring-sidebar-primary touch-target">
               <AvatarImage 
                 src={user?.avatarUrl || undefined} 
                 alt={user?.displayName || 'User avatar'}
               />
-              <AvatarFallback className="text-xs font-medium">{userInitials}</AvatarFallback>
+              <AvatarFallback className="bg-sidebar-primary text-xs font-medium text-sidebar-primary-foreground">{userInitials}</AvatarFallback>
             </Avatar>
           </div>
         </div>
@@ -288,7 +288,7 @@ export default function DashboardLayout({
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileMenuOpen(false)} />
           {/* Scrolls when it doesn't fit, so Settings / Sign out at the bottom
               are never cut off on short screens. */}
-          <nav className="absolute left-0 top-16 bottom-0 w-64 overflow-y-auto overscroll-contain bg-background border-r border-border p-4 pb-24 space-y-1">
+          <nav className="absolute left-0 top-16 bottom-0 w-64 overflow-y-auto overscroll-contain bg-sidebar text-sidebar-foreground border-r border-sidebar-border p-4 pb-24 space-y-1">
             {/* Notifications: phones have the bell in the header instead. */}
             {visibleNavItems.filter((item) => item.href !== '/notifications').map((item) => {
               const isActive = isNavItemActive(pathname, item.href)
@@ -300,8 +300,8 @@ export default function DashboardLayout({
                   className={cn(
                     'flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition-colors',
                     isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-foreground/70 hover:bg-muted hover:text-foreground'
+                      ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                      : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                   )}
                 >
                   <item.icon className="w-5 h-5" />
@@ -309,14 +309,14 @@ export default function DashboardLayout({
                 </Link>
               )
             })}
-            <div className="pt-4 border-t border-border mt-4">
+            <div className="pt-4 border-t border-sidebar-border mt-4">
               {!isChild && (
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false)
                     setFeedbackOpen(true)
                   }}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-foreground/70 hover:bg-muted"
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent"
                 >
                   <MessageSquarePlus className="w-5 h-5" />
                   Send feedback
@@ -325,7 +325,7 @@ export default function DashboardLayout({
               <Link
                 href="/settings"
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-foreground/70 hover:bg-muted"
+                className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent"
               >
                 <Settings className="w-5 h-5" />
                 Settings
@@ -354,7 +354,7 @@ export default function DashboardLayout({
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm lg:hidden safe-area-bottom">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-sidebar-border bg-sidebar/95 backdrop-blur-sm shadow-[inset_0_2px_0_0_var(--sidebar-primary)] lg:hidden safe-area-bottom">
         <div className="flex h-16 items-center justify-around px-1 landscape-compact">
           {[
             { href: '/dashboard', icon: Home, label: 'Home' },
@@ -371,8 +371,8 @@ export default function DashboardLayout({
                 className={cn(
                   'flex flex-col items-center justify-center gap-0.5 py-1.5 px-2 sm:px-4 min-w-[56px] sm:min-w-[64px] rounded-xl transition-all touch-target no-select',
                   isActive 
-                    ? 'text-primary bg-primary/10 scale-105' 
-                    : 'text-muted-foreground active:scale-95 active:bg-muted'
+                    ? 'text-sidebar-primary bg-sidebar-accent scale-105' 
+                    : 'text-sidebar-foreground/60 active:scale-95 active:bg-sidebar-accent'
                 )}
               >
                 <item.icon className="w-5 h-5 sm:w-6 sm:h-6" />
