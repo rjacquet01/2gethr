@@ -3,7 +3,7 @@ import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { guestForbidden } from "@/lib/permissions"
 
-// Last 24 hours of geofence arrivals/departures for a family's saved places.
+// Last 7 days of geofence arrivals/departures for a family's saved places.
 // Parents/guardians see everyone's; any other member sees only their own.
 export async function GET(request: NextRequest) {
   try {
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
           JOIN users u ON u.id = ge.user_id
           JOIN family_members fm ON fm.user_id = ge.user_id AND fm.family_id = sp.family_id AND fm.is_active = true
           WHERE sp.family_id = ${familyId}
-            AND ge.timestamp > NOW() - INTERVAL '24 hours'
+            AND ge.timestamp > NOW() - INTERVAL '7 days'
           ORDER BY ge.timestamp DESC
           LIMIT 100
         `
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
           JOIN users u ON u.id = ge.user_id
           WHERE sp.family_id = ${familyId}
             AND ge.user_id = ${user.id}
-            AND ge.timestamp > NOW() - INTERVAL '24 hours'
+            AND ge.timestamp > NOW() - INTERVAL '7 days'
           ORDER BY ge.timestamp DESC
           LIMIT 100
         `

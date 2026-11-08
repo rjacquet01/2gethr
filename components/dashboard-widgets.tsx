@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import useSWR from 'swr'
-import { format, formatDistanceToNow, isToday, isPast, parseISO } from 'date-fns'
+import { format, formatDistanceToNow, isToday, isYesterday, isPast, parseISO } from 'date-fns'
 import {
   AlertTriangle,
   ArrowRight,
@@ -529,9 +529,16 @@ export function TaskProgress({
 /* Right-column panel: last 24h geofence activity + shortcuts         */
 /* ------------------------------------------------------------------ */
 
+/** "3:42 PM · 12 minutes ago" today, "Yesterday, 3:42 PM", or "Wed, Nov 4, 3:42 PM" for older. */
+function activityWhen(d: Date): string {
+  const time = format(d, 'h:mm a')
+  if (isToday(d)) return `${time} · ${formatDistanceToNow(d, { addSuffix: true })}`
+  if (isYesterday(d)) return `Yesterday, ${time}`
+  return `${format(d, 'EEE, MMM d')}, ${time}`
+}
 export function DashboardActivityPanel({ familyId }: { familyId: string }) {
   const { data, isLoading } = useGeofenceActivity(familyId)
-  const events = (data?.events ?? []).slice(0, 6)
+  const events = (data?.events ?? []).slice(0, 8)
   const everyone = data?.scope !== 'self'
 
   return (
@@ -543,7 +550,7 @@ export function DashboardActivityPanel({ familyId }: { familyId: string }) {
               <BellRing className="w-4 h-4 text-muted-foreground" />
               {everyone ? 'Family activity' : 'Your activity'}
             </CardTitle>
-            <CardDescription>Last 24 hours</CardDescription>
+            <CardDescription>Arrivals and departures, last 7 days</CardDescription>
           </div>
           <Button variant="ghost" size="sm" asChild className="gap-1 h-7 px-2">
             <Link href="/places">
@@ -560,7 +567,7 @@ export function DashboardActivityPanel({ familyId }: { familyId: string }) {
             <Skeleton className="h-9" />
           </div>
         ) : events.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No arrivals or departures yet today.</p>
+          <p className="text-sm text-muted-foreground">No arrivals or departures in the last 7 days.</p>
         ) : (
           <ul className="space-y-2">
             {events.map((e) => {
@@ -581,8 +588,7 @@ export function DashboardActivityPanel({ familyId }: { familyId: string }) {
                       <span className="font-medium">{e.placeName}</span>
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {format(new Date(e.at), 'h:mm a')} ·{' '}
-                      {formatDistanceToNow(new Date(e.at), { addSuffix: true })}
+                      {activityWhen(new Date(e.at))}
                     </p>
                   </div>
                 </li>
