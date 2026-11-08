@@ -23,7 +23,8 @@ import {
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { BackgroundLocationCard } from '@/components/background-location-card'
+import { BackgroundLocationCard, BackgroundSharingBanner } from '@/components/background-location-card'
+import { usePurchaseUi } from '@/hooks/use-purchase-ui'
 import { TrackedMap } from '@/components/tracked-map'
 import { SosButton } from '@/components/sos-button'
 import { MemberAvatar } from '@/components/member-avatar'
@@ -131,6 +132,7 @@ function LocationPageContent({ isChild, isSupervisor }: { isChild: boolean; isSu
   const [pingable, setPingable] = useState<PingableMember[]>([])
   const [noAccountKids, setNoAccountKids] = useState<NoAccountChild[]>([])
   const [snapshots, setSnapshots] = useState<LocationSnapshot[]>([])
+  const { isAndroidApp } = usePurchaseUi()
   const [mySettings, setMySettings] = useState<LocationSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -760,7 +762,9 @@ function LocationPageContent({ isChild, isSupervisor }: { isChild: boolean; isSu
           (error) => {
             reject(new Error(
               error.code === error.PERMISSION_DENIED
-                ? 'Location permission is blocked. Allow location for this site in your browser or phone settings.'
+                ? (isAndroidApp
+                    ? "This phone isn't passing location to the page. Turn on background sharing and the app will send your location itself."
+                    : 'Location permission is blocked. Allow location for this site in your browser or phone settings.')
                 : 'Could not get your location. Check that location services are on and try again.'
             ))
           }
@@ -1087,6 +1091,15 @@ function LocationPageContent({ isChild, isSupervisor }: { isChild: boolean; isSu
           </div>
         </CardContent>
       </Card>
+
+      {/* The page says sharing while the phone may be sending nothing: say so. */}
+      {iAmSharing && (
+        <BackgroundSharingBanner
+          memberId={mySettings?.memberId}
+          familyId={mySettings?.familyId}
+          intervalSec={mySettings?.updateIntervalSec || 300}
+        />
+      )}
 
       {/* Map + people */}
       <div className="grid gap-4 lg:grid-cols-5">
