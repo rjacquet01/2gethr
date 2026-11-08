@@ -37,24 +37,14 @@ interface Props {
   intervalSec: number
 }
 
-// Only rendered inside the Android app. The native app registers the
-// togethr-bg:// link; opening it hands it a scoped token and starts the
-// background location service.
-export function BackgroundLocationCard({ memberId, familyId, intervalSec }: Props) {
+// Background sharing state for this phone, shared by the card (in Settings)
+// and the banner on the Location page. Only meaningful inside the Android app.
+// "Off" means the phone has no active background token: the native service is
+// not sending anything, whatever the sharing mode on the page says.
+export function useBackgroundSharing({ memberId, familyId, intervalSec }: Props) {
   const { isAndroidApp } = usePurchaseUi()
   const [status, setStatus] = useState<{ active: boolean; lastSeenAt: string | null } | null>(null)
   const [busy, setBusy] = useState(false)
-  const cardRef = useRef<HTMLDivElement>(null)
-  // Opened from the "Location sharing stopped - tap to resume" notification.
-  const [fromResumeLink, setFromResumeLink] = useState(false)
-  useEffect(() => {
-    try {
-      if (new URLSearchParams(window.location.search).get('resume') === '1') setFromResumeLink(true)
-    } catch {}
-  }, [])
-  useEffect(() => {
-    if (fromResumeLink && isAndroidApp) cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [fromResumeLink, isAndroidApp])
 
   const load = useCallback(async () => {
     if (!memberId || !familyId) return
@@ -76,9 +66,8 @@ export function BackgroundLocationCard({ memberId, familyId, intervalSec }: Prop
     return () => clearInterval(t)
   }, [isAndroidApp, load])
 
-  if (!isAndroidApp || !memberId || !familyId) return null
-
   const enable = async () => {
+    if (!memberId || !familyId) return
     setBusy(true)
     try {
       const res = await authFetch('/api/location/device-token', {
@@ -109,6 +98,7 @@ export function BackgroundLocationCard({ memberId, familyId, intervalSec }: Prop
   }
 
   const disable = async () => {
+    if (!memberId || !familyId) return
     setBusy(true)
     try {
       await authFetch(`/api/location/device-token?memberId=${memberId}&familyId=${familyId}`, { method: 'DELETE' })
@@ -123,6 +113,59 @@ export function BackgroundLocationCard({ memberId, familyId, intervalSec }: Prop
   const minsAgo = last ? Math.max(0, Math.round((Date.now() - last.getTime()) / 60000)) : null
   // On, but the phone has gone quiet: the background service was stopped.
   const stopped = !!status?.active && minsAgo !== null && minsAgo >= STOPPED_AFTER_MIN
+
+  return { isAndroidApp, status, busy, load, enable, disable, minsAgo, stopped }
+}
+
+// Shown on the Location page while the sharing mode is Active but this phone
+// is not sending in the background (turned off with Stop sharing, or stopped by
+// Android). Without it the page says "You're sharing" while nothing updates and
+// arrival/departure alerts never fire.
+export function BackgroundSharingBanner(props: Props) {
+  const bg = useBackgroundSharing(props)
+  if (!bg.isAndroidApp || !props.memberId || !props.familyId || !bg.status) return null
+  const off = !bg.status.active
+  if (!off && !bg.stopped) return null
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:bg-amber-950/30 space-y-2">
+      <p className="flex items-center gap-2 font-medium text-amber-800 dark:text-amber-300">
+        <AlertTriangle className="h-4 w-4 shrink-0" />
+        {off ? 'Background sharing is off on this phone' : 'Background sharing stopped on this phone'}
+      </p>
+      <p className="text-amber-900/80 dark:text-amber-200/80">
+        {off
+          ? 'Your family may be seeing an old location, and arrival and departure alerts will not fire until you turn it on.'
+          : `The last update was ${bg.minsAgo! >= 120 ? `about ${Math.round(bg.minsAgo! / 60)} hours` : `${bg.minsAgo} minutes`} ago, so alerts may be missed.`}
+      </p>
+      <Button size="sm" onClick={bg.enable} disabled={bg.busy}>
+        {off ? 'Turn on background sharing' : 'Restart background sharing'}
+      </Button>
+    </div>
+  )
+}
+
+// Only rendered inside the Android app. The native app registers the
+// togethr-bg:// link; opening it hands it a scoped token and starts the
+// background location service.
+export function BackgroundLocationCard({ memberId, familyId, intervalSec }: Props) {
+  const { isAndroidApp, status, busy, enable, disable, minsAgo, stopped } = useBackgroundSharing({
+    memberId,
+    familyId,
+    intervalSec,
+  })
+  const cardRef = useRef<HTMLDivElement>(null)
+  // Opened from the "Location sharing stopped - tap to resume" notification.
+  const [fromResumeLink, setFromResumeLink] = useState(false)
+  useEffect(() => {
+    try {
+      if (new URLSearchParams(window.location.search).get('resume') === '1') setFromResumeLink(true)
+    } catch {}
+  }, [])
+  useEffect(() => {
+    if (fromResumeLink && isAndroidApp) cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [fromResumeLink, isAndroidApp])
+
+  if (!isAndroidApp || !memberId || !familyId) return null
 
   return (
     <Card ref={cardRef} className={fromResumeLink ? 'ring-2 ring-primary' : undefined}>
