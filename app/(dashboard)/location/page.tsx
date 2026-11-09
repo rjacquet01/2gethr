@@ -233,7 +233,16 @@ function LocationPageContent({ isChild, isSupervisor }: { isChild: boolean; isSu
             () => resolve(null)
           )
         })
-        if (!fix) {
+        if (!fix && isAndroidApp && mySettings?.memberId && mySettings?.familyId) {
+          // Chrome in the Android app gives the page no location: with background
+          // sharing on, approve without one and the phone's service answers it.
+          const r = await authFetch(`/api/location/device-token?memberId=${mySettings.memberId}&familyId=${mySettings.familyId}`)
+          const s = r.ok ? await r.json().catch(() => null) : null
+          if (!s?.active) {
+            toast.error('Turn on background sharing on this phone to approve - the request is still open.')
+            return
+          }
+        } else if (!fix) {
           toast.error('Allow location access for Togethr on this device to approve - the request is still open.')
           return
         }
@@ -245,7 +254,11 @@ function LocationPageContent({ isChild, isSupervisor }: { isChild: boolean; isSu
       })
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
-        toast.success(action === 'approve' ? 'Approved - your location was shared once' : 'Request declined')
+        toast.success(
+          action === 'deny' ? 'Request declined'
+            : fix ? 'Approved - your location was shared once'
+              : 'Approved - your phone will send its location within about 2 minutes'
+        )
       } else {
         toast.error(data.error || 'Could not answer the request')
       }
@@ -709,7 +722,35 @@ function LocationPageContent({ isChild, isSupervisor }: { isChild: boolean; isSu
     toast.success('Locations refreshed')
   }
 
+  // Inside the Android app Chrome won't give the page a location; with
+  // background sharing on, the app's own service sends one instead.
+  // Returns false when background sharing is off (or the ask failed).
+  const askPhoneForFix = async (): Promise<boolean> => {
+    if (!isAndroidApp || !mySettings?.memberId || !mySettings?.familyId) return false
+    try {
+      const res = await authFetch('/api/location/device-token/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId: mySettings.memberId, familyId: mySettings.familyId }),
+      })
+      if (res.status === 429) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || 'Too many refreshes. Your phone keeps sharing on its own.')
+        return true
+      }
+      return res.ok
+    } catch {
+      return false
+    }
+  }
+
   const handlePingLocation = async () => {
+    if (await askPhoneForFix()) {
+      toast.success('Asked this phone for a fresh location. It shows on the map within about 2 minutes.')
+      setTimeout(() => loadLocations(), 60_000)
+      setTimeout(() => loadLocations(), 150_000)
+      return
+    }
     // Request current device location and share it
     if (!navigator.geolocation) {
       toast.error('Geolocation is not supported by your browser')
@@ -763,7 +804,7 @@ function LocationPageContent({ isChild, isSupervisor }: { isChild: boolean; isSu
             reject(new Error(
               error.code === error.PERMISSION_DENIED
                 ? (isAndroidApp
-                    ? "This phone isn't passing location to the page. Turn on background sharing and the app will send your location itself."
+                    ? 'Background sharing is off on this phone. Turn it on below and the app will send your location itself.'
                     : 'Location permission is blocked. Allow location for this site in your browser or phone settings.')
                 : 'Could not get your location. Check that location services are on and try again.'
             ))
