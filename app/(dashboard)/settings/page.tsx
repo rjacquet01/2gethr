@@ -18,6 +18,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { AppearanceButton, defaultColorFor } from '@/components/member-avatar'
 import { Badge } from '@/components/ui/badge'
 import { TwoFactorSettings } from '@/components/two-factor-settings'
 import { ChangePasswordButton } from '@/components/change-password-dialog'
@@ -354,6 +355,13 @@ export default function SettingsPage() {
   }
 
   const userInitials = user ? `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase() : 'U'
+  // The emoji and color you picked for yourself (per family). Shown whenever
+  // there is no photo, so a picture isn't the only way to personalize your profile.
+  const myMember = primaryFamily?.members?.find((m) => m.userId === user?.id) || null
+  const hasLook = !!(myMember?.emoji || myMember?.color)
+  const fallbackStyle = hasLook ? { backgroundColor: myMember?.color || defaultColorFor(user?.displayName) } : undefined
+  const fallbackClass = hasLook ? 'font-semibold text-white' : 'bg-primary/10 text-primary'
+  const fallbackContent = myMember?.emoji ? <span className="leading-none">{myMember.emoji}</span> : userInitials
 
   const handleSaveProfile = async () => {
     setSavingProfile(true)
@@ -494,7 +502,7 @@ export default function SettingsPage() {
       <div className="flex items-center gap-3">
         <Avatar className="h-11 w-11">
           <AvatarImage src={user?.avatarUrl || undefined} alt={user?.displayName || 'User'} />
-          <AvatarFallback className="bg-primary/10 text-primary">{userInitials}</AvatarFallback>
+          <AvatarFallback className={fallbackClass} style={fallbackStyle}>{fallbackContent}</AvatarFallback>
         </Avatar>
         <div className="min-w-0">
           <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Settings</h1>
@@ -544,7 +552,7 @@ export default function SettingsPage() {
               <div className="relative">
                 <Avatar className="h-20 w-20">
                   <AvatarImage src={user?.avatarUrl || undefined} alt={user?.displayName || 'User'} />
-                  <AvatarFallback className="bg-primary/10 text-2xl text-primary">{userInitials}</AvatarFallback>
+                  <AvatarFallback className={cn('text-2xl', fallbackClass)} style={fallbackStyle}>{fallbackContent}</AvatarFallback>
                 </Avatar>
                 {uploading && (
                   <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/80">
@@ -572,8 +580,19 @@ export default function SettingsPage() {
                       Remove
                     </Button>
                   )}
+                  {primaryFamily && myMember && (
+                    <AppearanceButton
+                      label="Emoji & color"
+                      familyId={primaryFamily.id}
+                      memberId={myMember.id}
+                      name={user?.displayName}
+                      avatarUrl={myMember.avatarUrl}
+                      color={myMember.color}
+                      emoji={myMember.emoji}
+                    />
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground">JPEG, PNG, WebP or GIF. Max 5MB.</p>
+                <p className="text-xs text-muted-foreground">JPEG, PNG, WebP or GIF. Max 5MB. No photo? Pick an emoji and color instead.</p>
               </div>
             </div>
 
