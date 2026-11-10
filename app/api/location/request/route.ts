@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
         target.nickname as target_name
       FROM family_members fm
       JOIN family_members target ON fm.family_id = target.family_id AND target.id = ${validatedData.memberId}
+        AND target.is_active = true
       WHERE fm.family_id = ${validatedData.familyId} 
         AND fm.user_id = ${user.id} 
         AND fm.is_active = true
@@ -240,6 +241,10 @@ export async function GET(request: NextRequest) {
       WHERE lr.target_user_id = ${user.id}
         AND lr.status = ${status}
         AND lr.expires_at > NOW()
+        -- Only while both are still in that family: someone removed (or who
+        -- removed them) can't be asked, and their old requests stop counting.
+        AND EXISTS (SELECT 1 FROM family_members t WHERE t.user_id = lr.target_user_id AND t.family_id = lr.family_id AND t.is_active = true)
+        AND EXISTS (SELECT 1 FROM family_members r WHERE r.user_id = lr.requester_user_id AND r.family_id = lr.family_id AND r.is_active = true)
       ORDER BY lr.created_at DESC
       LIMIT 10
     `

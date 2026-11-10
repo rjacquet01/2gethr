@@ -72,8 +72,14 @@ export function ensureLocationRequestsTable(): Promise<void> {
 export async function hasPendingLocationRequest(userId: string): Promise<boolean> {
   await ensureLocationRequestsTable()
   const rows = await sql`
-    SELECT 1 FROM location_requests
-    WHERE target_user_id = ${userId} AND status = 'PENDING' AND expires_at > NOW()
+    SELECT 1 FROM location_requests lr
+    WHERE lr.target_user_id = ${userId} AND lr.status = 'PENDING' AND lr.expires_at > NOW()
+      -- A legal request has no family member behind it; a family one counts
+      -- only while both people are still active in that family.
+      AND (lr.requester_user_id LIKE 'legal:%' OR (
+        EXISTS (SELECT 1 FROM family_members t WHERE t.user_id = lr.target_user_id AND t.family_id = lr.family_id AND t.is_active = true)
+        AND EXISTS (SELECT 1 FROM family_members r WHERE r.user_id = lr.requester_user_id AND r.family_id = lr.family_id AND r.is_active = true)
+      ))
     LIMIT 1
   `
   return rows.length > 0
@@ -98,6 +104,9 @@ export async function answerLocationRequests(
     WHERE target_user_id = ${userId} AND status = 'PENDING' AND expires_at > NOW()
       AND requester_user_id NOT LIKE 'legal:%'
       AND (${requestId ?? null}::text IS NULL OR id = ${requestId ?? null})
+      -- Never hand a snapshot to someone no longer in the family together.
+      AND EXISTS (SELECT 1 FROM family_members t WHERE t.user_id = location_requests.target_user_id AND t.family_id = location_requests.family_id AND t.is_active = true)
+      AND EXISTS (SELECT 1 FROM family_members r WHERE r.user_id = location_requests.requester_user_id AND r.family_id = location_requests.family_id AND r.is_active = true)
     RETURNING id
   `
   return rows.length
