@@ -41,7 +41,7 @@ import { alertPlaceLimit, getTierDefinition, SUBSCRIPTION_TIERS, annualSavingsPe
 import { BillingToggle } from '@/components/billing-toggle'
 import { FamilyNameTag } from '@/components/family-name-tag'
 import { PlanLimitNotice } from '@/components/plan-limit-notice'
-import { IN_APP_PLANS_COPY } from '@/lib/plan-limits'
+import { IN_APP_CANCEL_COPY, IN_APP_PLANS_COPY } from '@/lib/plan-limits'
 
 export default function SubscriptionPage() {
   const router = useRouter()
@@ -137,7 +137,8 @@ export default function SubscriptionPage() {
     }
   }
 
-  const handleManageBilling = async () => {
+  // flow 'cancel' opens the portal on its cancel confirmation (see the portal route).
+  const handleManageBilling = async (flow?: 'cancel') => {
     if (ownerOnly()) return
     if (!primaryFamily?.id) return
     setIsCanceling(true)
@@ -145,7 +146,7 @@ export default function SubscriptionPage() {
       const res = await authFetch('/api/subscription/portal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ familyId: primaryFamily.id }),
+        body: JSON.stringify({ familyId: primaryFamily.id, flow }),
       })
       const data = await res.json()
       if (res.ok && data.url) {
@@ -232,12 +233,12 @@ export default function SubscriptionPage() {
             </div>
             {canPurchase && access.hasPremium && !isTrialing && (
               <div className="flex shrink-0 gap-2">
-                <Button variant="outline" size="sm" onClick={handleManageBilling} disabled={isCanceling}>
+                <Button variant="outline" size="sm" onClick={() => handleManageBilling()} disabled={isCanceling}>
                   {isCanceling ? <Spinner className="h-4 w-4 sm:mr-1.5" /> : <CreditCard className="h-4 w-4 sm:mr-1.5" />}
                   <span className="hidden sm:inline">Manage billing</span>
                 </Button>
                 {!subscription?.cancelAtPeriodEnd && (
-                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleManageBilling} disabled={isCanceling}>
+                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleManageBilling('cancel')} disabled={isCanceling}>
                     Cancel
                   </Button>
                 )}
@@ -344,7 +345,9 @@ export default function SubscriptionPage() {
       )}
 
       {purchaseUiReady && !canPurchase && (
-        <p className="rounded-lg border bg-card p-3 text-sm text-muted-foreground">{IN_APP_PLANS_COPY}</p>
+        <p className="rounded-lg border bg-card p-3 text-sm text-muted-foreground" data-testid="in-app-plan-copy">
+          {access.hasPremium && !isTrialing && !subscription?.cancelAtPeriodEnd ? IN_APP_CANCEL_COPY : IN_APP_PLANS_COPY}
+        </p>
       )}
 
       {canPurchase && (

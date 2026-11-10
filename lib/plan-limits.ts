@@ -84,6 +84,8 @@ const NOUN: Record<PlanLimitKind, { used: (n: number, of: number | null) => stri
 export const IN_APP_LIMIT_COPY = "You've reached your plan's limit. Manage your plan at mytogethr.com"
 /** Where plan details would go, inside the Android app. */
 export const IN_APP_PLANS_COPY = "Manage your plan at mytogethr.com"
+/** Paid plan, inside the Android app: where to change or cancel it. */
+export const IN_APP_CANCEL_COPY = "To change or cancel your plan, sign in at mytogethr.com in your phone's browser and open Subscription."
 export const IN_APP_NEAR_LIMIT_COPY = "You're close to your plan's limit. Manage your plan at mytogethr.com"
 
 /** "You've used 9 of 15 events this month." */
