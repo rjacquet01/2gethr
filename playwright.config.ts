@@ -2,7 +2,8 @@ import { defineConfig, devices } from '@playwright/test'
 
 // Browser smoke tests (e2e/). Runs against a local `next dev` on port 3210,
 // which reads .env.local (the Neon dev branch), never production. Public
-// pages only: no sign-in, no database writes.
+// pages only, except e2e/signed-in, which registers throwaway @example.com
+// accounts on that dev branch (never point it at production).
 // First time on a machine: `npx playwright install chromium`.
 // Next allows one `next dev` per checkout, so if one is already running,
 // point the tests at it: E2E_PORT=3000 npm run test:e2e
