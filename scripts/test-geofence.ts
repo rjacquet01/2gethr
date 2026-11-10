@@ -48,9 +48,16 @@ assert.deepStrictEqual(run([{ north: 300, acc: 15 }, { north: 30, acc: 15 }, { n
 // 6b. Accuracy must be within half the radius. 50m place: 25m ok, 30m ignored
 // (the old 50m floor used to trust it). 100m place: 50m ok, 51m ignored.
 assert.deepStrictEqual(run([{ north: 0, acc: 25 }], 50), ["ARRIVAL"], "50m place, 25m fix trusted")
-assert.deepStrictEqual(run([{ north: 0, acc: 30 }], 50), [], "50m place, 30m fix ignored")
+// A coarser fix still arrives when its whole error circle is inside the place
+// (distance + accuracy <= radius); near the edge it is ignored as before.
+assert.deepStrictEqual(run([{ north: 0, acc: 30 }], 50), ["ARRIVAL"], "50m place, 30m fix at the centre: circle inside")
+assert.deepStrictEqual(run([{ north: 10, acc: 40 }], 50), ["ARRIVAL"], "50m place, 40m fix 10m from centre: circle inside")
+assert.deepStrictEqual(run([{ north: 30, acc: 30 }], 50), [], "50m place, 30m fix 30m out: circle crosses the edge, ignored")
+assert.deepStrictEqual(run([{ north: 0, acc: 60 }], 50), [], "50m place, 60m fix: bigger than the place, ignored")
+// A coarse fix inside never fires a departure through this rule.
+assert.deepStrictEqual(run([{ north: 0, acc: 5 }, { north: 0, acc: 40 }], 50), ["ARRIVAL"], "inside stays inside")
 assert.deepStrictEqual(run([{ north: 0, acc: 50 }], 100), ["ARRIVAL"], "100m place, 50m fix trusted")
-assert.deepStrictEqual(run([{ north: 0, acc: 51 }], 100), [], "100m place, 51m fix ignored")
+assert.deepStrictEqual(run([{ north: 50, acc: 51 }], 100), [], "100m place, 51m fix 50m out ignored")
 // A coarse Wi-Fi/cell fix (~100m) never moves state for a 100m place, either way.
 assert.deepStrictEqual(run([{ north: 0, acc: 10 }, { north: 600, acc: 100 }, { north: 0, acc: 10 }]), ["ARRIVAL"], "coarse fix can't depart")
 // Unknown accuracy is never trusted.
@@ -144,7 +151,7 @@ const fixAt = (north: number, acc: number, minAgo: number, queued = true) => ({
 }
 {
   // Trusted-fix rule still applies to queued fixes.
-  const { transitions } = planGeofenceTransitions([WORK], [fixAt(10, 80, 30), fixAt(5, 90, 0, false)], null, NOW)
+  const { transitions } = planGeofenceTransitions([WORK], [fixAt(30, 80, 30), fixAt(25, 90, 0, false)], null, NOW)
   assert.deepStrictEqual(transitions, [], "imprecise queued fixes never arrive")
 }
 {

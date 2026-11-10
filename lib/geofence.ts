@@ -34,6 +34,16 @@ export function isTrustedFix(accuracy: number | null | undefined, radius: number
 }
 
 /**
+ * The fix's whole error circle lies inside the place, so the person is inside
+ * whatever its error. Lets a small place (a 50 m Home) take a fix right at its
+ * centre that is a little coarser than half the radius; one near the edge
+ * still has to pass isTrustedFix.
+ */
+export function isClearlyInside(distance: number, accuracy: number | null | undefined, radius: number): boolean {
+  return typeof accuracy === "number" && Number.isFinite(accuracy) && accuracy >= 0 && distance + accuracy <= radius
+}
+
+/**
  * A departure needs a second, earlier fix that agrees: the previous fix must
  * itself be trusted and outside the radius. One stray fix can't fire a "left".
  */
@@ -43,7 +53,8 @@ export function confirmsDeparture(prev: { distance: number; accuracy: number | n
 
 /**
  * Decide whether a ping causes an arrival/departure.
- * - ARRIVAL: previously outside and the fix is inside the radius.
+ * - ARRIVAL: previously outside and the fix is inside the radius; a fix
+ *   whose whole error circle is inside (isClearlyInside) counts too.
  * - DEPARTURE: previously inside and the fix is confidently outside, i.e.
  *   even after giving the fix the benefit of its own error margin the person
  *   is beyond radius + hysteresis. This stops a single noisy fix near the
@@ -58,6 +69,7 @@ export function evaluateGeofence(opts: {
   wasInside: boolean
 }): GeofenceTransition {
   const { distance, radius, wasInside } = opts
+  if (!wasInside && isClearlyInside(distance, opts.accuracy, radius)) return "ARRIVAL"
   if (!isTrustedFix(opts.accuracy, radius)) return null
   const accuracy = opts.accuracy as number
 
