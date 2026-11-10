@@ -93,10 +93,12 @@ interface AppearanceButtonProps {
   avatarUrl?: string | null
   color?: string | null
   emoji?: string | null
+  /** When set, shows a labelled button (e.g. on the Settings page) instead of the small palette icon. */
+  label?: string
 }
 
 /** Small palette button that opens the "customize look" dialog. */
-export function AppearanceButton({ familyId, memberId, name, avatarUrl, color, emoji }: AppearanceButtonProps) {
+export function AppearanceButton({ familyId, memberId, name, avatarUrl, color, emoji, label }: AppearanceButtonProps) {
   const [open, setOpen] = useState(false)
   const [c, setC] = useState<string | null>(color || null)
   const [e, setE] = useState<string | null>(emoji || null)
@@ -175,17 +177,24 @@ export function AppearanceButton({ familyId, memberId, name, avatarUrl, color, e
   return (
     // Stop clicks (including ones from the dialog portal) from reaching a parent link/button.
     <span className="contents" onClick={(ev) => ev.stopPropagation()}>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 shrink-0"
-        title="Customize photo, color & emoji"
-        aria-label="Customize photo, color and emoji"
-        onClick={openDialog}
-      >
-        <Palette className="h-4 w-4" />
-      </Button>
+      {label ? (
+        <Button type="button" variant="outline" size="sm" onClick={openDialog}>
+          <Palette className="mr-1.5 h-4 w-4" />
+          {label}
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          title="Customize photo, color & emoji"
+          aria-label="Customize photo, color and emoji"
+          onClick={openDialog}
+        >
+          <Palette className="h-4 w-4" />
+        </Button>
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent onClick={(ev) => ev.stopPropagation()}>
           <DialogHeader>
