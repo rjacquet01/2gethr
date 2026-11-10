@@ -614,7 +614,8 @@ export async function POST(request: NextRequest) {
       mainEnd,
       participantUserIds.length > 0 ? participantUserIds : [user.id],
       null,
-      calendar.family_id
+      calendar.family_id,
+      user.id
     )
 
     if (conflicts.length > 0 && calendar.role !== "PARENT") {
@@ -876,8 +877,10 @@ async function checkEventConflicts(
   endTime: string,
   participantIds: string[],
   excludeEventId: string | null,
-  familyId: string
-): Promise<Array<{ eventId: string; title: string; participantId: string }>> {
+  familyId: string,
+  /** Who will see the result: titles follow their event visibility. */
+  viewerId: string
+): Promise<Array<{ eventId: string | null; title: string; participantId: string }>> {
   if (participantIds.length === 0) return []
   // Only this family's calendar counts: a co-parent's events in another
   // family must neither block this event nor have their titles revealed.
@@ -885,7 +888,7 @@ async function checkEventConflicts(
   let conflicts
   if (excludeEventId) {
     conflicts = await sql`
-      SELECT DISTINCT e.id, e.title, ep.user_id as participant_id
+      SELECT DISTINCT e.id, e.title, e.visibility, e.created_by_id, ep.user_id as participant_id
       FROM events e
       JOIN event_participants ep ON e.id = ep.event_id
       JOIN calendars c ON c.id = e.calendar_id AND c.family_id = ${familyId}
@@ -897,7 +900,7 @@ async function checkEventConflicts(
     `
   } else {
     conflicts = await sql`
-      SELECT DISTINCT e.id, e.title, ep.user_id as participant_id
+      SELECT DISTINCT e.id, e.title, e.visibility, e.created_by_id, ep.user_id as participant_id
       FROM events e
       JOIN event_participants ep ON e.id = ep.event_id
       JOIN calendars c ON c.id = e.calendar_id AND c.family_id = ${familyId}
@@ -908,9 +911,14 @@ async function checkEventConflicts(
     `
   }
 
+  // A private or selected-members event the caller can't see still counts as
+  // a clash, but only as "Busy": no title, no id.
+  const visible = new Set(
+    (await filterEventsByVisibility(conflicts as Array<{ id: string; visibility?: unknown; created_by_id?: unknown }>, viewerId)).map((c) => c.id)
+  )
   return conflicts.map(c => ({
-    eventId: c.id,
-    title: c.title,
+    eventId: visible.has(c.id) ? c.id : null,
+    title: visible.has(c.id) ? c.title : "Busy",
     participantId: c.participant_id,
   }))
 }

@@ -106,8 +106,13 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { testMode = false, testEmail = null } = body
+    // A test send goes to one address; without it, test mode would mail everyone.
+    if (testMode && !testEmail) {
+      return NextResponse.json({ success: false, error: 'Test mode needs a test email address' }, { status: 400 })
+    }
 
-    // Get users with weekly digest enabled (parents/guardians only)
+    // Get users with weekly digest enabled (parents/guardians only); someone
+    // who turned the digest off never gets it (same rule as GET and the cron).
     const digestUsers = (await sql`
       SELECT
         u.id,
@@ -119,9 +124,11 @@ export async function POST(request: NextRequest) {
       FROM users u
       JOIN family_members fm ON u.id = fm.user_id
       JOIN families f ON fm.family_id = f.id
+      LEFT JOIN reminder_settings rs ON u.id = rs.user_id
       WHERE u.is_active = true
       AND fm.is_active = true
       AND fm.role IN ('PARENT', 'GUARDIAN')
+      AND (rs.weekly_digest = true OR rs.weekly_digest IS NULL)
     `) as DigestUser[]
 
     const startOfWeek = new Date()

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { neon } from '@neondatabase/serverless'
 import { encrypt } from '@/lib/encryption'
 import { defaultFamilyFor } from '@/lib/permissions'
-import { verifyOAuthState } from '@/lib/auth'
+import { verifyOAuthState, OAUTH_NONCE_COOKIE } from '@/lib/auth'
 import { appUrl } from '@/lib/app-url'
 
 const sql = neon(process.env.DATABASE_URL!)
@@ -12,6 +12,12 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
 const REDIRECT_URI = `${appUrl()}/api/calendar-sync/google/callback`
 
 export async function GET(request: NextRequest) {
+  // Every way out clears the nonce cookie: one flow, one use.
+  const done = (path: string) => {
+    const res = NextResponse.redirect(new URL(path, request.url))
+    res.cookies.set(OAUTH_NONCE_COOKIE, '', { path: '/api/calendar-sync/google/callback', maxAge: 0 })
+    return res
+  }
   try {
     const searchParams = request.nextUrl.searchParams
     const code = searchParams.get('code')
@@ -19,18 +25,19 @@ export async function GET(request: NextRequest) {
     const error = searchParams.get('error')
 
     if (error) {
-      return NextResponse.redirect(new URL('/settings/calendar-sync?error=denied', request.url))
+      return done('/settings/calendar-sync?error=denied')
     }
 
     if (!code || !state) {
-      return NextResponse.redirect(new URL('/settings/calendar-sync?error=missing_params', request.url))
+      return done('/settings/calendar-sync?error=missing_params')
     }
 
-    // The state must be one we signed (see generateOAuthState); a forged or
-    // expired one could otherwise attach a stranger's Google account.
-    const userId = await verifyOAuthState(state)
+    // The state must be one we signed (see generateOAuthState), opened in the
+    // browser that started the flow: a forged, expired or someone else's link
+    // could otherwise attach a Google account to the wrong Togethr user.
+    const userId = await verifyOAuthState(state, request.cookies.get(OAUTH_NONCE_COOKIE)?.value)
     if (!userId) {
-      return NextResponse.redirect(new URL('/settings/calendar-sync?error=invalid_state', request.url))
+      return done('/settings/calendar-sync?error=invalid_state')
     }
 
     // Exchange code for tokens
@@ -49,7 +56,7 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.text()
       console.error('Token exchange failed:', errorData)
-      return NextResponse.redirect(new URL('/settings/calendar-sync?error=token_exchange', request.url))
+      return done('/settings/calendar-sync?error=token_exchange')
     }
 
     const tokens = await tokenResponse.json()
@@ -88,7 +95,7 @@ export async function GET(request: NextRequest) {
     const familyMembership = familyMembershipDefault ? [{ family_id: familyMembershipDefault.familyId }] : []
 
     if (familyMembership.length === 0) {
-      return NextResponse.redirect(new URL('/settings/calendar-sync?error=no_family', request.url))
+      return done('/settings/calendar-sync?error=no_family')
     }
 
     const familyId = familyMembership[0].family_id
@@ -136,9 +143,9 @@ export async function GET(request: NextRequest) {
       `
     }
 
-    return NextResponse.redirect(new URL('/settings/calendar-sync?success=google', request.url))
+    return done('/settings/calendar-sync?success=google')
   } catch (error) {
     console.error('Google callback error:', error)
-    return NextResponse.redirect(new URL('/settings/calendar-sync?error=callback_failed', request.url))
+    return done('/settings/calendar-sync?error=callback_failed')
   }
 }
