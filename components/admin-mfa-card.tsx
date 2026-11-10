@@ -60,10 +60,11 @@ export function AdminMfaCard() {
   const turnOff = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true)
-    const { ok, data } = await call('POST', { action: 'disable', password })
+    const { ok, data } = await call('POST', { action: 'disable', password, code })
     setBusy(false)
     if (!ok) return toast.error(data.error || 'Could not turn it off')
     setPassword('')
+    setCode('')
     setBackupCodes(null)
     setEnabled(false)
     toast.success('Two-step sign-in is off')
@@ -123,6 +124,10 @@ export function AdminMfaCard() {
             <div className="space-y-2">
               <Label htmlFor="admin-mfa-password">Password (to turn it off)</Label>
               <Input id="admin-mfa-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="admin-mfa-off-code">Code from your app (or a backup code)</Label>
+              <Input id="admin-mfa-off-code" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} required />
             </div>
             <Button type="submit" variant="outline" disabled={busy}>
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

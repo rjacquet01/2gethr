@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getAdminFromRequest, logAdminAction, verifyPassword } from '@/lib/admin-auth'
-import { adminMfaStatus, startAdminMfa, confirmAdminMfa, disableAdminMfa } from '@/lib/admin-mfa'
+import { adminMfaStatus, startAdminMfa, confirmAdminMfa, disableAdminMfa, verifyAdminMfaCode } from '@/lib/admin-mfa'
 import { notifyAccountChange } from '@/lib/admin-account-alerts'
+import { clientIp, hitRateLimit, tooManyRequests } from '@/lib/rate-limit'
 
 // The signed-in admin's own two-step sign-in (authenticator app).
-// GET: status. POST { action: 'setup' | 'enable' (code) | 'disable' (password) }.
+// GET: status. POST { action: 'setup' | 'enable' (code) | 'disable' (password + code) }.
 export async function GET(request: NextRequest) {
   const { admin } = await getAdminFromRequest(request, { allowWithoutMfa: true })
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
   const { admin } = await getAdminFromRequest(request, { allowWithoutMfa: true })
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await request.json().catch(() => ({}))
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || undefined
+  const ip = clientIp(request)
   const ua = request.headers.get('user-agent') || undefined
 
   try {
@@ -36,11 +37,19 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.action === 'disable') {
-      // Turning it off needs the password, so a stolen session can't.
+      // Turning it off needs the password and a current code (or a backup
+      // code), so neither a stolen session nor a stolen password can. Five
+      // tries per 15 minutes; one message for either being wrong.
+      const limit = await hitRateLimit(`admin-mfa-disable:${admin.id}`, 5, 15 * 60)
+      if (!limit.allowed) return tooManyRequests(limit.retryAfterSec, 'attempts')
       const rows = await sql`SELECT password_hash FROM admin_users WHERE id = ${admin.id}`
-      const ok = typeof body.password === 'string' && rows[0]?.password_hash
+      const passwordOk = typeof body.password === 'string' && rows[0]?.password_hash
         && (await verifyPassword(body.password, rows[0].password_hash as string))
-      if (!ok) return NextResponse.json({ error: 'Wrong password' }, { status: 403 })
+      const codeOk = passwordOk && typeof body.code === 'string' && (await verifyAdminMfaCode(admin.id, body.code))
+      if (!codeOk) {
+        await logAdminAction(admin.id, 'MFA_DISABLE_FAILED', null, null, {}, ip, ua)
+        return NextResponse.json({ error: 'Wrong password or code' }, { status: 403 })
+      }
       await disableAdminMfa(admin.id)
       await logAdminAction(admin.id, 'MFA_DISABLED', null, null, {}, ip, ua)
       await notifyAccountChange({ actor: admin.email, actorType: 'admin', accountEmail: admin.email, change: 'Admin two-factor sign-in turned off', ipAddress: ip })

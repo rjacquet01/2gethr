@@ -51,8 +51,17 @@ export async function hitRateLimit(key: string, limit: number, windowSec: number
   }
 }
 
+/**
+ * The caller's IP for rate limits and logs. The first x-forwarded-for entry is
+ * whatever the client sent, so it is never used: Vercel's own header first,
+ * then x-real-ip, then the last x-forwarded-for hop (added by the nearest proxy).
+ */
 export function clientIp(request: Request): string {
-  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown"
+  const h = request.headers
+  const vercel = h.get("x-vercel-forwarded-for")?.split(",")[0]?.trim()
+  const real = h.get("x-real-ip")?.trim()
+  const hops = h.get("x-forwarded-for")?.split(",").map((s) => s.trim()).filter(Boolean) ?? []
+  return vercel || real || hops[hops.length - 1] || "unknown"
 }
 
 export function tooManyRequests(retryAfterSec: number, what = "attempts") {
