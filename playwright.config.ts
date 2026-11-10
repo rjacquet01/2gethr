@@ -25,6 +25,8 @@ export default defineConfig({
     command: `npx next dev -p ${PORT}`,
     url: `http://localhost:${PORT}/login`,
     reuseExistingServer: true,
+    // The Stripe module throws at import without a key; the specs never call Stripe.
+    env: { STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || 'sk_test_e2e_placeholder' },
     timeout: 180_000,
   },
 })
