@@ -6,6 +6,7 @@ import { createNotification } from '@/lib/notifications'
 import { ensureEventParticipantChildColumns, resolveLoginlessChildIds, isAdultRole } from '@/lib/assignment'
 import { defaultFamilyFor, membershipIn } from '@/lib/permissions'
 import { actorNameInFamily } from "@/lib/member-names"
+import { checkFetchUrl, fetchPublicUrl, UnsafeUrlError } from '@/lib/safe-fetch'
 
 // POST - One-off import of a .ics file (uploaded) or a remote .ics/webcal
 // URL, into the caller's family. This is the generic "import from any
@@ -45,6 +46,22 @@ export async function POST(request: NextRequest) {
     }
     const familyId = familyMembership.familyId
     const importerRole = familyMembership.role as string
+
+    // A whole calendar lands on the family calendar at once: grown-ups only,
+    // with the same create-events permission as one event, and through the
+    // approval queue when this member's events need approving.
+    if (!isAdultRole(importerRole)) {
+      return NextResponse.json({ success: false, error: 'Only a parent, guardian or adult can import a calendar' }, { status: 403 })
+    }
+    const perms = await sql`
+      SELECT can_create_events, requires_event_approval FROM family_members
+      WHERE family_id = ${familyId} AND user_id = ${user.id} AND is_active = true
+      LIMIT 1
+    `
+    if (importerRole !== 'PARENT' && !perms[0]?.can_create_events) {
+      return NextResponse.json({ success: false, error: "You don't have permission to create events" }, { status: 403 })
+    }
+    const eventStatus = importerRole !== 'PARENT' && perms[0]?.requires_event_approval ? 'PENDING' : 'APPROVED'
 
     // Optional: assign every event in this file to family members. Accounts
     // (assignUserIds) and children with no login (assignChildIds).
@@ -87,33 +104,18 @@ export async function POST(request: NextRequest) {
       if (!url) {
         return NextResponse.json({ success: false, error: 'No file or url provided' }, { status: 400 })
       }
-      // webcal:// is just https:// in disguise - calendar apps use it to
-      // signal "open with my calendar app", but it's the same feed over
-      // HTTPS when fetched server-side.
-      const normalizedUrl = url.replace(/^webcal:\/\//i, 'https://')
-      let parsed: URL
+      // A user-typed URL: https/webcal on port 443 to a public address only,
+      // redirects re-checked, 5MB cap (lib/safe-fetch.ts).
       try {
-        parsed = new URL(normalizedUrl)
-      } catch {
-        return NextResponse.json({ success: false, error: 'Invalid URL' }, { status: 400 })
+        const buf = await fetchPublicUrl(String(url), { maxBytes: MAX_ICS_BYTES, accept: 'text/calendar, text/plain, */*' })
+        icsText = new TextDecoder('utf-8').decode(buf)
+        sourceLabel = checkFetchUrl(String(url)).hostname
+      } catch (e) {
+        const message = e instanceof UnsafeUrlError
+          ? (e.message === 'TOO_LARGE' ? 'Calendar feed is too large (5MB limit)' : e.message)
+          : "Couldn't download that calendar"
+        return NextResponse.json({ success: false, error: message }, { status: 400 })
       }
-      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-        return NextResponse.json({ success: false, error: 'URL must be http(s) or webcal' }, { status: 400 })
-      }
-
-      const res = await fetch(parsed.toString(), {
-        headers: { Accept: 'text/calendar, text/plain, */*' },
-        signal: AbortSignal.timeout(15000),
-      })
-      if (!res.ok) {
-        return NextResponse.json({ success: false, error: `Could not fetch calendar (HTTP ${res.status})` }, { status: 400 })
-      }
-      const buf = await res.arrayBuffer()
-      if (buf.byteLength > MAX_ICS_BYTES) {
-        return NextResponse.json({ success: false, error: 'Calendar feed is too large (5MB limit)' }, { status: 400 })
-      }
-      icsText = new TextDecoder('utf-8').decode(buf)
-      sourceLabel = parsed.hostname
     }
 
     // Only a parent/guardian can assign; keep only real members of this family.
@@ -204,10 +206,16 @@ export async function POST(request: NextRequest) {
             visibility, created_by_id
           ) VALUES (
             ${calendarId}, ${summary}, ${parseIcsField(raw, 'DESCRIPTION')}, ${parseIcsField(raw, 'LOCATION')},
-            ${startTime}, ${endTime}, ${isAllDay}, 'APPROVED', 'FAMILY', ${user.id}
+            ${startTime}, ${endTime}, ${isAllDay}, ${eventStatus}, 'FAMILY', ${user.id}
           )
           RETURNING id
         `
+        if (created.length > 0 && eventStatus === 'PENDING') {
+          await sql`
+            INSERT INTO event_requests (id, event_id, requestor_id, status, requested_at)
+            VALUES (${crypto.randomUUID()}, ${created[0].id}, ${user.id}, 'PENDING', NOW())
+          `
+        }
         if (created.length > 0) importedEventIds.push(created[0].id as string)
         eventsImported++
       }
@@ -326,9 +334,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('iCal import error:', error)
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Failed to import calendar file' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: 'Failed to import calendar file' }, { status: 500 })
   }
 }
