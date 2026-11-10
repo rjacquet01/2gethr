@@ -538,6 +538,15 @@ export async function PATCH(
           { status: 400 }
         )
       }
+      // Unarchive always lands on COMPLETED. For a task that needs approval,
+      // only a parent/guardian may do that: otherwise cancel -> archive ->
+      // unarchive let anyone skip the approval step.
+      if (task.requires_approval === true && !isSupervisorRole(membership[0].role)) {
+        return NextResponse.json(
+          { success: false, error: 'A parent needs to restore this task' },
+          { status: 403 }
+        )
+      }
       
       await sql`
         UPDATE tasks SET status = 'COMPLETED', updated_at = NOW()
