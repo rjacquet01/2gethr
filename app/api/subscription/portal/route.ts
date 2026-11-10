@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { familyId } = body
+    const { familyId, flow } = body
 
     if (!familyId) {
       return NextResponse.json({ error: "familyId required" }, { status: 400 })
@@ -46,10 +46,14 @@ export async function POST(request: NextRequest) {
     }
 
     const subscription = await sql`
-      SELECT stripe_customer_id FROM subscriptions WHERE family_id = ${familyId}
+      SELECT stripe_customer_id, stripe_subscription_id FROM subscriptions
+      WHERE family_id = ${familyId}
+      ORDER BY created_at DESC
+      LIMIT 1
     `
 
     const customerId = subscription[0]?.stripe_customer_id
+    const stripeSubscriptionId: string | null = subscription[0]?.stripe_subscription_id ?? null
     if (!customerId) {
       return NextResponse.json(
         { error: "No billing account found for this family yet" },
@@ -80,10 +84,33 @@ export async function POST(request: NextRequest) {
 
     const appUrl = siteUrl()
 
-    const portalSession = await stripe.billingPortal.sessions.create({
+    const baseParams = {
       customer: customerId,
       return_url: `${appUrl}/subscription`,
-    })
+    }
+
+    // The Cancel button opens the portal straight on its "cancel subscription"
+    // confirmation, so the owner confirms in one step instead of having to find
+    // the cancel link in the portal's main menu (people were closing the portal
+    // without cancelling, and Stripe kept billing). If the portal configuration
+    // doesn't allow cancellations, fall back to the normal portal.
+    let portalSession
+    if (flow === "cancel" && stripeSubscriptionId) {
+      try {
+        portalSession = await stripe.billingPortal.sessions.create({
+          ...baseParams,
+          flow_data: {
+            type: "subscription_cancel",
+            subscription_cancel: { subscription: stripeSubscriptionId },
+          },
+        })
+      } catch (err) {
+        console.warn("Portal cancel flow unavailable, opening the regular portal:", err)
+      }
+    }
+    if (!portalSession) {
+      portalSession = await stripe.billingPortal.sessions.create(baseParams)
+    }
 
     return NextResponse.json({ success: true, url: portalSession.url })
   } catch (error) {
