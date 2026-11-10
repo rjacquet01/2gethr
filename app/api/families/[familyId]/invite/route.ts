@@ -5,6 +5,7 @@ import { getUserFromRequest, logAuditEvent } from "@/lib/auth"
 import { ensureInviteTables, generateInviteCode, canManageInvites, INVITE_ROLES } from "@/lib/family-invites"
 import { sendEmail, isResendConfigured, EMAIL_TEMPLATES } from "@/lib/services/email"
 import { actorNameInFamily } from "@/lib/member-names"
+import { inviteEmailAllowed } from "@/lib/rate-limit"
 
 const INVITE_DAYS = 7
 const MAX_ACTIVE = 20
@@ -93,6 +94,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     let emailError: string | undefined
     if (email && !isResendConfigured()) {
       emailError = "Email isn't set up, so share the link instead."
+    } else if (email && !(await inviteEmailAllowed(g.user.id, email))) {
+      emailError = "You've sent a lot of invite emails. Share the link instead."
     } else if (email) {
       const fam = await sql`SELECT name FROM families WHERE id = ${familyId} LIMIT 1`
       const inviterName = await actorNameInFamily(familyId, g.user, "A family member")

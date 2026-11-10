@@ -48,8 +48,14 @@ export async function POST(request: Request) {
 
     // Get user's family memberships
     const memberships = (await sql`
-      SELECT family_id FROM family_members WHERE user_id = ${user.id}
-    `) as Row<{ family_id: string }>[]
+      SELECT family_id, role FROM family_members WHERE user_id = ${user.id}
+    `) as Row<{ family_id: string; role: string }>[]
+    // This wipes location history and consent records and removes the person
+    // from their family. A child's supervision data and parental-consent trail
+    // are a parent's to manage, so a child account can't run it.
+    if (memberships.some((m: { role: string }) => m.role === 'CHILD')) {
+      return NextResponse.json({ error: 'Ask a parent or guardian to do this for you' }, { status: 403 })
+    }
     const familyIds = memberships.map((m: { family_id: string }) => m.family_id)
 
     // Delete user data in order (respecting foreign keys)

@@ -222,7 +222,7 @@ export async function PATCH(
 
     // Get event and check permissions
     const events = await sql`
-      SELECT e.*, fm.role, fm.can_create_events
+      SELECT e.*, fm.role, fm.can_create_events, fm.requires_event_approval
       FROM events e
       JOIN calendars c ON e.calendar_id = c.id
       JOIN family_members fm ON c.family_id = fm.family_id AND fm.user_id = ${user.id}
@@ -264,6 +264,17 @@ export async function PATCH(
         { status: 403 }
       )
     }
+    // A parent approved what the event said at the time. If someone whose
+    // events need approval changes what it says, it goes back to the parent.
+    const needsApproval = event.requires_event_approval === true && !["PARENT", "GUARDIAN"].includes(event.role)
+    const materialEdit =
+      validatedData.title !== undefined || validatedData.description !== undefined ||
+      validatedData.location !== undefined || validatedData.savedPlaceId !== undefined ||
+      validatedData.startTime !== undefined || validatedData.endTime !== undefined ||
+      validatedData.isAllDay !== undefined || validatedData.visibility !== undefined ||
+      validatedData.participantUserIds !== undefined || validatedData.participantChildProfileIds !== undefined
+    const backToPending = needsApproval && materialEdit && event.status === "APPROVED"
+    const effectiveStatus: string | undefined = backToPending ? "PENDING" : validatedData.status
     const newStart = new Date(validatedData.startTime ?? event.start_time)
     const newEnd = new Date(validatedData.endTime ?? event.end_time)
     if (newEnd < newStart) {
@@ -305,10 +316,17 @@ export async function PATCH(
         category = CASE WHEN ${validatedData.category !== undefined} THEN ${validatedData.category ? validatedData.category.replace(/\s+/g, ' ').trim().slice(0, 30) || null : null} ELSE category END,
         reminder_minutes = COALESCE(${validatedData.reminderMinutes}, reminder_minutes),
         notify_channels = CASE WHEN ${validatedData.notifyChannels !== undefined} THEN ${validatedData.notifyChannels && validatedData.notifyChannels.length > 0 ? validatedData.notifyChannels : null}::text[] ELSE notify_channels END,
-        status = COALESCE(${validatedData.status}, status),
+        status = COALESCE(${effectiveStatus ?? null}, status),
         updated_at = NOW()
       WHERE id = ${eventId}
     `
+
+    if (backToPending) {
+      await sql`
+        INSERT INTO event_requests (id, event_id, requestor_id, status, requested_at)
+        VALUES (${crypto.randomUUID()}, ${eventId}, ${user.id}, 'PENDING', NOW())
+      `
+    }
 
     // A guest editing their own event can keep who is already on it and add
     // themselves, but can't add anyone else from the family.

@@ -319,9 +319,10 @@ export async function POST(request: NextRequest) {
 
 function generateInviteCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+  // Invite codes are bearer credentials: use the CSPRNG, not Math.random().
+  // 32 symbols divide 256 evenly, so there's no modulo bias.
+  const bytes = crypto.getRandomValues(new Uint8Array(8))
   let code = ""
-  for (let i = 0; i < 8; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
+  for (let i = 0; i < 8; i++) code += chars.charAt(bytes[i] % chars.length)
   return code
 }

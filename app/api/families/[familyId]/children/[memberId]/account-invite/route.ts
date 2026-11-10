@@ -8,6 +8,7 @@ import { ensureAgeColumns } from "@/lib/age-schema"
 import { effectiveAge } from "@/lib/age"
 import { sendEmail, isResendConfigured, EMAIL_TEMPLATES } from "@/lib/services/email"
 import { actorNameInFamily } from "@/lib/member-names"
+import { inviteEmailAllowed } from "@/lib/rate-limit"
 import { recordParentalConsent } from "@/lib/parental-consent"
 
 const INVITE_DAYS = 7
@@ -85,6 +86,8 @@ export async function POST(
     let emailError: string | undefined
     if (email && !isResendConfigured()) {
       emailError = "Email isn't set up, so share the link instead."
+    } else if (email && !(await inviteEmailAllowed(user.id, email))) {
+      emailError = "You've sent a lot of invite emails. Share the link instead."
     } else if (email) {
       const fam = await sql`SELECT name FROM families WHERE id = ${familyId} LIMIT 1`
       const parentName = await actorNameInFamily(familyId, user, "Your parent")

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { sql } from '@/lib/db'
-import { getUserFromRequest, hashPassword, verifyPassword, logAuditEvent } from '@/lib/auth'
+import { getUserFromRequest, hashPassword, verifyPassword, logAuditEvent, generateTokenPair, setAuthCookies } from '@/lib/auth'
 import { hitRateLimit, tooManyRequests } from '@/lib/rate-limit'
 import { notifyAccountChange, requestIp } from '@/lib/admin-account-alerts'
 
@@ -58,21 +58,18 @@ export async function POST(request: NextRequest) {
     const newHash = await hashPassword(newPassword)
     await sql`UPDATE users SET password_hash = ${newHash}, updated_at = NOW() WHERE id = ${user.id}`
 
-    // Sign out every OTHER device/session, but keep this one signed in so the
-    // person isn't kicked out of the screen they just used.
-    const cookieStore = await cookies()
-    const currentRefresh = cookieStore.get('refresh_token')?.value ?? null
-    if (currentRefresh) {
-      await sql`
-        UPDATE refresh_tokens SET revoked_at = NOW()
-        WHERE user_id = ${user.id} AND revoked_at IS NULL AND token <> ${currentRefresh}
-      `
-    } else {
-      await sql`
-        UPDATE refresh_tokens SET revoked_at = NOW()
-        WHERE user_id = ${user.id} AND revoked_at IS NULL
-      `
-    }
+    // Sign out EVERY session, including this one's old refresh token, then
+    // give this device a brand-new session. Keeping the old token alive let
+    // someone holding a stolen copy of it (same rotation chain) stay signed in.
+    await sql`
+      UPDATE refresh_tokens SET revoked_at = NOW()
+      WHERE user_id = ${user.id} AND revoked_at IS NULL
+    `
+    const fresh = await generateTokenPair(user.id, {
+      ipAddress: requestIp(request) ?? undefined,
+      userAgent: request.headers.get('user-agent') || undefined,
+    })
+    await setAuthCookies(fresh.accessToken, fresh.refreshToken)
 
     try {
       await logAuditEvent(user.id, 'UPDATE', 'user_password', user.id, {
