@@ -45,7 +45,7 @@ real email. Read a script's header before running it.
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
   account-change-emails, admin-auth-hardening, admin-created-email, admin-delete-child, admin-tier-breakdown, admin-token-refresh, adult-location-access, brand-logo, child-invite, coppa, cron-health,
   dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, extended-trial, family-invite, free-tier-limits, geofence, kid-ping, launch-security, legal-hold-closure, location-history-delete,
-  calendar-sync-security, ios-setup, legal-ping, location-dedupe, removed-member-location, location-share-now, member-names, notification-dedupe, notification-fixes, shown-notifications, event-heads-up, notification-link, site-data, push-ownership,
+  calendar-sync-security, color-themes, ios-setup, legal-ping, location-dedupe, removed-member-location, location-share-now, member-names, notification-dedupe, notification-fixes, shown-notifications, event-heads-up, notification-link, site-data, push-ownership,
   dictation, place-alerts, promo-codes, push-picker, quick-add, schema-snapshot, self-refresh, signup-source, smart-import, sms-allowance, sms-consent, stillness, stripe-cancel-pending, stripe-checkout-tax, task-due, trial-eligibility,
   stripe-webhook-events, telnyx-sms, twa-upgrade-links, upgrade-order, weather-prompt, weather-route.
 - **Board suites** (board-flyer-download, board-flyers, board-limits,
@@ -175,6 +175,11 @@ real email. Read a script's header before running it.
 - Account changes (profile, sign-in, family membership, plan; user or admin side) email admin@mytogethr.com through
   `notifyAccountChange` (`lib/admin-account-alerts.ts`), after the change and only when something changed. Secrets and
   birthdates show only "changed"; email/phone are masked. Stripe webhook tier changes and cancellations keep their own notices.
+- Colour themes (Settings > Preferences, free for everyone): Togethr (default navy and orange), Forest, Ocean, Berry,
+  Sunset, Honey, Lavender, Graphite. `lib/color-themes.ts` lists them; each is a light and a dark block of colour tokens
+  in `app/globals.css` (`html[data-palette='<id>']`, `html.dark[data-palette='<id>']`, same tokens in both). Saved on the
+  device (localStorage), applied by a `<head>` script before paint. Status and category colours (approvals, priority,
+  event categories, member colours), the logo, emails and the Android status bar stay the same in every theme.
 - Cold-start schema setup is skipped when the catalog snapshot shows it is
   already applied (`lib/schema-snapshot.ts`, the `ddl` tag).
 

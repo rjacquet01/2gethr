@@ -31,6 +31,7 @@ import { Bell, Lock, Shield, Globe, User, Camera, Trash2, Phone, Smartphone, Dow
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { smsAllowanceNotice, type SmsUsage } from '@/lib/sms-allowance'
 import { useTheme } from 'next-themes'
+import { ColorThemePicker } from '@/components/color-theme-picker'
 import { useMyRole } from '@/hooks/use-my-role'
 import {
   Dialog,
@@ -789,6 +790,13 @@ export default function SettingsPage() {
                 <Switch id="dark-mode" checked={mounted ? resolvedTheme === 'dark' : false} onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')} />
               </div>
             </Row>
+            <div className="space-y-2 py-3">
+              <div>
+                <Label className="text-sm font-medium">Colour theme</Label>
+                <p className="text-xs text-muted-foreground">Works with light and dark mode. Saved on this device.</p>
+              </div>
+              <ColorThemePicker />
+            </div>
             <Row label="Language" hint="Your preferred language">
               <select
                 value={settings.language}

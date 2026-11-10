@@ -3,6 +3,7 @@ import { Inter, Geist_Mono } from 'next/font/google'
 import { PrivacyAnalytics } from '@/components/privacy-analytics'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/theme-provider'
+import { COLOR_THEME_SCRIPT } from '@/lib/color-themes'
 import { AndroidAppDetector } from '@/components/android-app-detector'
 import { InAppBrowserNotice } from '@/components/iphone-setup'
 import { SourceCapture } from '@/components/source-capture'
@@ -78,6 +79,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/togethr-icon-blue.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <script dangerouslySetInnerHTML={{ __html: COLOR_THEME_SCRIPT }} />
       </head>
       <body className="font-sans antialiased min-h-screen">
         <ThemeProvider
