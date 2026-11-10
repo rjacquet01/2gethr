@@ -52,6 +52,18 @@ export async function hitRateLimit(key: string, limit: number, windowSec: number
 }
 
 /**
+ * Invite emails come from our own sending domain, so cap them: 10 an hour per
+ * sender and 3 a day per recipient address. Counted in rate_limit_hits, so
+ * revoking a code doesn't reset it.
+ */
+export async function inviteEmailAllowed(userId: string, email: string): Promise<boolean> {
+  const sender = await hitRateLimit(`invite-email-user:${userId}`, 10, 3600)
+  if (!sender.allowed) return false
+  const recipient = await hitRateLimit(`invite-email-to:${email.trim().toLowerCase()}`, 3, 86400)
+  return recipient.allowed
+}
+
+/**
  * The caller's IP for rate limits and logs. The first x-forwarded-for entry is
  * whatever the client sent, so it is never used: Vercel's own header first,
  * then x-real-ip, then the last x-forwarded-for hop (added by the nearest proxy).
