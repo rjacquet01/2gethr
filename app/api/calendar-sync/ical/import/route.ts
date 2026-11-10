@@ -7,6 +7,7 @@ import { ensureEventParticipantChildColumns, resolveLoginlessChildIds, isAdultRo
 import { defaultFamilyFor, membershipIn } from '@/lib/permissions'
 import { actorNameInFamily } from "@/lib/member-names"
 import { checkFetchUrl, fetchPublicUrl, UnsafeUrlError } from '@/lib/safe-fetch'
+import { hitRateLimit, tooManyRequests } from '@/lib/rate-limit'
 
 // POST - One-off import of a .ics file (uploaded) or a remote .ics/webcal
 // URL, into the caller's family. This is the generic "import from any
@@ -34,6 +35,10 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ success: false, error: error || 'Not authenticated' }, { status: 401 })
     }
+
+    // Each import can notify people by email/SMS: cap how often one account can run it.
+    const importLimit = await hitRateLimit(`ical-import:${user.id}`, 10, 3600)
+    if (!importLimit.allowed) return tooManyRequests(importLimit.retryAfterSec, 'imports')
 
     // Import into the family being viewed (?familyId=, works for both upload
     // and URL imports), using the importer's role in THAT family.

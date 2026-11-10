@@ -4,6 +4,7 @@ import { decrypt, encrypt } from '@/lib/encryption'
 import { sql } from '@/lib/db'
 import { guestScopeUserId } from '@/lib/guest-scope'
 import { defaultFamilyFor } from '@/lib/permissions'
+import { isSupervisorRole, isAdultRole } from '@/lib/assignment'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
@@ -176,6 +177,7 @@ export async function POST(request: NextRequest) {
     }
 
     const familyId = familyMembers[0].family_id
+    const syncRole = String(familyMembersDefault?.role || '')
     // A guest only syncs the tasks they created or are assigned to.
     const guestUserId = await guestScopeUserId(familyId, user.id)
 
@@ -218,12 +220,22 @@ export async function POST(request: NextRequest) {
             // Only a task in the family this user is in now (and a guest's own):
             // after someone leaves, their old mappings must not write anywhere.
             const local = await sql`
-              SELECT status, updated_at FROM tasks
+              SELECT status, updated_at, requires_approval, created_by_id, assigned_to_id FROM tasks
               WHERE id = ${row.familyhub_task_id} AND family_id = ${familyId}
                 AND (${guestUserId}::text IS NULL OR created_by_id = ${guestUserId} OR assigned_to_id = ${guestUserId})
             `
             if (local.length === 0) {
               await sql`DELETE FROM synced_tasks WHERE id = ${row.sync_id}`
+            } else if (
+              // Kids (and guests) can only change tasks that are theirs: not the
+              // whole family's list, and never past a parent's approval step.
+              !isSupervisorRole(syncRole) &&
+              (!(local[0].created_by_id === user.id || local[0].assigned_to_id === user.id) ||
+                local[0].requires_approval === true ||
+                ['PENDING_APPROVAL', 'REJECTED'].includes(local[0].status as string))
+            ) {
+              // Leave the Togethr task alone.
+              await sql`UPDATE synced_tasks SET last_synced_at = NOW() WHERE id = ${row.sync_id}`
             } else {
               const localStatus = local[0].status as string
               const localNewer = new Date(local[0].updated_at) > lastSynced
@@ -268,6 +280,8 @@ export async function POST(request: NextRequest) {
           RETURNING id
         `
         if (claimed.length === 0) continue
+        // Only grown-ups add tasks to the family list from Google.
+        if (!isAdultRole(syncRole)) continue
 
         const newTask = await sql`
           INSERT INTO tasks (family_id, title, description, created_by_id, due_date, priority, category, status)
