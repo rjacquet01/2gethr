@@ -14,8 +14,8 @@ export async function GET(request: NextRequest) {
     }
 
     const userId = request.nextUrl.searchParams.get('userId')
-    const limit = parseInt(request.nextUrl.searchParams.get('limit') || '100')
-    const offset = parseInt(request.nextUrl.searchParams.get('offset') || '0')
+    const limit = Math.min(Math.max(parseInt(request.nextUrl.searchParams.get('limit') || '100') || 100, 1), 500)
+    const offset = Math.max(parseInt(request.nextUrl.searchParams.get('offset') || '0') || 0, 0)
 
     let notifications
     if (userId) {
@@ -71,6 +71,11 @@ export async function POST(request: NextRequest) {
 
     if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
       return NextResponse.json({ error: 'At least one user ID is required' }, { status: 400 })
+    }
+
+    // One send reaches at most 500 people, and only real ids.
+    if (userIds.length > 500 || userIds.some((u: unknown) => typeof u !== 'string' || !u)) {
+      return NextResponse.json({ error: 'Send to at most 500 valid user IDs at a time' }, { status: 400 })
     }
 
     // Valid notification types from enum
