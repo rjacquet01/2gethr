@@ -61,7 +61,10 @@ async function main() {
       method,
       headers: {
         "content-type": "application/json",
-        "x-forwarded-for": `${IP}, 10.0.0.1`,
+        // As on Vercel, which overwrites x-forwarded-for with the client address
+        // and adds x-vercel-forwarded-for (lib/rate-limit clientIp prefers it).
+        "x-vercel-forwarded-for": IP,
+        "x-forwarded-for": IP,
         "user-agent": "coppa-test",
         ...(auth ? { authorization: `Bearer ${token}` } : {}),
       },
