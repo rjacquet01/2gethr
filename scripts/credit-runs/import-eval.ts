@@ -29,20 +29,39 @@ const KINDS = [
 type Case = { kind: string; text: string; expected: Array<Record<string, string>> }
 
 async function main() {
+// The same cases are reused between runs (out/import-cases.json) so a prompt change can be compared fairly.
+// Pass --fresh to generate a new set.
+const casesFile = path.join(OUT_DIR, "import-cases.json")
+let cases: Case[] = []
+if (!args.includes("--fresh") && fs.existsSync(casesFile)) {
+  cases = JSON.parse(fs.readFileSync(casesFile, "utf8"))
+  console.log(`Reusing ${cases.length} saved test cases`)
+} else {
 console.log(`Generating ${batches * 5} test cases...`)
-const cases: Case[] = (
+cases = (
   await pmap(Array.from({ length: batches }, (_, i) => i), 3, async (i: number) => {
     const kind = KINDS[i % KINDS.length]
+    // The model sometimes returns slightly broken JSON (or runs out of room): retry once, then skip the batch.
+    for (let attempt = 0; attempt < 2; attempt++) {
+    try {
     const reply = await ask({
-      system: "You create test data for an event-extraction feature. Reply ONLY JSON.",
+      system: "You create test data for an event-extraction feature. Reply ONLY valid JSON (escape quotes and newlines inside strings).",
       user: `Today is ${TODAY.weekday} ${TODAY.date} (time zone ${TZ}). Write 5 DIFFERENT realistic documents of this kind: ${kind}.
 Make them messy like real life (varied wording, abbreviations, typos). For each, give the exact list of events a careful person would add to a family calendar.
 JSON: [{"text":"...","expected":[{"title":"","date":"YYYY-MM-DD","startTime":"HH:MM or null","endTime":"HH:MM or null","location":"or null"}]}]`,
-      maxTokens: 6000,
+      maxTokens: 10000,
     })
     return (parseJson(reply) as Case[]).map((c) => ({ ...c, kind }))
+    } catch (err) {
+      if (String((err as Error).message).includes("BUDGET_TOKENS")) throw err
+      console.warn(`  batch ${i} attempt ${attempt + 1} failed: ${(err as Error).message}`)
+    }
+    }
+    return [] as Case[]
   })
 ).flat()
+fs.writeFileSync(casesFile, JSON.stringify(cases, null, 2))
+}
 
 const { smartImportAi } = await import("../../lib/smart-import-ai")
 
