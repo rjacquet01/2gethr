@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserFromRequest, generateOAuthState } from '@/lib/auth'
+import { getUserFromRequest, generateOAuthState, OAUTH_NONCE_COOKIE, OAUTH_NONCE_MAX_AGE_SEC } from '@/lib/auth'
 import { appUrl } from '@/lib/app-url'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
@@ -29,9 +29,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Signed state: the callback only trusts a user id this server issued.
-    const state = await generateOAuthState(user.id)
-    
+    // Signed state: the callback only trusts a user id this server issued, and
+    // only in the browser holding the matching nonce cookie set here.
+    const nonce = crypto.randomUUID()
+    const state = await generateOAuthState(user.id, nonce)
+
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
     authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID)
     authUrl.searchParams.set('redirect_uri', REDIRECT_URI)
@@ -41,10 +43,18 @@ export async function GET(request: NextRequest) {
     authUrl.searchParams.set('prompt', 'consent')
     authUrl.searchParams.set('state', state)
 
-    return NextResponse.json({ 
-      success: true, 
-      authUrl: authUrl.toString() 
+    const res = NextResponse.json({
+      success: true,
+      authUrl: authUrl.toString()
     })
+    res.cookies.set(OAUTH_NONCE_COOKIE, nonce, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/api/calendar-sync/google/callback',
+      maxAge: OAUTH_NONCE_MAX_AGE_SEC,
+    })
+    return res
   } catch (error) {
     console.error('Google auth error:', error)
     return NextResponse.json(

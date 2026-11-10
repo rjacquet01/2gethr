@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from "jose"
 import { cookies } from "next/headers"
 import bcrypt from "bcryptjs"
+import { timingSafeEqual } from "node:crypto"
 import { sql } from "./db"
 import { getTierDefinition } from "./subscription-tiers"
 
@@ -135,18 +136,31 @@ export async function verifyTwoFactorChallengeToken(token: string): Promise<JWTP
 // callback can't be pointed at someone else's account, and short-lived.
 const OAUTH_STATE_EXPIRY = "15m"
 
-export async function generateOAuthState(userId: string): Promise<string> {
-  return new SignJWT({ userId, type: "oauth_state", nonce: crypto.randomUUID() })
+/** OAuth state for a connect flow. The nonce also goes in OAUTH_NONCE_COOKIE, so only the browser that started the flow can finish it. */
+export async function generateOAuthState(userId: string, nonce: string): Promise<string> {
+  return new SignJWT({ userId, type: "oauth_state", nonce })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(OAUTH_STATE_EXPIRY)
     .sign(ACCESS_TOKEN_SECRET)
 }
 
-export async function verifyOAuthState(state: string): Promise<string | null> {
+export const OAUTH_NONCE_COOKIE = "gcal_oauth_nonce"
+export const OAUTH_NONCE_MAX_AGE_SEC = 15 * 60
+
+/**
+ * The user id in a state we signed, only when its nonce matches the cookie
+ * set on this browser when the flow started (an attacker's link opened in
+ * someone else's browser has no such cookie).
+ */
+export async function verifyOAuthState(state: string, cookieNonce: string | undefined): Promise<string | null> {
   try {
     const { payload } = await jwtVerify(state, ACCESS_TOKEN_SECRET)
-    if (payload.type !== "oauth_state" || typeof payload.userId !== "string") return null
+    if (payload.type !== "oauth_state" || typeof payload.userId !== "string" || typeof payload.nonce !== "string") return null
+    if (!cookieNonce) return null
+    const a = Buffer.from(payload.nonce)
+    const b = Buffer.from(cookieNonce)
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return null
     return payload.userId
   } catch {
     return null

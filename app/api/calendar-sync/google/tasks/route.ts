@@ -176,6 +176,8 @@ export async function POST(request: NextRequest) {
     }
 
     const familyId = familyMembers[0].family_id
+    // A guest only syncs the tasks they created or are assigned to.
+    const guestUserId = await guestScopeUserId(familyId, user.id)
 
     // --- Pull: reflect changes made directly in Google Tasks back into
     // Togethr. This used to be push-only (Togethr -> Google Tasks), so
@@ -213,10 +215,16 @@ export async function POST(request: NextRequest) {
           // last sync checkpoint - otherwise this is just Google echoing
           // back a change the push loop already sent it.
           if (googleUpdated > lastSynced) {
+            // Only a task in the family this user is in now (and a guest's own):
+            // after someone leaves, their old mappings must not write anywhere.
             const local = await sql`
-              SELECT status, updated_at FROM tasks WHERE id = ${row.familyhub_task_id}
+              SELECT status, updated_at FROM tasks
+              WHERE id = ${row.familyhub_task_id} AND family_id = ${familyId}
+                AND (${guestUserId}::text IS NULL OR created_by_id = ${guestUserId} OR assigned_to_id = ${guestUserId})
             `
-            if (local.length > 0) {
+            if (local.length === 0) {
+              await sql`DELETE FROM synced_tasks WHERE id = ${row.sync_id}`
+            } else {
               const localStatus = local[0].status as string
               const localNewer = new Date(local[0].updated_at) > lastSynced
               // Local edits made since the last sync win; the push loop below
@@ -237,7 +245,7 @@ export async function POST(request: NextRequest) {
                   UPDATE tasks
                   SET title = ${gTask.title}, description = ${gTask.notes || null},
                       due_date = ${googleDue}, status = ${nextStatus}, updated_at = NOW()
-                  WHERE id = ${row.familyhub_task_id}
+                  WHERE id = ${row.familyhub_task_id} AND family_id = ${familyId}
                 `
                 await sql`UPDATE synced_tasks SET last_synced_at = NOW() WHERE id = ${row.sync_id}`
                 pulled++
@@ -277,7 +285,6 @@ export async function POST(request: NextRequest) {
     // not `task_id` (see scripts/add-synced-tasks-table.sql) - the old name
     // doesn't exist, so this join always threw and task sync never ran.
     // A guest only pushes the tasks they created or are assigned to.
-    const guestUserId = await guestScopeUserId(familyId, user.id)
     const tasks = await sql`
       SELECT t.id, t.title, t.description, t.due_date, t.status, t.updated_at,
              st.id as sync_id, st.google_task_id, st.last_synced_at
