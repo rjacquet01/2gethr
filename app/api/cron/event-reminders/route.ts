@@ -117,7 +117,7 @@ async function runJob(request: NextRequest) {
         }
         if (channels.includes("email") && us.email_enabled && p.email && isResendConfigured()) {
           try {
-            await sendEmail({ to: p.email, subject: `Reminder: ${event.title}`, html: `<p>${body}.</p>`, text: `${body}.` })
+            await sendEmail({ to: p.email, subject: `Reminder: ${event.title}`, html: `<p>${body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")}.</p>`, text: `${body}.` })
           } catch (e) {
             console.error("[EventReminder] email failed (non-fatal):", e)
           }
