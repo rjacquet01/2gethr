@@ -160,7 +160,7 @@ async function main() {
     // A legal ping is waiting: the device check says so, without any detail.
     const pendingAny = (async (strings: TemplateStringsArray, ...v: unknown[]) => {
       const q = strings.join("?").replace(/\s+/g, " ").trim()
-      if (q.startsWith("SELECT 1 FROM location_requests WHERE target_user_id")) return [{ x: 1 }]
+      if (q.startsWith("SELECT 1 FROM location_requests lr WHERE lr.target_user_id")) return [{ x: 1 }]
       return (fake as any)(strings, ...v)
     }) as unknown as Parameters<typeof __setSqlForTests>[0]
     __setSqlForTests(pendingAny)
