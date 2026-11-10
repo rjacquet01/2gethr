@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
-import { getAdminFromToken, logAdminAction } from '@/lib/admin-auth'
+import { getAdminFromToken, logAdminAction, revokeAdminSessions } from '@/lib/admin-auth'
+import { hitRateLimit, tooManyRequests } from '@/lib/rate-limit'
 import { sql } from '@/lib/db'
 import { notifyAccountChange, requestIp } from '@/lib/admin-account-alerts'
 
@@ -13,6 +14,10 @@ export async function POST(request: NextRequest) {
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    // Slow down guessing of the current password from a stolen session.
+    const pwLimit = await hitRateLimit(`admin-change-password:${admin.id}`, 5, 900)
+    if (!pwLimit.allowed) return tooManyRequests(pwLimit.retryAfterSec)
 
     const { currentPassword, newPassword } = await request.json()
 
@@ -47,6 +52,9 @@ export async function POST(request: NextRequest) {
       UPDATE admin_users SET password_hash = ${newHash}, updated_at = NOW()
       WHERE id = ${admin.id}
     `
+
+    // Sign out every other session: a changed password should end a stolen one.
+    await revokeAdminSessions(admin.id)
 
     // Log the action
     const ipAddress = request.headers.get('x-forwarded-for') || 'unknown'

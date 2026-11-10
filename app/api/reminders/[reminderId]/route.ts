@@ -103,9 +103,25 @@ export async function PATCH(
     }
 
     // Until a parent approves, the kid can't turn it on another way.
-    if (reminder.approval_status === 'PENDING_APPROVAL' && status && !['PARENT', 'GUARDIAN'].includes(reminder.membership_role)) {
+    // This covers the action shortcuts and field edits too, not just `status`.
+    const isSupervisor = ['PARENT', 'GUARDIAN'].includes(reminder.membership_role)
+    const editsContent =
+      title !== undefined || description !== undefined || remindAt !== undefined ||
+      isRecurring !== undefined || recurrenceRule !== undefined
+    if (
+      reminder.approval_status === 'PENDING_APPROVAL' &&
+      !isSupervisor &&
+      (status || action || editsContent)
+    ) {
       return NextResponse.json({ error: 'This reminder is waiting for a parent' }, { status: 409 })
     }
+    // A declined reminder stays declined unless a parent changes it.
+    if (reminder.approval_status === 'DECLINED' && !isSupervisor && (editsContent || action === 'restore' || status)) {
+      return NextResponse.json({ error: 'A parent declined this reminder' }, { status: 409 })
+    }
+    // Changing what a parent approved sends it back for approval, so a kid
+    // can't get one thing approved and then edit it into another.
+    const resetApproval = reminder.approval_status === 'APPROVED' && !isSupervisor && editsContent
 
     // A couple of UI shorthand actions, matching the pattern the Archive
     // page already uses for tasks/events (action: 'unarchive' etc.)
@@ -175,6 +191,7 @@ export async function PATCH(
         recurrence_rule = ${recurrenceRule !== undefined ? recurrenceRule : reminder.recurrence_rule},
         notify_channels = ${normalizedNotifyChannels !== undefined ? normalizedNotifyChannels : reminder.notify_channels},
         status = ${nextStatus ?? reminder.status},
+        approval_status = ${resetApproval ? 'PENDING_APPROVAL' : reminder.approval_status},
         updated_at = NOW()
       WHERE id = ${reminderId}
       RETURNING *

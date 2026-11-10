@@ -1,4 +1,5 @@
 import { createNotification } from '@/lib/notifications'
+import { hitRateLimit, tooManyRequests } from '@/lib/rate-limit'
 import { ensureAssignmentColumns, isSupervisorRole, getParentUserIds, assigneesInFamily } from '@/lib/assignment'
 import { NextRequest, NextResponse } from 'next/server'
 import { sql, type Row } from '@/lib/db'
@@ -152,6 +153,10 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    // Each task can email/text/push its assignee: stop one account flooding people.
+    const createLimit = await hitRateLimit(`task-create:${user.id}`, 60, 3600)
+    if (!createLimit.allowed) return tooManyRequests(createLimit.retryAfterSec, 'new tasks')
 
     const body = await request.json()
     const { 
