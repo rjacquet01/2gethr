@@ -13,6 +13,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    if (!hasPermission(admin, 'manage_users')) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
+    }
+
     const userId = request.nextUrl.searchParams.get('userId')
     const limit = Math.min(Math.max(parseInt(request.nextUrl.searchParams.get('limit') || '100') || 100, 1), 500)
     const offset = Math.max(parseInt(request.nextUrl.searchParams.get('offset') || '0') || 0, 0)

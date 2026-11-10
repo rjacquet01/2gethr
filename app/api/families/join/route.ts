@@ -5,6 +5,7 @@ import { z } from "zod"
 import { ensureInviteTables, activateMember, INVITE_ROLES, type InviteRole } from "@/lib/family-invites"
 import { alertFamilyAdults } from "@/lib/family-alerts"
 import { notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
+import { hitRateLimit, tooManyRequests } from "@/lib/rate-limit"
 
 // The role is decided by the invite code, never by the person joining, so a
 // "role" sent in the body is ignored (zod strips unknown keys).
@@ -44,6 +45,10 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ success: false, error: error || "Not authenticated" }, { status: 401 })
     }
+
+    // Stop guessing of invite codes (wrong codes get distinct answers).
+    const joinLimit = await hitRateLimit(`family-join:${user.id}`, 20, 3600)
+    if (!joinLimit.allowed) return tooManyRequests(joinLimit.retryAfterSec, "join attempts")
 
     const { inviteCode, nickname } = joinFamilySchema.parse(await request.json())
     await ensureInviteTables()
