@@ -1,4 +1,5 @@
-﻿import { test, expect, type Page, type Route } from '@playwright/test'
+import { test, expect, type Page, type Route } from '@playwright/test'
+import { signInWithState } from '../helpers/auth'
 
 // Location area: family map, background sharing (Android app), pings, SOS
 // and emergency alerts. Like the other specs this runs against `next dev`
@@ -6,8 +7,10 @@
 // requests (or made-up device tokens) that every route refuses before it
 // touches a row, and the confirm-device screen's own API call is intercepted
 // with page.route, so no real token is ever confirmed or revoked.
-// Flows that need a signed-in parent, child or guest are listed at the
-// bottom and skipped: this suite has no accounts or families to sign in with.
+// Signed-in flows at the bottom use the seeded parent / child / guest
+// sessions (scripts/e2e-seed.mjs) and skip themselves when a state file is
+// not given. They only read, or are refused before anything is written
+// (reading /api/location/settings may create a default OFF settings row).
 
 // Made-up values: never a real member, family, request or token.
 const FAKE_FAMILY = 'fam_e2e_does_not_exist'
@@ -17,6 +20,12 @@ const FAKE_TOKEN = 'e2e-not-a-real-device-token'
 const WELL_FORMED_CODE = 'ab'.repeat(24)
 
 const CONFIRM_API = '**/api/location/device-token/confirm'
+
+const PARENT_STATE = process.env.E2E_PARENT_STATE
+const CHILD_STATE = process.env.E2E_CHILD_STATE
+const GUEST_STATE = process.env.E2E_GUEST_STATE
+const PARENT_FAMILY_ID = process.env.E2E_PARENT_FAMILY_ID
+const GUEST_FAMILY_ID = process.env.E2E_GUEST_FAMILY_ID
 
 // ---------------------------------------------------------------------------
 // Signed-out visitors (a "guest" in the loosest sense): every location API
@@ -146,7 +155,7 @@ test.describe('location pages, signed out', () => {
       const res = await page.goto(path, { waitUntil: 'networkidle' })
       expect(res?.status(), `${path} HTTP status`).toBeLessThan(500)
       await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
-      await expect(page.getByText(/Request location|Share now|Background sharing/)).toHaveCount(0)
+      await expect(page.getByText(/Request location|Ping |Share now|Background sharing/)).toHaveCount(0)
     })
   }
 })
@@ -164,6 +173,9 @@ test.describe('location pages, signed out', () => {
  * which this suite doesn't have.
  */
 async function openConfirmDevice(page: Page, hash: string) {
+  // Use the saved parent session when there is one (scripts/e2e-seed.mjs);
+  // without it the dashboard sends the visitor to the sign-in screen and the test skips.
+  await signInWithState(page, 'parent')
   await page.goto(`/location/confirm-device${hash}`)
   const card = page.getByText('Background sharing', { exact: true })
   const signIn = page.getByRole('button', { name: 'Sign in', exact: true })
@@ -265,48 +277,122 @@ test.describe('confirm-device page (Android background sharing)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Signed-in flows: parent vs child vs guest, and empty states. These need
-// seeded accounts (a Premium family with a parent, a second grown-up, a child
-// with a login, a child without one, and a guest) and a way to sign in
-// without email codes. Neither exists for this suite, which is public pages
-// only with no writes, so they are skipped. Each test notes what it should
-// check once a seeded test family exists.
+// Signed-in flows: parent vs child vs guest, and empty states, using the
+// seeded family (a PARENT, a CHILD with a login "Seed Kid", a GUEST). States
+// the seed cannot produce (a sharing child, a child without a login, a free
+// plan) are served by mocking the GET /api/location response the page reads.
 // ---------------------------------------------------------------------------
 
-test.describe('location page, signed in (needs seeded accounts)', () => {
-  test.skip(true, 'Needs signed-in parent/child/guest test accounts in a seeded family; this suite runs signed out with no DB writes.')
+type FamilyMapBody = {
+  success: boolean
+  data?: unknown[]
+  pingable?: unknown[]
+  noAccountChildren?: unknown[]
+  snapshots?: unknown[]
+  error?: string
+  code?: string
+}
+
+// Answers the page's GET /api/location (the family map) with `body`; every
+// other location route and method goes to the real server.
+async function mockFamilyMap(page: Page, body: FamilyMapBody, status = 200) {
+  await page.route(
+    (url) => url.pathname === '/api/location',
+    (route) => (route.request().method() === 'GET' ? route.fulfill({ status, json: body }) : route.fallback()),
+  )
+}
+
+async function myMemberId(page: Page, familyId: string): Promise<string | undefined> {
+  const res = await page.request.get('/api/location/settings')
+  expect(res.status(), await res.text()).toBe(200)
+  const { data } = (await res.json()) as { data: Array<{ memberId: string; familyId: string }> }
+  return data.find((s) => s.familyId === familyId)?.memberId
+}
+
+test.describe('location page, signed in as the parent', () => {
+  test.skip(!PARENT_STATE, 'E2E_PARENT_STATE (signed-in parent storageState) not set')
+  test.beforeEach(async ({ page }) => { await signInWithState(page, 'parent') })
 
   test('parent: sees sharing children, "Request location" on each, and the grown-up access list', async ({ page }) => {
-    await page.goto('/location', { waitUntil: 'networkidle' })
-    await expect(page.getByRole('button', { name: /Request location/ }).first()).toBeVisible()
+    test.skip(!PARENT_FAMILY_ID, 'E2E_PARENT_FAMILY_ID not set')
+
+    // Real API: the child with a login can be pinged, the guest never can.
+    const real = await page.request.get(`/api/location?familyId=${PARENT_FAMILY_ID}`)
+    const realBody = await real.json()
+    if (real.status() === 403) {
+      expect(realBody.code).toBe('SUBSCRIPTION_REQUIRED')
+    } else {
+      expect(real.status(), JSON.stringify(realBody)).toBe(200)
+      const pingable = realBody.pingable as Array<{ name: string; role: string }>
+      expect(pingable.some((p) => p.name.includes('Seed Kid') && p.role === 'CHILD')).toBe(true)
+      expect(pingable.some((p) => p.role === 'GUEST')).toBe(false)
+    }
+
+    // The grown-up access list: the seeded family has no other adult (guests
+    // and children take no part), so it is empty but answered.
+    const access = await page.request.get(`/api/location/access?familyId=${PARENT_FAMILY_ID}`)
+    expect(access.status()).toBe(200)
+    const accessBody = await access.json()
+    expect(accessBody.success).toBe(true)
+    expect(accessBody.data.people).toEqual([])
+
+    // UI with a sharing child (served by the mock).
+    await mockFamilyMap(page, {
+      success: true,
+      data: [
+        {
+          memberId: 'mem_e2e_sharing_kid',
+          userId: 'usr_e2e_sharing_kid',
+          name: 'E2E Sharing Kid',
+          role: 'CHILD',
+          hasAccount: true,
+          color: null,
+          emoji: null,
+          profilePhotoPath: null,
+          locationMode: 'ACTIVE',
+          location: {
+            latitude: 51.5,
+            longitude: -0.12,
+            accuracy: 10,
+            altitude: null,
+            speed: null,
+            heading: null,
+            batteryLevel: 80,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      ],
+      pingable: [{ memberId: 'mem_e2e_sharing_kid', name: 'E2E Sharing Kid', role: 'CHILD', hasAccount: true }],
+      noAccountChildren: [],
+      snapshots: [],
+    })
+    await page.goto('/location', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('E2E Sharing Kid').first()).toBeVisible()
+    // The ping button is labelled "Ping <name>" (its tooltip is "Request current location").
+    await expect(page.getByRole('button', { name: 'Ping E2E Sharing Kid' })).toBeVisible()
   })
 
   test('parent: a child with no login is listed as "No account" with nothing to ping', async ({ page }) => {
-    await page.goto('/location', { waitUntil: 'networkidle' })
+    // The seeded family has no login-less child, so the map response is mocked.
+    await mockFamilyMap(page, {
+      success: true,
+      data: [],
+      pingable: [],
+      noAccountChildren: [{ memberId: 'mem_e2e_no_login_kid', name: 'E2E No Login Kid', hasAccount: false, color: null, emoji: null }],
+      snapshots: [],
+    })
+    await page.goto('/location', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('E2E No Login Kid').first()).toBeVisible()
     await expect(page.getByText('No account').first()).toBeVisible()
-  })
-
-  test('child: sees only the grown-ups who share, no access requests to other grown-ups', async ({ page }) => {
-    await page.goto('/location', { waitUntil: 'networkidle' })
-    const res = await page.request.get(`/api/location/access?familyId=${FAKE_FAMILY}`)
-    expect((await res.json()).data.people).toEqual([])
-  })
-
-  test('child: cannot send an emergency alert (403)', async ({ page }) => {
-    const res = await page.request.post('/api/location/emergency-alert', { data: { memberId: FAKE_MEMBER } })
-    expect(res.status()).toBe(403)
-  })
-
-  test('guest: /location shows the guest notice, location APIs answer 403', async ({ page }) => {
-    await page.goto('/location', { waitUntil: 'networkidle' })
-    await expect(page.getByRole('button', { name: /Request location/ })).toHaveCount(0)
-    const res = await page.request.get('/api/location/settings')
-    expect(res.status()).toBe(403)
+    await expect(page.getByRole('button', { name: /^Ping / })).toHaveCount(0)
   })
 
   test('validation: PATCH settings with an update interval under 60s -> 400', async ({ page }) => {
     const res = await page.request.patch('/api/location/settings', { data: { memberId: FAKE_MEMBER, updateIntervalSec: 5 } })
     expect(res.status()).toBe(400)
+    const body = await res.json()
+    expect(body.success).toBe(false)
+    expect(body.error).toBeTruthy()
   })
 
   test('validation: confirm-device with a malformed code -> 400 "This setup link is not valid."', async ({ page }) => {
@@ -316,12 +402,111 @@ test.describe('location page, signed in (needs seeded accounts)', () => {
   })
 
   test('empty state: a family where nobody shares shows no member locations', async ({ page }) => {
-    await page.goto('/location', { waitUntil: 'networkidle' })
-    await expect(page.getByRole('button', { name: /Request location/ })).toHaveCount(0)
+    test.skip(!PARENT_FAMILY_ID, 'E2E_PARENT_FAMILY_ID not set')
+    // Nobody in the seeded family turns sharing on, so no child is on the map.
+    const real = await page.request.get(`/api/location?familyId=${PARENT_FAMILY_ID}`)
+    const realBody = await real.json()
+    if (real.status() === 403) {
+      expect(realBody.code).toBe('SUBSCRIPTION_REQUIRED')
+    } else {
+      expect(real.status()).toBe(200)
+      const data = realBody.data as Array<{ role: string }>
+      expect(data.filter((m) => m.role === 'CHILD' || m.role === 'GUEST')).toEqual([])
+    }
+
+    await mockFamilyMap(page, { success: true, data: [], pingable: [], noAccountChildren: [], snapshots: [] })
+    await page.goto('/location', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: /^Ping / })).toHaveCount(0)
+    await expect(page.getByText('No account')).toHaveCount(0)
   })
 
   test('free plan: location is gated behind the upgrade notice (prices hidden in the Android app)', async ({ page }) => {
+    await mockFamilyMap(
+      page,
+      { success: false, error: 'Location sharing requires a Premium subscription', code: 'SUBSCRIPTION_REQUIRED' },
+      403,
+    )
     await page.goto('/location?source=android-app', { waitUntil: 'networkidle' })
+    await expect(page.getByRole('button', { name: /^Ping / })).toHaveCount(0)
     await expect(page.locator('a[href="/pricing"], a[href^="/subscription/upgrade"]')).toHaveCount(0)
+  })
+})
+
+test.describe('location page, signed in as the child', () => {
+  test.skip(!CHILD_STATE, 'E2E_CHILD_STATE (signed-in child storageState) not set')
+  test.skip(!PARENT_FAMILY_ID, 'E2E_PARENT_FAMILY_ID (the seeded family) not set')
+  test.beforeEach(async ({ page }) => { await signInWithState(page, 'child') })
+
+  test('child: sees only the grown-ups who share, no access requests to other grown-ups', async ({ page }) => {
+    await page.goto('/location', { waitUntil: 'networkidle' })
+
+    const access = await page.request.get(`/api/location/access?familyId=${PARENT_FAMILY_ID}`)
+    expect(access.status()).toBe(200)
+    expect((await access.json()).data.people).toEqual([])
+
+    const ask = await page.request.post('/api/location/access', {
+      data: { familyId: PARENT_FAMILY_ID, memberId: FAKE_MEMBER, action: 'request' },
+    })
+    expect(ask.status()).toBe(403)
+    expect((await ask.json()).error).toBe('Only adults in this family can do this')
+
+    const map = await page.request.get(`/api/location?familyId=${PARENT_FAMILY_ID}`)
+    const mapBody = await map.json()
+    if (map.status() === 403) {
+      expect(mapBody.code).toBe('SUBSCRIPTION_REQUIRED')
+    } else {
+      expect(map.status()).toBe(200)
+      for (const m of mapBody.data as Array<{ role: string }>) {
+        expect(['PARENT', 'GUARDIAN', 'ADULT']).toContain(m.role)
+      }
+      expect(mapBody.noAccountChildren).toEqual([])
+    }
+  })
+
+  test('child: cannot send an emergency alert (403)', async ({ page }) => {
+    const memberId = await myMemberId(page, PARENT_FAMILY_ID!)
+    expect(memberId, "the child's own member id").toBeTruthy()
+
+    const res = await page.request.post('/api/location/emergency-alert', {
+      data: { familyId: PARENT_FAMILY_ID, memberId },
+    })
+    expect(res.status()).toBe(403)
+    expect((await res.json()).error).toBe('Only a parent or guardian can send an emergency alert')
+
+    const eligibility = await page.request.get(`/api/location/emergency-alert?familyId=${PARENT_FAMILY_ID}`)
+    expect(eligibility.status()).toBe(200)
+    expect((await eligibility.json()).data).toMatchObject({ eligible: false, reason: 'NOT_PARENT', children: [] })
+  })
+})
+
+test.describe('location page, signed in as the guest', () => {
+  test.skip(!GUEST_STATE, 'E2E_GUEST_STATE (signed-in guest storageState) not set')
+  test.beforeEach(async ({ page }) => { await signInWithState(page, 'guest') })
+
+  test('guest: /location shows the guest notice, location APIs answer 403', async ({ page }) => {
+    await page.goto('/location', { waitUntil: 'networkidle' })
+    await expect(page.getByRole('button', { name: /^Ping / })).toHaveCount(0)
+    await expect(page.getByText(/Share now|Background sharing/)).toHaveCount(0)
+
+    const res = await page.request.get('/api/location/settings')
+    expect(res.status()).toBe(403)
+
+    const awaiting = await page.request.get('/api/location/request?awaiting=1')
+    expect(awaiting.status()).toBe(403)
+
+    if (GUEST_FAMILY_ID) {
+      const map = await page.request.get(`/api/location?familyId=${GUEST_FAMILY_ID}`)
+      expect(map.status()).toBe(403)
+      expect(JSON.stringify(await map.json().catch(() => ({})))).not.toMatch(/latitude|longitude/i)
+
+      const alert = await page.request.get(`/api/location/emergency-alert?familyId=${GUEST_FAMILY_ID}`)
+      expect(alert.status()).toBe(403)
+
+      // Refused before any alert is dispatched.
+      const sos = await page.request.post('/api/location/sos', {
+        data: { familyId: GUEST_FAMILY_ID, message: 'e2e test - not a real SOS' },
+      })
+      expect(sos.status()).toBe(403)
+    }
   })
 })

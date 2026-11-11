@@ -1,3 +1,4 @@
+import { signInWithState } from '../helpers/auth'
 import { test, expect, type Page } from '@playwright/test'
 
 // Settings (/settings, /settings/calendar-sync) and the profile APIs behind
@@ -26,6 +27,8 @@ const TINY_PNG = Buffer.from(
 )
 
 async function signIn(page: Page, creds: { email?: string; password?: string }) {
+  // Reuse the saved session when there is one (the login API rate-limits repeat sign-ins).
+  if (await signInWithState(page, creds === CHILD ? 'child' : 'parent')) return
   await page.goto('/login', { waitUntil: 'networkidle' })
   await page.locator('input[type="email"]').fill(creds.email!)
   await page.locator('input[type="password"]').fill(creds.password!)

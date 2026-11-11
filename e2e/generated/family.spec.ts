@@ -1,3 +1,4 @@
+import { signInWithState } from '../helpers/auth'
 import { test, expect, type Page, type Request, type Route } from '@playwright/test'
 
 // Family area: /family, /family/settings, /family/child/[childId] and the
@@ -19,6 +20,8 @@ type Role = keyof typeof ACCOUNTS
 const hasAccount = (role: Role) => !!ACCOUNTS[role].email && !!ACCOUNTS[role].password
 
 async function signIn(page: Page, role: Role) {
+  // Reuse the saved session when there is one (the login API rate-limits repeat sign-ins).
+  if (await signInWithState(page, role as 'parent' | 'child' | 'guest')) return
   const { email, password } = ACCOUNTS[role]
   await page.goto('/login', { waitUntil: 'networkidle' })
   await page.locator('input[type="email"]').fill(email!)

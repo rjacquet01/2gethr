@@ -1,4 +1,5 @@
 import { test, expect, type ConsoleMessage, type Page } from '@playwright/test'
+import { signInWithState } from '../helpers/auth'
 
 // Tasks: the list (/tasks), the new-task form (/tasks/new), the detail and edit
 // pages, and the /api/tasks routes behind them.
@@ -78,7 +79,8 @@ test.describe('signed out: the tasks API refuses every call', () => {
   for (const path of ['/tasks', '/tasks/new', `/tasks/${NO_SUCH_ID}`, `/tasks/${NO_SUCH_ID}/edit`]) {
     test(`${path} does not show the task form without sign-in`, async ({ page }) => {
       // Failed 401 fetches log console errors here, so console output is not checked.
-      const res = await page.goto(path, { waitUntil: 'networkidle' })
+      // A missing task page keeps polling, so it never reaches "networkidle".
+      const res = await page.goto(path, { waitUntil: 'domcontentloaded' })
       expect(res?.status(), `${path} HTTP status`).toBeLessThan(500)
       await expect(page.getByLabel('Task Title')).toHaveCount(0)
       await expect(page.getByRole('button', { name: 'Mark as done' })).toHaveCount(0)
@@ -89,7 +91,7 @@ test.describe('signed out: the tasks API refuses every call', () => {
 test.describe('parent', () => {
   // Needs a saved sign-in for a PARENT on the dev branch; see the top of this file.
   test.skip(!PARENT_STATE, 'E2E_PARENT_STATE (signed-in parent storageState) not set')
-  test.use({ storageState: PARENT_STATE })
+  test.beforeEach(async ({ page }) => { await signInWithState(page, 'parent') })
 
   test('/tasks/new renders the form with no console errors', async ({ page }) => {
     const errors: string[] = []
@@ -98,7 +100,7 @@ test.describe('parent', () => {
     await page.goto('/tasks/new', { waitUntil: 'networkidle' })
     await expect(page.getByRole('heading', { name: 'New Task' })).toBeVisible()
     await expect(page.getByLabel('Task Title')).toBeVisible()
-    await expect(page.getByLabel('Description')).toBeVisible()
+    await expect(page.getByLabel('Description', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Due Date')).toBeVisible()
     await expect(page.getByLabel('Reminder')).toBeVisible()
     await expect(page.getByRole('switch', { name: 'Require Approval' })).toBeVisible()
@@ -137,13 +139,13 @@ test.describe('parent', () => {
   })
 
   test('a task that does not exist shows "Task not found"', async ({ page }) => {
-    await page.goto(`/tasks/${NO_SUCH_ID}`, { waitUntil: 'networkidle' })
+    await page.goto(`/tasks/${NO_SUCH_ID}`, { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('Task not found')).toBeVisible()
     await expect(page.getByRole('link', { name: 'Back to Dashboard' })).toHaveAttribute('href', '/dashboard')
   })
 
   test('editing a task that does not exist shows "Task not found"', async ({ page }) => {
-    await page.goto(`/tasks/${NO_SUCH_ID}/edit`, { waitUntil: 'networkidle' })
+    await page.goto(`/tasks/${NO_SUCH_ID}/edit`, { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('Task not found')).toBeVisible()
     await expect(page.getByRole('link', { name: 'Back to Tasks' })).toHaveAttribute('href', '/tasks')
     await expect(page.getByLabel('Task Title')).toHaveCount(0)
@@ -210,7 +212,7 @@ test.describe('parent', () => {
     try {
       await page.goto('/tasks/new', { waitUntil: 'networkidle' })
       await page.getByLabel('Task Title').fill(title)
-      await page.getByLabel('Description').fill('Made by the e2e suite')
+      await page.getByLabel('Description', { exact: true }).fill('Made by the e2e suite')
       await page.getByRole('switch', { name: 'Require Approval' }).click()
       await page.getByRole('button', { name: /create/i }).first().click()
       await expect(page.getByText('Task created successfully')).toBeVisible()
@@ -238,7 +240,7 @@ test.describe('parent', () => {
 test.describe('child', () => {
   // Needs a saved sign-in for a CHILD with a login on the dev branch.
   test.skip(!CHILD_STATE, 'E2E_CHILD_STATE (signed-in child storageState) not set')
-  test.use({ storageState: CHILD_STATE })
+  test.beforeEach(async ({ page }) => { await signInWithState(page, 'child') })
 
   test('/tasks/new offers "Ask a parent" next to Create', async ({ page }) => {
     await page.goto('/tasks/new', { waitUntil: 'networkidle' })
@@ -273,8 +275,9 @@ test.describe('child', () => {
       // The child cannot approve their own request.
       await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0)
     } finally {
-      const parent = await browser.newContext({ storageState: PARENT_STATE })
+      const parent = await browser.newContext()
       const parentPage = await parent.newPage()
+      await signInWithState(parentPage, 'parent')
       const id = await taskIdByTitle(parentPage, title)
       if (id) await parentPage.request.delete(`/api/tasks/${id}`)
       await parent.close()
@@ -285,7 +288,7 @@ test.describe('child', () => {
 test.describe('guest', () => {
   // Needs a saved sign-in for a GUEST on the dev branch.
   test.skip(!GUEST_STATE, 'E2E_GUEST_STATE (signed-in guest storageState) not set')
-  test.use({ storageState: GUEST_STATE })
+  test.beforeEach(async ({ page }) => { await signInWithState(page, 'guest') })
 
   test('API: a guest cannot assign a task to a child (403)', async ({ page }) => {
     test.skip(!GUEST_FAMILY_ID, 'E2E_GUEST_FAMILY_ID not set')
@@ -305,16 +308,31 @@ test.describe('guest', () => {
     expect((await res.json()).error).toBe('Guests can only assign tasks to themselves')
   })
 
-  test('API: a guest only sees tasks they created or are assigned to', async ({ page }) => {
-    const me = await page.request.get('/api/tasks')
-    expect(me.status()).toBe(200)
-    const { data } = (await me.json()) as { data: Array<{ family_id: string; created_by_id: string; assigned_to_id: string | null }> }
-    test.skip(!GUEST_FAMILY_ID || data.length === 0, 'no guest family id or no tasks to inspect')
-    const inGuestFamily = data.filter((t) => t.family_id === GUEST_FAMILY_ID)
-    const people = new Set(inGuestFamily.flatMap((t) => [t.created_by_id, t.assigned_to_id]))
-    // Every listed task involves one shared person: the guest.
-    for (const t of inGuestFamily) {
-      expect([t.created_by_id, t.assigned_to_id].some((id) => id && people.has(id))).toBe(true)
+  test('API: a guest only sees tasks they created or are assigned to', async ({ page, browser }) => {
+    test.skip(!GUEST_FAMILY_ID || !PARENT_STATE || !ALLOW_WRITES, 'needs the seeded family, a parent session and E2E_ALLOW_WRITES=1')
+    // A parent makes a task for nobody in particular; the guest makes their own.
+    const parentCtx = await browser.newContext()
+    const parentPage = await parentCtx.newPage()
+    await signInWithState(parentPage, 'parent')
+    const hiddenTitle = uniqueTitle('parent-only')
+    const ownTitle = uniqueTitle('guest-own')
+    const ids: string[] = []
+    try {
+      const hidden = await parentPage.request.post('/api/tasks', { data: { familyId: GUEST_FAMILY_ID, title: hiddenTitle } })
+      expect(hidden.status(), await hidden.text()).toBe(201)
+      ids.push((await hidden.json()).data.id)
+      const own = await page.request.post('/api/tasks', { data: { familyId: GUEST_FAMILY_ID, title: ownTitle } })
+      expect(own.status(), await own.text()).toBe(201)
+      ids.push((await own.json()).data.id)
+
+      const list = await page.request.get('/api/tasks')
+      expect(list.status()).toBe(200)
+      const titles = ((await list.json()) as { data: Array<{ title: string }> }).data.map((t) => t.title)
+      expect(titles).toContain(ownTitle)
+      expect(titles).not.toContain(hiddenTitle)
+    } finally {
+      for (const id of ids) await parentPage.request.delete(`/api/tasks/${id}`)
+      await parentCtx.close()
     }
   })
 })
@@ -322,7 +340,7 @@ test.describe('guest', () => {
 test.describe('no family yet (empty state)', () => {
   // Needs a saved sign-in for an account that has not joined or created a family.
   test.skip(!NOFAMILY_STATE, 'E2E_NOFAMILY_STATE (signed-in, no family) not set')
-  test.use({ storageState: NOFAMILY_STATE })
+  test.beforeEach(async ({ page }) => { await signInWithState(page, 'nofamily') })
 
   test('/tasks says "No family yet" and links to onboarding', async ({ page }) => {
     await page.goto('/tasks', { waitUntil: 'networkidle' })
