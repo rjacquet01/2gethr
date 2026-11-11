@@ -98,6 +98,7 @@ writeFileSync(
     `$env:E2E_CHILD_PASSWORD='${PASSWORD}'`,
     `$env:E2E_GUEST_EMAIL='${guest.email}'`,
     `$env:E2E_GUEST_PASSWORD='${PASSWORD}'`,
+    `$env:E2E_PARENT_NO_CALENDAR='1'`, // the seeded parent has no calendar connections
     `$env:E2E_ALLOW_WRITES='1'`,
     '',
   ].join('\r\n'),

@@ -11,6 +11,12 @@ export async function signInWithState(page: Page, role: 'parent' | 'child' | 'gu
   if (!file) return false
   const state = JSON.parse(readFileSync(file, 'utf8')) as { cookies: Parameters<ReturnType<Page['context']>['addCookies']>[0] }
   await page.context().addCookies(state.cookies)
+  // Vercel's analytics script is third-party and sometimes answers 403; the
+  // browser logs that as a console error, which fails the "no console errors"
+  // checks. Serve an empty script instead.
+  await page.route('**/va.vercel-scripts.com/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/javascript', body: '' }),
+  )
   // The saved access token only lasts 15 minutes; the refresh cookie lasts days.
   // Refreshing sets a fresh access cookie on this page's context.
   await page.request.post('/api/auth/refresh')
