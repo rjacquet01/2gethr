@@ -207,7 +207,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               <span className="text-primary"> made simple</span>
             </h1>
             <p className="text-lg lg:text-xl text-muted-foreground max-w-xl mx-auto lg:mx-0 mb-8 text-pretty">
-              Stay organized. One shared spot for chores, calendars, and arrival alerts so nobody gets left behind.
+              Get organized. One shared spot for chores, calendars, and arrival alerts so nobody gets left behind.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3">
               <Button size="lg" asChild className="h-12 px-8">
