@@ -5,7 +5,7 @@ import { Logo, BRAND_MOTTO } from '@/components/brand/logo'
 import { SignedInRedirect } from '@/components/signed-in-redirect'
 import { HideInAndroidApp } from '@/components/hide-in-android-app'
 import { purchaseBlockedForPage } from '@/lib/android-app'
-import { AndroidAvailableNote, PlayStoreBadge } from '@/components/play-store-badge'
+import { AndroidAvailableNote, AndroidBetaInvite, PlayStoreBadge } from '@/components/play-store-badge'
 import { listTierDefinitions, displayPrice, TRIAL_DAYS } from '@/lib/subscription-tiers'
 import { 
   Calendar, 
@@ -239,6 +239,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <ProductPreview />
         </div>
       </section>
+
+      <AndroidBetaInvite />
 
       {/* How it works */}
       <section className="py-16 sm:py-20">
