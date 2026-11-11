@@ -21,7 +21,7 @@ export const PLAY_STORE_LIVE = process.env.NEXT_PUBLIC_PLAY_STORE_LIVE === 'true
  * People join the group and opt in on Google's own pages; nothing about them
  * passes through Togethr.
  */
-export const BETA_GROUP_URL: string | null = null
+export const BETA_GROUP_URL: string | null = 'https://groups.google.com/g/togethr-testers'
 /** Google's opt-in page for the test; works once someone is in the group. */
 export const BETA_OPT_IN_URL = 'https://play.google.com/apps/testing/com.togethrapp.mobile'
 export const BETA_OPEN = !PLAY_STORE_LIVE && BETA_GROUP_URL !== null
