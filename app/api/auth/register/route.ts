@@ -33,12 +33,12 @@ const registerSchema = z.object({
       "Password must contain uppercase, lowercase, and number"
     ),
   // Support both displayName (from UI) or firstName/lastName
-  displayName: z.string().optional(),
+  displayName: z.string().max(200).optional(),
   firstName: z.string().max(100).optional(),
   lastName: z.string().max(100).optional(),
-  phone: z.string().optional(),
+  phone: z.string().max(30).optional(),
   smsConsent: z.boolean().optional().default(false),
-  timezone: z.string().default("UTC"),
+  timezone: z.string().max(64).default("UTC"),
   // Adults only: both must be exactly true, checked here (not just on the form).
   ageConfirmed: z.boolean().optional(),
   termsAccepted: z.boolean().optional(),
