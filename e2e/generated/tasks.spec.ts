@@ -308,16 +308,31 @@ test.describe('guest', () => {
     expect((await res.json()).error).toBe('Guests can only assign tasks to themselves')
   })
 
-  test('API: a guest only sees tasks they created or are assigned to', async ({ page }) => {
-    const me = await page.request.get('/api/tasks')
-    expect(me.status()).toBe(200)
-    const { data } = (await me.json()) as { data: Array<{ family_id: string; created_by_id: string; assigned_to_id: string | null }> }
-    test.skip(!GUEST_FAMILY_ID || data.length === 0, 'no guest family id or no tasks to inspect')
-    const inGuestFamily = data.filter((t) => t.family_id === GUEST_FAMILY_ID)
-    const people = new Set(inGuestFamily.flatMap((t) => [t.created_by_id, t.assigned_to_id]))
-    // Every listed task involves one shared person: the guest.
-    for (const t of inGuestFamily) {
-      expect([t.created_by_id, t.assigned_to_id].some((id) => id && people.has(id))).toBe(true)
+  test('API: a guest only sees tasks they created or are assigned to', async ({ page, browser }) => {
+    test.skip(!GUEST_FAMILY_ID || !PARENT_STATE || !ALLOW_WRITES, 'needs the seeded family, a parent session and E2E_ALLOW_WRITES=1')
+    // A parent makes a task for nobody in particular; the guest makes their own.
+    const parentCtx = await browser.newContext()
+    const parentPage = await parentCtx.newPage()
+    await signInWithState(parentPage, 'parent')
+    const hiddenTitle = uniqueTitle('parent-only')
+    const ownTitle = uniqueTitle('guest-own')
+    const ids: string[] = []
+    try {
+      const hidden = await parentPage.request.post('/api/tasks', { data: { familyId: GUEST_FAMILY_ID, title: hiddenTitle } })
+      expect(hidden.status(), await hidden.text()).toBe(201)
+      ids.push((await hidden.json()).data.id)
+      const own = await page.request.post('/api/tasks', { data: { familyId: GUEST_FAMILY_ID, title: ownTitle } })
+      expect(own.status(), await own.text()).toBe(201)
+      ids.push((await own.json()).data.id)
+
+      const list = await page.request.get('/api/tasks')
+      expect(list.status()).toBe(200)
+      const titles = ((await list.json()) as { data: Array<{ title: string }> }).data.map((t) => t.title)
+      expect(titles).toContain(ownTitle)
+      expect(titles).not.toContain(hiddenTitle)
+    } finally {
+      for (const id of ids) await parentPage.request.delete(`/api/tasks/${id}`)
+      await parentCtx.close()
     }
   })
 })
