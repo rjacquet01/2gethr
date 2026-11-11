@@ -605,8 +605,8 @@ export const EMAIL_TEMPLATES = {
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px;">
         <h2 style="color: #3b4563;">New user signup</h2>
-        <p><strong>Name:</strong> ${userName}</p>
-        <p><strong>Email:</strong> ${userEmail}</p>
+        <p><strong>Name:</strong> ${escapeHtml(userName)}</p>
+        <p><strong>Email:</strong> ${escapeHtml(userEmail)}</p>
         <p><strong>When:</strong> ${new Date().toISOString()}</p>
       </div>
     `,
