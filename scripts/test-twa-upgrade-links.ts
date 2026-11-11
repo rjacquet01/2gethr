@@ -96,8 +96,18 @@ async function main() {
     .filter((m) => m.index! < plansStart || m.index! > plansEnd)
     .map((m) => `line ${sub.slice(0, m.index).split("\n").length}: ${m[0]}`)
   assert.deepStrictEqual(outside, [], "price or checkout outside the plans block")
-  assert.ok(/purchaseUiReady && !canPurchase && \(\s*<p[^>]*>\{IN_APP_PLANS_COPY\}/.test(sub), "the app sees the neutral line")
-  ok("My plan in the app: prices, trials and checkout only inside the canPurchase block")
+  // The app sees one neutral line: where to manage the plan or, on a paid
+  // plan, where to change or cancel it (#115). Neither may carry a price, a
+  // link or a buy word.
+  assert.ok(
+    /purchaseUiReady && !canPurchase && \(\s*<p[^>]*>\s*\{[^}]*\? IN_APP_CANCEL_COPY : IN_APP_PLANS_COPY\}/.test(sub),
+    "the app sees the neutral line"
+  )
+  const { IN_APP_CANCEL_COPY, IN_APP_PLANS_COPY } = await import("../lib/plan-limits")
+  for (const copy of [IN_APP_CANCEL_COPY, IN_APP_PLANS_COPY]) {
+    assert.ok(!/[$€£]|\d+\.\d\d|https?:|\/subscription\/upgrade|\/pricing|\b(buy|upgrade|subscribe|trial)\b/i.test(copy), `not neutral: ${copy}`)
+  }
+  ok("My plan in the app: prices, trials and checkout only inside the canPurchase block; neutral line only")
 
   console.log(`\n${passed} checks passed`)
 }
