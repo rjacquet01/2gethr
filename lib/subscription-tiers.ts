@@ -67,7 +67,7 @@ export const HISTORY_DAYS = { FREE: 30, PLUS: 90, PREMIUM: 90 } as const
 export const LOCATION_TRAIL_DAYS = { FREE: 0, PLUS: 90, PREMIUM: 90 } as const
 /** Text messages a month (opt-in; urgent safety alerts don't count). */
 export const SMS_PER_MONTH = { FREE: 20, PLUS: 60, PREMIUM: 300 } as const
-/** Smart Import (photo or text to events) per family per calendar month; TRIAL: the 7-day trial. */
+/** Smart Import (photo or text to events) per family per calendar month; TRIAL: the free trial. */
 export const SMART_IMPORTS_PER_MONTH = { FREE: 3, PLUS: 20, PREMIUM: 60, TRIAL: 10 } as const
 /** Show a soft "nearly at your limit" nudge from this share of a cap. */
 export const NEAR_LIMIT_RATIO = 0.8
@@ -77,7 +77,7 @@ export const NEAR_LIMIT_RATIO = 0.8
  * length and every "N-day trial" string is built from this. Changing it only
  * affects trials started afterwards (existing rows keep their trial_ends_at).
  */
-export const TRIAL_DAYS = 7
+export const TRIAL_DAYS = 30
 
 /** Text messages per month while a family is on its free trial. */
 export const TRIAL_SMS_QUOTA = 50
