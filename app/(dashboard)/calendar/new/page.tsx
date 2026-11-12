@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { lookFallback } from '@/components/member-avatar'
 import {
   NotificationChannelsPicker,
   type NotificationChannelValue,
@@ -121,6 +122,8 @@ function NewEventForm() {
     childProfileId?: string
     displayName: string
     avatarUrl: string | null
+    color?: string | null
+    emoji?: string | null
   }>>([])
   
   // Form state
@@ -219,14 +222,15 @@ function NewEventForm() {
     userId: string | undefined,
     childProfileId: string | undefined,
     displayName: string,
-    avatarUrl: string | null
+    avatarUrl: string | null,
+    look?: { color?: string | null; emoji?: string | null }
   ) => {
     setSelectedParticipants(prev => {
       const exists = prev.some(p => p.id === id && p.type === type)
       if (exists) {
         return prev.filter(p => !(p.id === id && p.type === type))
       }
-      return [...prev, { type, id, userId, childProfileId, displayName, avatarUrl }]
+      return [...prev, { type, id, userId, childProfileId, displayName, avatarUrl, color: look?.color ?? null, emoji: look?.emoji ?? null }]
     })
   }
 
@@ -806,8 +810,11 @@ function NewEventForm() {
                     <Badge key={`${p.type}-${p.id}`} variant="secondary" className="pl-1 pr-1 gap-1">
                       <Avatar className="h-5 w-5">
                         <AvatarImage src={p.avatarUrl || undefined} />
-                        <AvatarFallback className="text-[10px]">
-                          {p.displayName.charAt(0).toUpperCase()}
+                        <AvatarFallback
+                          className={p.emoji || p.color ? 'text-[10px] text-white' : 'text-[10px]'}
+                          style={lookFallback(p.displayName, p.color, p.emoji).style}
+                        >
+                          {p.emoji ? <span className="leading-none">{p.emoji}</span> : p.displayName.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                       <span className="max-w-[100px] truncate">{p.displayName}</span>
@@ -862,7 +869,8 @@ function NewEventForm() {
                                   member.userId,
                                   undefined,
                                   member.displayName,
-                                  member.avatarUrl
+                                  member.avatarUrl,
+                                  { color: member.color, emoji: member.emoji }
                                 )}
                               >
                                 <div className={`flex items-center justify-center h-5 w-5 rounded border ${
@@ -876,8 +884,11 @@ function NewEventForm() {
                                 </div>
                                 <Avatar className="h-8 w-8">
                                   <AvatarImage src={member.avatarUrl || undefined} />
-                                  <AvatarFallback>
-                                    {member.displayName.charAt(0).toUpperCase()}
+                                  <AvatarFallback
+                                    className={member.emoji || member.color ? 'text-white' : undefined}
+                                    style={lookFallback(member.displayName, member.color, member.emoji).style}
+                                  >
+                                    {member.emoji ? <span className="leading-none">{member.emoji}</span> : member.displayName.charAt(0).toUpperCase()}
                                   </AvatarFallback>
                                 </Avatar>
                                 <div className="flex-1 text-left">
@@ -912,7 +923,8 @@ function NewEventForm() {
                                   undefined,
                                   child.id,
                                   child.displayName,
-                                  child.avatarUrl
+                                  child.avatarUrl,
+                                  { color: child.color, emoji: child.emoji }
                                 )}
                               >
                                 <div className={`flex items-center justify-center h-5 w-5 rounded border ${
@@ -926,8 +938,11 @@ function NewEventForm() {
                                 </div>
                                 <Avatar className="h-8 w-8">
                                   <AvatarImage src={child.avatarUrl || undefined} />
-                                  <AvatarFallback>
-                                    {child.displayName.charAt(0).toUpperCase()}
+                                  <AvatarFallback
+                                    className={child.emoji || child.color ? 'text-white' : undefined}
+                                    style={lookFallback(child.displayName, child.color, child.emoji).style}
+                                  >
+                                    {child.emoji ? <span className="leading-none">{child.emoji}</span> : child.displayName.charAt(0).toUpperCase()}
                                   </AvatarFallback>
                                 </Avatar>
                                 <div className="flex-1 text-left">

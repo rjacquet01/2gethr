@@ -9,6 +9,8 @@ import { useMyRole } from '@/hooks/use-my-role'
 import { markChildDevice } from '@/components/privacy-analytics'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { lookFallback } from '@/components/member-avatar'
+import { useFamilies } from '@/hooks/use-family'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -97,6 +99,7 @@ export default function DashboardLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const { isGuest, isChild, role } = useMyRole()
+  const { families } = useFamilies()
   // Inside the Android app the plan page is plan info only (no prices or
   // upgrades), so the menu calls it "My plan".
   const { inApp } = useUpgradeWording()
@@ -148,6 +151,10 @@ export default function DashboardLayout({
     .map((n) => n[0])
     .join('')
     .toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'
+
+  // The emoji/color I picked for myself (per family), shown in place of initials.
+  const myMember = families[0]?.members?.find((m) => String(m.userId) === String(user?.id)) || null
+  const myLook = lookFallback(user?.displayName, myMember?.color, myMember?.emoji)
 
   return (
     <div className="min-h-screen bg-background">
@@ -205,8 +212,11 @@ export default function DashboardLayout({
                       src={user?.avatarUrl || undefined} 
                       alt={user?.displayName || 'User avatar'}
                     />
-                    <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-sm font-medium">
-                      {userInitials}
+                    <AvatarFallback
+                      className={cn(myLook.hasLook ? 'text-white font-semibold text-sm' : 'bg-sidebar-primary text-sidebar-primary-foreground text-sm font-medium')}
+                      style={myLook.style}
+                    >
+                      {myLook.content ?? userInitials}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
@@ -276,7 +286,12 @@ export default function DashboardLayout({
                 src={user?.avatarUrl || undefined} 
                 alt={user?.displayName || 'User avatar'}
               />
-              <AvatarFallback className="bg-sidebar-primary text-xs font-medium text-sidebar-primary-foreground">{userInitials}</AvatarFallback>
+              <AvatarFallback
+                className={cn(myLook.hasLook ? 'text-white font-semibold text-xs' : 'bg-sidebar-primary text-xs font-medium text-sidebar-primary-foreground')}
+                style={myLook.style}
+              >
+                {myLook.content ?? userInitials}
+              </AvatarFallback>
             </Avatar>
           </div>
         </div>

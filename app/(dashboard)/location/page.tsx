@@ -59,6 +59,8 @@ interface PingableMember {
   memberId: string
   name: string
   role: string
+  color?: string | null
+  emoji?: string | null
 }
 
 // A child with no login (sent to parents/guardians only).
@@ -1317,7 +1319,7 @@ function LocationPageContent({ isChild, isSupervisor }: { isChild: boolean; isSu
               </h2>
               {notSharing.map((p) => (
                 <div key={p.memberId} className="flex items-center gap-3 rounded-lg border bg-card p-3">
-                  <MemberAvatar name={p.name} />
+                  <MemberAvatar name={p.name} color={p.color} emoji={p.emoji} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{p.name}</p>
                     <p className="text-xs text-muted-foreground">
