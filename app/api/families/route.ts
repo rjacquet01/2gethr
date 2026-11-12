@@ -8,6 +8,7 @@ import { TRIAL_DAYS } from "@/lib/subscription-tiers"
 import { getTrialEligibility } from "@/lib/trial-eligibility"
 import { memberName } from "@/lib/member-names"
 import { notifyAccountChange, requestIp } from "@/lib/admin-account-alerts"
+import { ensureMemberAppearanceColumns } from "@/lib/member-appearance"
 
 const createFamilySchema = z.object({
   name: z.string().min(1, "Family name is required").max(100),
@@ -24,6 +25,8 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       )
     }
+
+    await ensureMemberAppearanceColumns()
 
     const families = await sql`
       SELECT 
@@ -58,6 +61,8 @@ export async function GET(request: NextRequest) {
               fm.nickname,
               fm.is_active,
               fm.joined_at,
+              fm.color,
+              fm.emoji,
               u.first_name,
               u.last_name,
               u.profile_photo_url,
@@ -74,7 +79,7 @@ export async function GET(request: NextRequest) {
           f.user_role === 'GUEST' ? Promise.resolve([]) : sql`
             SELECT 
               cp.id, cp.display_name, cp.age, cp.school, cp.grade,
-              cp.avatar_url, cp.created_at, fm.user_id AS member_user_id
+              cp.avatar_url, cp.created_at, fm.user_id AS member_user_id, fm.color, fm.emoji
             FROM child_profiles cp
             JOIN family_members fm ON cp.family_member_id = fm.id
             WHERE fm.family_id = ${f.id} AND fm.role = 'CHILD' AND fm.is_active = true
@@ -100,6 +105,8 @@ export async function GET(request: NextRequest) {
             role: m.role,
             displayName: memberName({ role: m.role, nickname: m.nickname, childDisplayName: m.display_name, firstName: m.first_name, lastName: m.last_name }, { withLastName: true }),
             avatarUrl: m.profile_photo_url,
+            color: m.color || null,
+            emoji: m.emoji || null,
             // false for a child managed by a parent (no login, user_id NULL)
             hasAccount: !!m.user_id,
             isActive: m.is_active,
@@ -110,6 +117,8 @@ export async function GET(request: NextRequest) {
             id: c.id,
             displayName: c.display_name,
             avatarUrl: c.avatar_url,
+            color: c.color || null,
+            emoji: c.emoji || null,
             grade: f.user_role === 'GUEST' ? null : c.grade,
             age: f.user_role === 'GUEST' ? null : c.age,
             school: f.user_role === 'GUEST' ? null : c.school,
