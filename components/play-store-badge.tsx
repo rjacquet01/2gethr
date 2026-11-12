@@ -153,7 +153,7 @@ export function AndroidBetaInvite() {
             )}
           </a>
           <p className="mt-4 text-sm text-muted-foreground">
-            Please keep the app installed for at least two weeks, and tell us what you think from Support in the app.
+            Every new family gets a free 30-day Premium trial, no card needed. Please keep the app installed for at least two weeks, and tell us what you think from Support in the app.
           </p>
         </div>
       </div>

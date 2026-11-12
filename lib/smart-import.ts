@@ -28,7 +28,7 @@ export function smartImportModel(): string {
   return process.env.SMART_IMPORT_MODEL?.trim() || SMART_IMPORT_DEFAULT_MODEL
 }
 
-/** Imports a month: the 7-day trial has its own cap; an admin's extended trial gets its plan's. */
+/** Imports a month: the free trial has its own cap; an admin's extended trial gets its plan's. */
 export function smartImportCap(tier: SubscriptionTierKey, userTrial: boolean): number {
   if (userTrial) return SMART_IMPORTS_PER_MONTH.TRIAL
   if (tier === "PREMIUM_PLUS") return SMART_IMPORTS_PER_MONTH.PREMIUM
