@@ -19,6 +19,7 @@ import {
 import { authFetch } from '@/hooks/use-auth'
 import { isTaskActive, isTaskOverdue, taskDueAt } from '@/lib/task-due'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { lookFallback } from '@/components/member-avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -102,6 +103,7 @@ interface StripMember {
   displayName: string
   avatarUrl: string | null
   color?: string | null
+  emoji?: string | null
 }
 
 export function FamilyStatusStrip({
@@ -142,6 +144,7 @@ export function FamilyStatusStrip({
         </div>
         <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
           {members.map((m) => {
+            const look = lookFallback(m.displayName, m.color, m.emoji)
             const initials =
               m.displayName
                 ?.split(' ')
@@ -185,8 +188,11 @@ export function FamilyStatusStrip({
                       src={m.avatarUrl ? `/api/files?pathname=${encodeURIComponent(m.avatarUrl)}` : undefined}
                       alt={m.displayName}
                     />
-                    <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                      {initials}
+                    <AvatarFallback
+                      className={look.hasLook ? 'text-xs text-white font-semibold' : 'text-xs bg-primary/10 text-primary'}
+                      style={look.style}
+                    >
+                      {look.content ?? initials}
                     </AvatarFallback>
                   </Avatar>
                   {!noAccount && (

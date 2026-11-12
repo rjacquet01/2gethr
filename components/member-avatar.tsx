@@ -58,6 +58,20 @@ async function downscaleImage(file: File): Promise<File> {
   }
 }
 
+/**
+ * For screens that draw their own <Avatar> (sidebar, task rows...): the picked
+ * color/emoji for an AvatarFallback, same as MemberAvatar. `content` is null
+ * when there's no emoji, so the caller keeps its initials.
+ */
+export function lookFallback(name?: string | null, color?: string | null, emoji?: string | null) {
+  const hasLook = !!(emoji || color)
+  return {
+    hasLook,
+    style: hasLook ? { backgroundColor: color || defaultColorFor(name) } : undefined,
+    content: emoji ? <span className="leading-none">{emoji}</span> : null,
+  }
+}
+
 function initialsOf(name?: string | null) {
   return (name || '').split(' ').filter(Boolean).map((n) => n[0]).join('').slice(0, 2).toUpperCase() || '?'
 }

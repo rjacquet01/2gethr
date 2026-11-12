@@ -8,6 +8,7 @@ import { useTasks, updateTask } from '@/hooks/use-tasks'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { lookFallback } from '@/components/member-avatar'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Empty } from '@/components/ui/empty'
@@ -261,6 +262,13 @@ export default function TasksPage() {
         ? `/api/avatar/${task.assigned_to_id}`
         : undefined
     const unassigned = assigneeName === 'Unassigned'
+    // The assignee's picked emoji/color (family data), instead of initials.
+    const assigneeLook = unassigned
+      ? null
+      : (task.assigned_to_id && members.find((m) => String(m.userId) === String(task.assigned_to_id))) ||
+        (task.child_profile_id && kids.find((c) => c.id === task.child_profile_id)) ||
+        null
+    const assigneeFallback = lookFallback(assigneeName, assigneeLook?.color, assigneeLook?.emoji)
     const overdue = overdueOf(task)
     const busy = processingTaskId === task.id
     const dueKey = task.due_date ? format(parseISO(task.due_date), 'yyyy-MM-dd') : ''
@@ -320,8 +328,11 @@ export default function TasksPage() {
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Avatar className="h-4 w-4">
                   {assigneeAvatarSrc && <AvatarImage src={assigneeAvatarSrc} alt={assigneeName} />}
-                  <AvatarFallback className="bg-primary/10 text-[9px] text-primary">
-                    {unassigned ? '?' : initialsOf(assigneeName)}
+                  <AvatarFallback
+                    className={assigneeFallback.hasLook ? 'text-[9px] text-white' : 'bg-primary/10 text-[9px] text-primary'}
+                    style={assigneeFallback.style}
+                  >
+                    {unassigned ? '?' : assigneeFallback.content ?? initialsOf(assigneeName)}
                   </AvatarFallback>
                 </Avatar>
                 {assigneeName}
