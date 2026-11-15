@@ -178,8 +178,8 @@ async function claimSlot(userId: string, scope: string): Promise<boolean> {
  * In-app notification for every recipient; a push only when `push` is true,
  * the recipient allows push, it isn't their quiet hours, and they haven't had
  * a push for this same `scope` in the last PUSH_COALESCE_MINUTES. With
- * `email`, the same for email: only to recipients with an address and
- * reminder_settings.email_enabled (as createNotification does), at most one
+ * `email`, the same for email: only to recipients with an address and email
+ * not switched off (as createNotification does), at most one
  * per scope per window. `pushBody` replaces the body on the lock screen
  * (push) when the in-app text shouldn't show there. Never SMS.
  */
@@ -225,7 +225,7 @@ export async function notifySocial(opts: {
         console.error("social push failed (non-fatal):", e)
       }
     }
-    if (doEmail && p.email && p.email_enabled === true) {
+    if (doEmail && p.email && p.email_enabled !== false) {
       try {
         if (await claimSlot(p.id as string, `${opts.scope}:email`)) {
           const msg = opts.email!({ firstName: (p.first_name as string | null) ?? null })

@@ -5,10 +5,9 @@ import { alertFamilyAdults } from "@/lib/family-alerts"
 import { sendPushToUser, isFirebaseConfigured } from "@/lib/services/push"
 
 // Every 30 minutes (see vercel.json): a child whose sharing is still switched
-// ON but whose phone hasn't reported a location for STALE_HOURS gets ONE quiet
-// heads-up (in-app + push only) to their parents. This is the "silent stop"
-// case (phone off, permission revoked, no signal) - deliberately softer than
-// the all-channel alert when a child switches sharing off themselves. Skipped
+// ON but whose phone hasn't reported a location for STALE_HOURS gets ONE
+// heads-up to their parents on every channel ("silent stop": phone off,
+// permission revoked, no signal). Skipped
 // overnight in the child's own time zone, when a quiet phone is normal.
 const STALE_HOURS = 3
 const QUIET_START_HOUR = 22
@@ -74,7 +73,6 @@ async function runJob(request: NextRequest) {
         type: "LOCATION_ALERT",
         data: { subType: "SHARING_STALE", memberId: r.member_id },
         clickAction: "/location",
-        soft: true,
       })
       alerted++
     }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { actorNameInFamily } from "@/lib/member-names"
+import { notifyParentsAboutKid } from "@/lib/kid-notify"
 import { sql } from "@/lib/db"
 import { getUserFromRequest } from "@/lib/auth"
 import { eventCommentAccess } from "@/lib/event-comment-access"
@@ -104,6 +105,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       push: true,
       scope: `event:${eventId}`,
       clickAction: `/calendar/event/${eventId}`,
+    })
+    // A child commented: the other parents hear too, on every channel.
+    await notifyParentsAboutKid({
+      familyId: access.familyId,
+      kid: { userIds: [user.id] },
+      exclude: [user.id, ...recipients.map((r) => r.user_id as string)],
+      type: "EVENT_UPDATE",
+      title: `New comment on "${access.title}"`,
+      body: `${name}: ${cleaned.body.slice(0, 120)}`,
+      data: { subType: "EVENT_COMMENT", eventId },
     })
 
     const authors = await authorInfo(access.familyId, [user.id])

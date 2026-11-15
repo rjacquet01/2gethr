@@ -242,7 +242,7 @@ const NOTIFY_CHANNEL_OPTIONS: { value: NotifyChannel; label: string; icon: typeo
   { value: 'sms', label: 'Text', icon: MessageSquare },
 ]
 
-const DEFAULT_NOTIFY_CHANNELS: NotifyChannel[] = ['in_app', 'push', 'email']
+const DEFAULT_NOTIFY_CHANNELS: NotifyChannel[] = ['in_app', 'push', 'email', 'sms']
 
 type PlaceFilter = 'all' | 'geofence' | 'nogeofence' | 'favorites'
 

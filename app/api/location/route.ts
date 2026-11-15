@@ -21,7 +21,8 @@ import { shouldMergeWithPrevious, oneTimePingId, isOneTimePingId } from "@/lib/l
 import { answerLocationRequests, fulfillLocationRequests } from "@/lib/location-schema"
 import { alertFamilyAdults } from "@/lib/family-alerts"
 import { memberName, nameInFamily } from "@/lib/member-names"
-import { approvedOwnerMemberIds, needsAccessGrant, locationAudienceUserIds } from "@/lib/location-access"
+import { approvedOwnerMemberIds, needsAccessGrant } from "@/lib/location-access"
+import { involvesChild } from "@/lib/kid-notify"
 import { ensureMemberAppearanceColumns } from "@/lib/member-appearance"
 import { guestForbidden, isAdultMemberRole, isGuestInFamily, isGuestOnly } from "@/lib/permissions"
 import { alertPlaceLimit } from "@/lib/place-alerts"
@@ -562,13 +563,13 @@ export async function POST(request: NextRequest) {
         // (not one they only shared with once: nothing there stops updating).
         const alertFamilies = [...(oneTime ? [] : [setting.family_id as string]), ...otherFamilies.map((o) => o.family_id as string)]
         for (const familyId of alertFamilies) {
+          // A child's battery only: parents aren't told about other grown-ups.
+          if (!(await involvesChild(familyId, { userIds: [user.id] }))) continue
           const who = await nameInFamily(familyId, user.id, "A family member")
           await alertFamilyAdults(familyId, user.id, {
             title: `${who}'s battery is low`,
             body: `${who}'s phone is at ${battery}%. Their location may stop updating soon.`,
             data: { userId: user.id, subType: "LOW_BATTERY", batteryLevel: battery },
-            // A grown-up's: only those they approved to see them.
-            onlyUserIds: await locationAudienceUserIds(familyId, user.id),
           })
         }
       } catch (err) {
@@ -706,6 +707,10 @@ async function createGeofenceNotification(
   eventType: "ARRIVAL" | "DEPARTURE",
   notifyChannels: string[] | null
 ) {
+  // Parents hear about the kids' arrivals and departures, not about other
+  // grown-ups' (lib/kid-notify.ts).
+  if (!(await involvesChild(familyId, { userIds: [userId] }))) return
+
   // Their name in this family
   const userName = await nameInFamily(familyId, userId)
 
@@ -744,9 +749,7 @@ async function createGeofenceNotification(
       AND fm.is_active = true
       AND fm.user_id != ${userId}
   `
-  // A grown-up's arrivals only reach the grown-ups they approved to see them.
-  const audience = await locationAudienceUserIds(familyId, userId)
-  const allowedRecipients = audience ? recipients.filter((r) => audience.includes(r.user_id)) : recipients
+  const allowedRecipients = recipients
 
   const actionVerb = eventType === "ARRIVAL" ? "arrived" : "left"
   const title = eventType === "ARRIVAL" ? `${userName} arrived at ${placeName}` : `${userName} left ${placeName}`

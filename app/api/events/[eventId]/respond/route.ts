@@ -4,6 +4,7 @@ import { getUserFromRequest } from "@/lib/auth"
 import { createNotification } from "@/lib/notifications"
 import { z } from "zod"
 import { actorNameInFamily } from "@/lib/member-names"
+import { notifyParentsAboutKid } from "@/lib/kid-notify"
 
 const schema = z.object({ action: z.enum(["ACCEPT", "DECLINE"]) })
 
@@ -34,14 +35,26 @@ export async function POST(
       SELECT e.title, e.created_by_id, c.family_id FROM events e
       JOIN calendars c ON e.calendar_id = c.id WHERE e.id = ${eventId}
     `
-    if (ev[0] && ev[0].created_by_id !== user.id) {
+    if (ev[0]) {
       const name = await actorNameInFamily(ev[0].family_id as string, user, "Someone")
-      await createNotification({
+      const title = action === "ACCEPT" ? "Invitation accepted" : "Invitation declined"
+      const body = `${name} ${action === "ACCEPT" ? "accepted" : "declined"} "${ev[0].title}"`
+      if (ev[0].created_by_id !== user.id) await createNotification({
         userId: ev[0].created_by_id,
         type: "APPROVAL_RESPONSE",
-        title: action === "ACCEPT" ? "Invitation accepted" : "Invitation declined",
-        body: `${name} ${action === "ACCEPT" ? "accepted" : "declined"} "${ev[0].title}"`,
+        title,
+        body,
         data: { eventId, familyId: ev[0].family_id },
+      })
+      // A child answered: the parents hear too.
+      await notifyParentsAboutKid({
+        familyId: ev[0].family_id as string,
+        kid: { userIds: [user.id] },
+        exclude: [user.id, ev[0].created_by_id as string],
+        type: "APPROVAL_RESPONSE",
+        title,
+        body,
+        data: { eventId },
       })
     }
     return NextResponse.json({ success: true, status: newStatus })

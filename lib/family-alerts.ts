@@ -1,7 +1,7 @@
 import { sql } from "./db"
 import { sendPushToUser, isFirebaseConfigured } from "./services/push"
 import { sendSMSMetered, isSmsConfigured } from "./services/sms"
-import { sendEmail, isResendConfigured } from "./services/email"
+import { sendEmail, isResendConfigured, escapeHtml } from "./services/email"
 import { hitRateLimit } from "./rate-limit"
 
 interface AlertOptions {
@@ -76,13 +76,14 @@ export async function alertFamilyAdults(familyId: string, aboutUserId: string, o
         console.error("alertFamilyAdults sms failed:", err)
       }
     }
-    const emailOk = opts.soft ? false : opts.urgent ? r.email_enabled !== false : (r.email_enabled ?? true)
-    if (emailOk && r.email && isResendConfigured() && opts.urgent) {
+    // Email is on unless the person switched it off (a missing row counts as on).
+    const emailOk = opts.soft ? false : r.email_enabled !== false
+    if (emailOk && r.email && isResendConfigured()) {
       try {
         await sendEmail({
           to: r.email,
           subject: opts.title,
-          html: `<p><strong>${opts.title}</strong></p><p>${opts.body}</p>`,
+          html: `<p><strong>${escapeHtml(opts.title)}</strong></p><p>${escapeHtml(opts.body)}</p>`,
           text: `${opts.title}\n\n${opts.body}`,
         })
       } catch (err) {

@@ -827,7 +827,8 @@ export async function POST(request: NextRequest) {
       validatedData.notifyChannels && validatedData.notifyChannels.length > 0
         ? (validatedData.notifyChannels as NotificationChannel[])
         : undefined,
-      childUserIds
+      childUserIds,
+      { participantUserIds, kidInvolved: childUserIds.length > 0 || participantChildIds.length > 0 }
     )
 
     for (const childId of childUserIds) {

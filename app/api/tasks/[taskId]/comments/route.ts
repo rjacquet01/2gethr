@@ -89,7 +89,7 @@ export async function POST(
 
     // Verify task exists and user has access
     const task = await sql`
-      SELECT family_id, assigned_to_id, created_by_id, title FROM tasks WHERE id = ${taskId}
+      SELECT family_id, assigned_to_id, created_by_id, child_profile_id, title FROM tasks WHERE id = ${taskId}
     `
 
     if (task.length === 0) {
@@ -130,6 +130,7 @@ export async function POST(
       familyId: task[0].family_id,
       taskTitle: task[0].title,
       assignedToId: task[0].assigned_to_id,
+      childProfileId: task[0].child_profile_id,
       commenterId: user.id,
       commenterName: await actorNameInFamily(task[0].family_id as string, user, 'Someone'),
       commentMessage: trimmedContent,
@@ -169,7 +170,7 @@ export async function PATCH(
     }
 
     const task = await sql`
-      SELECT family_id, assigned_to_id, created_by_id, title FROM tasks WHERE id = ${taskId}
+      SELECT family_id, assigned_to_id, created_by_id, child_profile_id, title FROM tasks WHERE id = ${taskId}
     `
 
     if (task.length === 0) {
@@ -219,6 +220,7 @@ export async function PATCH(
       familyId: task[0].family_id,
       taskTitle: task[0].title,
       assignedToId: task[0].assigned_to_id,
+      childProfileId: task[0].child_profile_id,
       commenterId: user.id,
       commenterName: await actorNameInFamily(task[0].family_id as string, user, 'Someone'),
       commentMessage: trimmedContent,
