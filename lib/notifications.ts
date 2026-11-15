@@ -6,6 +6,7 @@ import { isQuietNow } from "@/lib/quiet-hours"
 import { headsUpBody, headsUpChannels, HEADS_UP_ALL_DAY_HOURS, HEADS_UP_TIMED_HOURS } from "@/lib/event-heads-up"
 import { sendEmail, isResendConfigured, EMAIL_TEMPLATES, escapeHtml } from "@/lib/services/email"
 import { sendSMSMetered, isSmsConfigured } from "@/lib/services/sms"
+import { involvesChild, parentIds, ALL_CHANNELS } from "@/lib/kid-notify"
 
 // SMS for in-app notifications. Goes through the metered sender so every text
 // counts against the family's monthly SMS quota (over quota it is skipped and
@@ -59,8 +60,10 @@ type NotificationData = {
   title: string
   body: string
   data?: Record<string, unknown>
-  sendSms?: boolean // If true and user has phone, also send SMS
-  sendEmail?: boolean // If true and user has email notifications enabled, also send an email
+  // Every notification goes out on every channel by default; each recipient's
+  // own Settings toggles (and SMS consent) decide. Pass false to leave one out.
+  sendSms?: boolean
+  sendEmail?: boolean
   // Per-item channel override (e.g. the notify-channels picker on a task or
   // event creation form). When provided, it takes priority over sendSms/
   // sendEmail and over the always-attempt behavior of in_app/push below -
@@ -101,8 +104,8 @@ export async function createNotification({
   title,
   body,
   data = {},
-  sendSms = false,
-  sendEmail: sendEmailFlag = false,
+  sendSms = true,
+  sendEmail: sendEmailFlag = true,
   channels,
   force = false
 }: NotificationData): Promise<{ success: boolean; notificationId?: string; error?: string }> {
@@ -236,7 +239,8 @@ export async function createNotification({
           LEFT JOIN reminder_settings rs ON u.id = rs.user_id
           WHERE u.id = ${userId}
         `
-        if (userEmailPrefs.length > 0 && userEmailPrefs[0].email && (force || userEmailPrefs[0].email_enabled)) {
+        // No settings row, or NULL, counts as on: email is on by default.
+        if (userEmailPrefs.length > 0 && userEmailPrefs[0].email && (force || userEmailPrefs[0].email_enabled !== false)) {
           const taskTitle = typeof data.taskTitle === 'string' ? data.taskTitle : title
           const newStatus = typeof data.newStatus === 'string' ? data.newStatus : null
           const changedBy = typeof data.changedBy === 'string' ? data.changedBy : 'Someone'
@@ -311,6 +315,7 @@ export async function notifyTaskComment({
   familyId,
   taskTitle,
   assignedToId,
+  childProfileId = null,
   commenterId,
   commenterName,
   commentMessage,
@@ -320,6 +325,7 @@ export async function notifyTaskComment({
   familyId: string
   taskTitle: string
   assignedToId: string | null
+  childProfileId?: string | null
   commenterId: string
   commenterName: string
   commentMessage: string
@@ -331,17 +337,10 @@ export async function notifyTaskComment({
     recipientIds.add(assignedToId)
   }
 
-  const guardians = await sql`
-    SELECT user_id FROM family_members
-    WHERE family_id = ${familyId}
-      AND is_active = true
-      AND role IN ('PARENT', 'GUARDIAN')
-      AND user_id IS NOT NULL
-  `
-  for (const guardian of guardians) {
-    if (guardian.user_id !== commenterId) {
-      recipientIds.add(guardian.user_id)
-    }
+  // Parents hear about comments on a child's task or by a child, not about
+  // grown-ups commenting on grown-ups' tasks (lib/kid-notify.ts).
+  if (await involvesChild(familyId, { userIds: [assignedToId, commenterId], childProfileId })) {
+    for (const id of await parentIds(familyId, [commenterId])) recipientIds.add(id)
   }
 
   const excerpt = commentMessage.length > 120
@@ -372,12 +371,17 @@ export async function notifyFamilyAboutEvent(
   creatorName: string,
   excludeUserId?: string,
   channels?: NotificationChannel[], // from the event's notify_channels column, if the creator picked any
-  skipUserIds: string[] = [] // people who get their own (forced) notification instead
+  skipUserIds: string[] = [], // people who get their own (forced) notification instead
+  // Called for events made by a grown-up. Other grown-ups hear about it only
+  // when they take part, or (parents/guardians, on every channel) when a
+  // child does; kids always hear about family events.
+  event: { participantUserIds?: string[]; kidInvolved?: boolean } = {}
 ): Promise<void> {
-  // Notify ALL active family members with linked accounts - except guests,
-  // who only hear about events they are invited to (via their own invitation).
+  const participants = new Set(event.participantUserIds ?? [])
+  // Every active family member with a login - except guests, who only hear
+  // about events they are invited to (via their own invitation).
   const members = await sql`
-    SELECT fm.user_id
+    SELECT fm.user_id, fm.role
     FROM family_members fm
     WHERE fm.family_id = ${familyId}
       AND fm.is_active = true
@@ -388,19 +392,19 @@ export async function notifyFamilyAboutEvent(
 
   for (const member of members) {
     if (skipUserIds.includes(member.user_id)) continue
-    // One call per member, one message per channel: createNotification sends
-    // the text too (when the creator picked SMS or picked nothing), gated by
-    // the member's sms_enabled and the family's plan/quota. (A separate SMS
-    // send here used to text everyone a second time, ignoring sms_enabled.)
+    const role = member.role as string
+    const isGrownUp = role === 'PARENT' || role === 'GUARDIAN' || role === 'ADULT'
+    const parentForKid = (role === 'PARENT' || role === 'GUARDIAN') && event.kidInvolved === true
+    if (isGrownUp && !participants.has(member.user_id) && !parentForKid) continue
+    // One call per member, one message per channel, each gated by the
+    // member's own toggles, SMS consent and the family's plan/quota.
     await createNotification({
       userId: member.user_id,
       type: 'EVENT_CREATED',
       title: 'New Family Event',
       body: `${creatorName} created a new event: "${eventTitle}"`,
       data: { eventId, familyId },
-      sendEmail: true, // Will check user preferences before sending
-      sendSms: true, // Will check sms_enabled, phone and quota before sending
-      channels
+      channels: parentForKid ? ALL_CHANNELS : channels,
     })
   }
 }
@@ -441,18 +445,10 @@ export async function checkAndNotifyOverdueTasks(): Promise<{ notified: number }
       }
     }
     
-    const parents = await sql`
-      SELECT fm.user_id
-      FROM family_members fm
-      WHERE fm.family_id = ${task.family_id}
-        AND fm.is_active = true
-        AND fm.role IN ('PARENT', 'GUARDIAN')
-    `
-    
-    for (const parent of parents) {
-      if (!usersToNotify.includes(parent.user_id)) {
-        usersToNotify.push(parent.user_id)
-      }
+    // Parents hear only about a child's task (lib/kid-notify.ts).
+    const kidTask = await involvesChild(task.family_id, { userIds: [task.assigned_to_id], childProfileId: task.child_profile_id })
+    for (const pid of kidTask ? await parentIds(task.family_id) : []) {
+      if (!usersToNotify.includes(pid)) usersToNotify.push(pid)
     }
     
     for (const userId of usersToNotify) {
@@ -592,18 +588,10 @@ export async function checkAndNotifyUpcomingDueDates(): Promise<{
       usersToNotify.push(task.created_by_id)
     }
     
-    const parents = await sql`
-      SELECT fm.user_id
-      FROM family_members fm
-      WHERE fm.family_id = ${task.family_id}
-        AND fm.is_active = true
-        AND fm.role IN ('PARENT', 'GUARDIAN')
-    `
-    
-    for (const parent of parents) {
-      if (!usersToNotify.includes(parent.user_id)) {
-        usersToNotify.push(parent.user_id)
-      }
+    // Parents hear only about a child's task (lib/kid-notify.ts).
+    const kidTask = await involvesChild(task.family_id, { userIds: [task.assigned_to_id], childProfileId: task.child_profile_id })
+    for (const pid of kidTask ? await parentIds(task.family_id) : []) {
+      if (!usersToNotify.includes(pid)) usersToNotify.push(pid)
     }
     
     const timeText = hoursUntilDue <= 1 

@@ -19,7 +19,7 @@ portal (support, legal requests). Preparing for a soft launch.
   `STRIPE_SECRET_KEY=sk_test_placeholder_local_build_only npm run build`.
   The build rewrites `next-env.d.ts`, so revert it with `git checkout -- next-env.d.ts`.
 - `npx tsc --noEmit`: baseline **0 errors**. Keep it at 0.
-- `npm run lint`: baseline **419 problems: 1 error, 418 warnings**. The one
+- `npm run lint`: baseline **426 problems: 1 error, 425 warnings**. The one
   error is `prefer-const` in `scripts/test-push-ownership.ts`. Add no new errors and
   no new warnings.
 - `npm run test:e2e`: Playwright smoke test of the public pages (`/`, `/login`,
@@ -45,7 +45,7 @@ real email. Read a script's header before running it.
   in-memory fake through `__setSqlForTests`, with DATABASE_URL pointed at a closed port:
   account-change-emails, admin-auth-hardening, admin-created-email, admin-delete-child, admin-tier-breakdown, admin-token-refresh, adult-location-access, brand-logo, child-invite, coppa, cron-health,
   dashboard-prefetch, demo-guard, device-token-claim, existing-user-confirmations, extended-trial, family-invite, free-tier-limits, geofence, kid-ping, launch-security, legal-hold-closure, location-history-delete,
-  calendar-sync-security, color-themes, ios-setup, legal-ping, location-dedupe, removed-member-location, location-share-now, member-names, notification-dedupe, notification-fixes, shown-notifications, event-heads-up, notification-link, site-data, push-ownership,
+  calendar-sync-security, color-themes, ios-setup, legal-ping, location-dedupe, removed-member-location, location-share-now, member-names, notification-dedupe, notification-fixes, parent-kid-notifications, shown-notifications, event-heads-up, notification-link, site-data, push-ownership,
   dictation, place-alerts, promo-codes, push-picker, quick-add, schema-snapshot, self-refresh, signup-source, smart-import, sms-allowance, sms-consent, stillness, stripe-cancel-pending, stripe-checkout-tax, task-due, trial-eligibility,
   stripe-webhook-events, telnyx-sms, twa-upgrade-links, upgrade-order, weather-prompt, weather-route.
 - **Board suites** (board-flyer-download, board-flyers, board-limits,
@@ -128,6 +128,14 @@ real email. Read a script's header before running it.
   (mode OFF or share-with-family off, not pause) and when their account is deleted
   (`lib/location-history.ts`, `lib/account-closure.ts`). Kept while they still share with another family
   or a legal hold covers them.
+- Who is notified (`lib/kid-notify.ts`): every notification goes out on every channel the person allows (in-app, push,
+  email on unless switched off or no settings row, texts only with SMS consent). Anything about a child (the child acted,
+  or it is the child's task, event, reminder, place alert, battery, comment, board post or RSVP) reaches every
+  parent/guardian on every channel, ignoring the creator's channel picks (`notifyParentsAboutKid`); place alerts keep the
+  place's own "Notify me via" picks, which start with all four. A grown-up's own
+  activity doesn't reach the other grown-ups: no co-parent board posts, place alerts, low battery, task comments or
+  completions, or new events unless invited. Things sent to them directly (their task, an invite, approval requests,
+  SOS) still do. `scripts/test-parent-kid-notifications.ts` checks this.
 - Event notices: one "Upcoming Event" heads-up the day before (`lib/event-heads-up.ts`, hourly cron: timed events
   22-24 h ahead, all-day the evening before) by in-app, push and email, never text; nothing earlier. Texts come
   only at the reminder times picked on the event (`/api/cron/event-reminders`, every minute, all picked channels).

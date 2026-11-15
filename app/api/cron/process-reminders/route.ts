@@ -6,6 +6,8 @@ import { sendEmail, isResendConfigured } from "@/lib/services/email"
 import { sendSMSMetered, isSmsConfigured } from "@/lib/services/sms"
 import { ensureReminderChildColumn } from "@/lib/reminder-schema"
 import { isQuietNow } from "@/lib/quiet-hours"
+import { notifyParentsAboutKid } from "@/lib/kid-notify"
+import { nameInFamily } from "@/lib/member-names"
 
 // Delivers standalone reminders (lib: see app/api/reminders) - the
 // "just remind me of a thing" feature that isn't tied to a task or a
@@ -36,7 +38,7 @@ async function runJob(request: NextRequest) {
     // forward to its next remind_at, and when a user edits remind_at).
     const due = await sql`
       SELECT r.id, r.title, r.description, r.remind_at, r.user_id, r.family_id,
-             r.is_recurring, r.recurrence_rule, r.notify_channels,
+             r.is_recurring, r.recurrence_rule, r.notify_channels, r.child_profile_id,
              u.email, u.phone, u.timezone,
              cp.display_name as child_name, cfm.user_id as child_user_id
       FROM reminders r
@@ -142,6 +144,20 @@ async function runJob(request: NextRequest) {
         } catch (smsError) {
           console.error('[Reminder] SMS send failed (non-fatal):', smsError)
         }
+      }
+
+      // A child's reminder: the parents get it too, on every channel.
+      if (reminder.family_id) {
+        const kidName = reminder.child_name || await nameInFamily(reminder.family_id, reminder.user_id, 'your child')
+        await notifyParentsAboutKid({
+          familyId: reminder.family_id,
+          kid: { userIds: [reminder.user_id], childProfileId: reminder.child_profile_id },
+          exclude: [reminder.user_id],
+          type: 'REMINDER',
+          title: `Reminder for ${kidName}: ${reminder.title}`,
+          body: reminder.description || 'Reminder',
+          data: { reminderId: reminder.id },
+        })
       }
 
       sent++

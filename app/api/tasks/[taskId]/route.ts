@@ -7,6 +7,7 @@ import { ensureTaskEventNotifyChannelsColumns } from '@/lib/notify-channels-sche
 import { ensureTaskApprovalColumn } from '@/lib/task-approval-schema'
 import { taskInvolvesUser } from '@/lib/guest-scope'
 import { taskAssigneeName, actorNameInFamily } from "@/lib/member-names"
+import { notifyParentsAboutKid } from '@/lib/kid-notify'
 
 // Helper to sync task status updates across all related tables
 async function syncTaskStatusUpdate(
@@ -81,7 +82,21 @@ async function syncTaskStatusUpdate(
       }
     })
   }
-  
+
+  // A child's task (or a child changed it): parents hear on every channel.
+  // Completion has its own "Task Completed" notice to parents.
+  if (newStatus !== 'COMPLETED') {
+    await notifyParentsAboutKid({
+      familyId: task.family_id as string,
+      kid: { userIds: [task.assigned_to_id as string | null, userId], childProfileId: task.child_profile_id as string | null },
+      exclude: [userId, ...notifyUsers],
+      type: 'TASK_ASSIGNED',
+      title: `Task ${statusMessage}`,
+      body: `${changedByName}: "${task.title}" ${statusMessage}`,
+      data: { taskId, newStatus, taskTitle: task.title, changedBy: changedByName, ...additionalData },
+    })
+  }
+
   // 3. Update audit_logs for compliance tracking
   await sql`
     INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, old_value, new_value, created_at)
@@ -343,19 +358,17 @@ export async function PATCH(
         await notifyTaskCompleted(task.created_by_id, task.title, taskId, task.family_id, completedByName)
       }
       
-      // Notify all parents in the family
-      const parents = await sql`
-        SELECT fm.user_id
-        FROM family_members fm
-        WHERE fm.family_id = ${task.family_id}
-          AND fm.is_active = true
-          AND fm.role IN ('PARENT', 'GUARDIAN')
-          AND fm.user_id != ${user.id}
-          AND fm.user_id != ${task.created_by_id || user.id}
-      `
-      for (const parent of parents) {
-        await notifyTaskCompleted(parent.user_id, task.title, taskId, task.family_id, completedByName)
-      }
+      // Parents hear when a child's task is done, or a child did it; not when
+      // a grown-up finishes a grown-up's task.
+      await notifyParentsAboutKid({
+        familyId: task.family_id as string,
+        kid: { userIds: [task.assigned_to_id as string | null, user.id], childProfileId: task.child_profile_id as string | null },
+        exclude: [user.id, task.created_by_id as string | null],
+        type: 'TASK_COMPLETED',
+        title: 'Task Completed',
+        body: `${completedByName} completed the task: "${task.title}"`,
+        data: { taskId },
+      })
       
       return NextResponse.json({ success: true, status: newStatus })
     }
@@ -689,6 +702,19 @@ export async function PATCH(
         } catch (e) {
           console.error('Task reassignment notification failed (non-fatal):', e)
         }
+      }
+      // Given to a child, or a child moved it: the other parents hear too.
+      if (assigneeChanged) {
+        const assignerName = await actorNameInFamily(task.family_id, user, 'Someone')
+        await notifyParentsAboutKid({
+          familyId: task.family_id as string,
+          kid: { userIds: [targetUserId, user.id], childProfileId: newChildId || null },
+          exclude: [user.id, targetUserId],
+          type: 'TASK_ASSIGNED',
+          title: 'Task reassigned',
+          body: `${assignerName} reassigned "${(updates.title as string) || task.title}"`,
+          data: { taskId },
+        })
       }
 
       return NextResponse.json({ success: true })

@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
           smsConsentNeeded: false,
           eventReminders: true,
           locationAlerts: true,
-          weeklyDigest: false,
+          weeklyDigest: true,
           defaultReminderMinutes: [15],
         }
       })
@@ -52,7 +52,8 @@ export async function GET(request: NextRequest) {
         phoneAlerts: s.phone_alerts ?? false,
         eventReminders: true,
         locationAlerts: true,
-        weeklyDigest: s.weekly_digest ?? false,
+        // NULL is on: the weekly digest cron sends to it.
+        weeklyDigest: s.weekly_digest ?? true,
         defaultReminderMinutes: Array.isArray(s.default_reminder_minutes) && s.default_reminder_minutes.length > 0
           ? s.default_reminder_minutes
           : [15],

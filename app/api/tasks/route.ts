@@ -9,6 +9,7 @@ import { ensureTaskApprovalColumn } from '@/lib/task-approval-schema'
 import { filterTasksForGuest } from '@/lib/guest-scope'
 import { notifyTaskAssigned, type NotificationChannel } from '@/lib/notifications'
 import { taskAssigneeName, actorNameInFamily } from "@/lib/member-names"
+import { notifyParentsAboutKid } from '@/lib/kid-notify'
 
 // GET - List tasks for the current user's families
 export async function GET(request: NextRequest) {
@@ -308,18 +309,19 @@ export async function POST(request: NextRequest) {
           await notifyTaskAssigned(targetUserId, title, task[0].id, familyId, assignerName, ch)
         }
       }
-      // Parents get an FYI when a child is assigned something.
-      if (assignedToChildId) {
-        for (const pid of await getParentUserIds(familyId, user.id)) {
-          if (pid === targetUserId) continue
-          await createNotification({
-            userId: pid, type: 'TASK_ASSIGNED',
-            title: 'Task assigned to ' + (targetName || 'a child'),
-            body: `${assignerName} assigned ${targetName || 'a child'} a task: "${title}"`,
-            data: { taskId: task[0].id, familyId }, channels: ch,
-          })
-        }
-      }
+    }
+    // Parents hear, on every channel, about a task for a child or made by a
+    // child (an approval request above already went to all of them).
+    if (assignmentStatus !== 'PENDING_APPROVAL') {
+      await notifyParentsAboutKid({
+        familyId,
+        kid: { userIds: [targetUserId, user.id], childProfileId: assignedToChildId || null },
+        exclude: [user.id, targetUserId],
+        type: 'TASK_ASSIGNED',
+        title: targetName ? `New task for ${targetName}` : 'New family task',
+        body: `${assignerName} added a task${targetName ? ` for ${targetName}` : ''}: "${title}"`,
+        data: { taskId: task[0].id },
+      })
     }
 
     return NextResponse.json({ data: task[0] }, { status: 201 })

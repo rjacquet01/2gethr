@@ -3,6 +3,7 @@ import { ddl } from "./schema-snapshot"
 import { isAdultMemberRole, isSupervisorRole } from "./permissions"
 import { createNotification, notifyFamilyAboutEvent } from "./notifications"
 import type { NotificationChannel } from "./notifications"
+import { ALL_CHANNELS, notifyParentsAboutKid } from "./kid-notify"
 
 // tasks.assignment_status: NULL / ACCEPTED = active.
 //   PENDING_APPROVAL   = a child assigned it to a parent/guardian (or to a
@@ -121,8 +122,8 @@ export async function notifyEventAssignment(args: {
       title: "New Family Event",
       body: `${creatorName} created a new event: "${title}"`,
       data: { eventId, familyId },
-      sendEmail: true,
-      channels,
+      // A child's event: parents get every channel, whatever the child picked.
+      channels: ALL_CHANNELS,
     })
   }
 }
@@ -235,6 +236,16 @@ export async function notifyParticipantsAdded(args: {
         : { sendEmail: true, sendSms: true, channels }),
     })
   }
+  // A child added (or a child adding people): the other parents hear too.
+  await notifyParentsAboutKid({
+    familyId,
+    kid: { userIds: [actorUserId, ...others], childProfileId: addedChildIds[0] ?? null },
+    exclude: [actorUserId, ...others],
+    type: "EVENT_UPDATE",
+    title: "Event updated",
+    body: `${actorName} added people to "${title}"`,
+    data: { eventId },
+  })
   return { pending: false }
 }
 export { notifyFamilyAboutEvent }

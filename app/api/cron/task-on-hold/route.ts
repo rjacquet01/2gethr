@@ -3,6 +3,7 @@ import { monitorCron } from "@/lib/cron-health"
 import { sql } from "@/lib/db"
 import { createNotification } from "@/lib/notifications"
 import { ensureAssignmentColumns } from "@/lib/assignment"
+import { involvesChild, parentIds } from "@/lib/kid-notify"
 
 // Daily (see vercel.json): a task that has been ON_HOLD for 3+ days gets one
 // notification to its assignee and its requester (creator). It fires once per
@@ -23,7 +24,7 @@ async function runJob(request: NextRequest) {
     await ensureAssignmentColumns()
 
     const held = await sql`
-      SELECT t.id, t.title, t.family_id, t.created_by_id,
+      SELECT t.id, t.title, t.family_id, t.created_by_id, t.assigned_to_id, t.child_profile_id,
              COALESCE(t.assigned_to_id, cfm.user_id) AS assignee_id,
              COALESCE((SELECT MAX(h.created_at) FROM task_history h WHERE h.task_id = t.id AND h.action = 'ON_HOLD'), t.updated_at) AS hold_at
       FROM tasks t
@@ -53,6 +54,10 @@ async function runJob(request: NextRequest) {
       const recipients = new Set<string>()
       if (t.assignee_id) recipients.add(t.assignee_id)
       if (t.created_by_id) recipients.add(t.created_by_id)
+      // A child's task: the parents hear too.
+      if (await involvesChild(t.family_id, { userIds: [t.assignee_id], childProfileId: t.child_profile_id })) {
+        for (const pid of await parentIds(t.family_id)) recipients.add(pid)
+      }
       for (const uid of recipients) {
         await createNotification({
           userId: uid,

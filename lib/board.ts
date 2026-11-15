@@ -5,6 +5,7 @@ import { authorInfo, notifySocial, type AuthorInfo } from "./social"
 import { EMAIL_TEMPLATES } from "./services/email"
 import { canPinFlyers, flyerDownloadUrl, flyerImageUrl, isBoardAdult } from "./board-flyers"
 import { actorNameInFamily } from "./member-names"
+import { involvesChild, notifyParentsAboutKid } from "./kid-notify"
 
 export interface BoardAccess {
   role: string
@@ -87,8 +88,8 @@ export async function shapePosts(familyId: string, posts: Record<string, unknown
 }
 
 /**
- * A new pin is up: tell every other active, non-guest member (children too,
- * like event notifications). In-app always (with a short preview); push and
+ * A new pin is up. A grown-up's post goes to the kids; a child's post goes to
+ * the other kids and grown-ups, and to the parents on every channel. In-app always (with a short preview); push and
  * email for every pin, each at most once per person per 10 minutes per
  * family board, respecting the recipient's push / email settings and quiet
  * hours (push). Push and email say only who pinned what, never the text.
@@ -102,13 +103,28 @@ export async function notifyNewPost(opts: {
   body: string
   flyer?: boolean
 }) {
-  const recipients = await sql`
-    SELECT DISTINCT user_id FROM family_members
+  const members = await sql`
+    SELECT DISTINCT user_id, role FROM family_members
     WHERE family_id = ${opts.familyId} AND is_active = true AND user_id IS NOT NULL
       AND role <> 'GUEST' AND user_id <> ${opts.user.id}
   `
-  if (recipients.length === 0) return
+  // A child's post reaches the parents on every channel (lib/kid-notify.ts);
+  // a grown-up's post reaches the kids only, not the other grown-ups.
+  const kidAuthor = await involvesChild(opts.familyId, { userIds: [opts.user.id] })
+  const recipients = members.filter((m) => m.role === "CHILD" || (kidAuthor && m.role === "ADULT"))
   const name = await actorNameInFamily(opts.familyId, opts.user, "Someone")
+  if (kidAuthor) {
+    await notifyParentsAboutKid({
+      familyId: opts.familyId,
+      kid: { userIds: [opts.user.id] },
+      exclude: [opts.user.id],
+      type: "SYSTEM",
+      title: opts.flyer ? `${name} pinned a flyer` : `${name} posted on the family board`,
+      body: "Open the family board to see it.",
+      data: { subType: "BOARD_POST", postId: opts.postId },
+    })
+  }
+  if (recipients.length === 0) return
   const fam = await sql`SELECT name FROM families WHERE id = ${opts.familyId} LIMIT 1`
   const familyName = (fam[0]?.name as string | undefined) ?? null
   await notifySocial({

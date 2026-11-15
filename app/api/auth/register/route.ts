@@ -242,7 +242,6 @@ export async function POST(request: NextRequest) {
           type: "FAMILY_INVITATION",
           data: { subType: "CHILD_ACCOUNT_LINKED", familyId: childInvite.familyId, memberId: childInvite.childMemberId },
           clickAction: "/family",
-          soft: true,
         })
       } catch (e) {
         console.error("child account alert failed (non-fatal):", e)
