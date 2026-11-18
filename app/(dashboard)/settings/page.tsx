@@ -25,6 +25,7 @@ import { ChangePasswordButton } from '@/components/change-password-dialog'
 import { ActiveSessions } from '@/components/active-sessions'
 import { usePushNotifications } from '@/hooks/use-push-notifications'
 import { isIos } from '@/lib/ios-setup'
+import { setPushOffHere } from '@/lib/push-prefs'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Bell, Lock, Shield, Globe, User, Camera, Trash2, Phone, Smartphone, Download, RotateCcw, Sun, Moon, RefreshCw, ChevronRight, Mail, MessageSquareOff } from 'lucide-react'
@@ -66,6 +67,26 @@ export default function SettingsPage() {
   const { inApp } = useUpgradeWording()
   const { theme, setTheme, resolvedTheme } = useTheme()
   const pushNotifications = usePushNotifications()
+  const [testingPush, setTestingPush] = useState(false)
+
+  // One test message to this account's devices, with a plain answer about
+  // what happened (no device registered vs. sent vs. could not be delivered).
+  const sendTestPush = async () => {
+    setTestingPush(true)
+    try {
+      const res = await authFetch('/api/notifications/push-test', { method: 'POST' })
+      const data = await res.json().catch(() => null)
+      if (res.status === 429) toast.error('Too many tests. Try again in a few minutes.')
+      else if (data?.reason === 'no-device') toast.error('No device is set up for notifications yet. Turn the Push switch on first.')
+      else if (data?.reason === 'not-configured') toast.error('Notifications are not available right now. Please try again later.')
+      else if (data?.ok) toast.success('Test sent. It should appear in a few seconds. If it does not, turn Push off and on again.')
+      else toast.error("We couldn't reach your device. Turn Push off and on again, then send another test.")
+    } catch {
+      toast.error('Could not send the test. Check your connection and try again.')
+    } finally {
+      setTestingPush(false)
+    }
+  }
   // A child's name is set by a parent (the server refuses changes).
   const { isChild } = useMyRole()
   const [mounted, setMounted] = useState(false)
@@ -205,6 +226,7 @@ export default function SettingsPage() {
           return
         }
         const ok = await pushNotifications.subscribe()
+        if (ok) setPushOffHere(false)
         if (!ok) {
           toast.error(
             pushNotifications.error === 'Notification permission denied'
@@ -216,6 +238,7 @@ export default function SettingsPage() {
       } else {
         // Off is for this device only: the account keeps push for its other
         // phones and computers.
+        setPushOffHere(true) // the app must not quietly turn it back on here
         await pushNotifications.unsubscribe()
         setSettings(prev => ({ ...prev, pushNotifications: false }))
         toast.success('Push off on this device')
@@ -672,6 +695,12 @@ export default function SettingsPage() {
             <Row label="Push" htmlFor="push-notifications" hint="Notifications on this device">
               <Switch id="push-notifications" checked={settings.pushNotifications} onCheckedChange={() => handleToggle('pushNotifications')} />
             </Row>
+            <div className="flex items-center justify-between gap-3 py-3">
+              <p className="text-sm text-muted-foreground">Check that notifications reach this device</p>
+              <Button variant="outline" size="sm" onClick={sendTestPush} disabled={testingPush}>
+                {testingPush ? 'Sending…' : 'Send test'}
+              </Button>
+            </div>
             <div>
             <Row
               label="SMS"
