@@ -54,6 +54,7 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useUpgradeWording } from '@/components/upgrade-gate'
 import { IphoneSetupCard } from '@/components/iphone-setup'
+import { PushPrompt } from '@/components/push-prompt'
 
 // '/dashboard' is both the Home route AND the prefix every other dashboard
 // route is nested under (/dashboard/reminders, /dashboard/archive, ...), so
@@ -364,6 +365,7 @@ export default function DashboardLayout({
       <main className="lg:pl-64 pt-14 lg:pt-0 min-h-screen">
         <div className="p-3 sm:p-4 lg:p-8 pb-20 lg:pb-8">
           <IphoneSetupCard />
+          <PushPrompt />
           {children}
         </div>
       </main>
