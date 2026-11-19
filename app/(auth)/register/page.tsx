@@ -153,7 +153,7 @@ export default function RegisterPage() {
                 ? `A parent in ${childInvite.familyName} set this up. This account joins the family as ${childInvite.childName}.`
                 : adultInvite
                   ? 'Your invite is saved. Create your account and you will join the family next. Togethr accounts are for adults 18 and older.'
-                  : 'Togethr accounts are for adults 18 and older. Children are added by a parent.'}
+                  : 'Togethr accounts are for adults 18 and older. Children are added by a parent. Your first family gets a free 30-day Premium trial, no card needed.'}
             </CardDescription>
             {childInviteError && <p className="text-xs text-destructive">{childInviteError}</p>}
           </CardHeader>
