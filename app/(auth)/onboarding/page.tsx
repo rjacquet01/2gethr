@@ -136,7 +136,7 @@ export default function OnboardingPage() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-foreground">Create a Family</h3>
-                  <p className="text-sm text-muted-foreground">Start fresh and invite your family members</p>
+                  <p className="text-sm text-muted-foreground">Start fresh and invite your family. Includes a free 30-day Premium trial, no card needed.</p>
                 </div>
                 <ArrowRight className="w-5 h-5 text-muted-foreground" />
               </CardContent>
@@ -152,16 +152,20 @@ export default function OnboardingPage() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-foreground">Join a Family</h3>
-                  <p className="text-sm text-muted-foreground">Use an invite code from a family member</p>
+                  <p className="text-sm text-muted-foreground">Only if a family member sent you an invite code</p>
                 </div>
                 <ArrowRight className="w-5 h-5 text-muted-foreground" />
               </CardContent>
             </Card>
           </div>
 
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Just trying the app? Choose <span className="font-medium text-foreground">Create a Family</span>. You can invite others later.
+          </p>
+
           <Button 
             variant="ghost" 
-            className="w-full mt-6" 
+            className="w-full mt-2" 
             onClick={() => router.push('/dashboard')}
           >
             {"I'll do this later"}
@@ -184,7 +188,7 @@ export default function OnboardingPage() {
                 Create Your Family
               </CardTitle>
               <CardDescription>
-                Give your family a name. You can change this later.
+                Give your family a name. You can change this later. New families get a free 30-day Premium trial, no card needed.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
