@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Empty } from '@/components/ui/empty'
+import { CreateFamilyCard } from '@/components/create-family-card'
 import Link from 'next/link'
 import { 
   Calendar, 
@@ -257,19 +258,7 @@ export default function DashboardPage() {
   }
 
   if (!primaryFamily) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <Empty
-          title="No family yet"
-          description="Create or join a family to start coordinating"
-        />
-        <div className="flex gap-3 mt-6">
-          <Button asChild>
-            <Link href="/onboarding">Get Started</Link>
-          </Button>
-        </div>
-      </div>
-    )
+    return <CreateFamilyCard />
   }
 
   return (
