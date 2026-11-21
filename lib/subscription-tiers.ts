@@ -242,7 +242,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTierKey, TierDefinition> = {
       "Arrival & departure alerts (every place)",
       "Unlimited events, reminders and notifications",
       `${BOARD_UPLOADS.PREMIUM} photo uploads on the family board`,
-      `${SMART_IMPORTS_PER_MONTH.PREMIUM} photo-to-calendar imports a month`,
+      `${SMART_IMPORTS_PER_MONTH.PREMIUM} photo-to-calendar imports a month (${SMART_IMPORTS_PER_MONTH.TRIAL} during the free trial)`,
       "Emergency alerts to your child",
       `${LOCATION_TRAIL_DAYS.PREMIUM}-day location trail, ${HISTORY_DAYS.PREMIUM} days of past events`,
       "Custom reminder times",

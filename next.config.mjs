@@ -38,18 +38,6 @@ const nextConfig = {
       },
     ]
   },
-  // Short link for posts and bios: mytogethr.com/beta jumps to the Android
-  // beta steps on the homepage. Temporary (307) so it can be repointed or
-  // removed once the Play listing is public.
-  async redirects() {
-    return [
-      {
-        source: "/beta",
-        destination: "/#android-beta",
-        permanent: false,
-      },
-    ]
-  },
   async rewrites() {
     return [
       {

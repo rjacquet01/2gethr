@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { mutate } from 'swr'
@@ -101,6 +101,39 @@ function ImportEvents() {
   const [existing, setExisting] = useState<{ title: string; startTime: string }[]>([])
   const [who, setWho] = useState<Who[]>([])
   const [adding, setAdding] = useState(false)
+  // The suggestions are kept for this tab so a reload (easy on a phone) doesn't
+  // throw away a read that was already counted. Cleared once the events are added.
+  const draftKey = familyId ? `togethr-import-draft:${familyId}:${postId || 'new'}` : null
+  const [restored, setRestored] = useState(false)
+  useEffect(() => {
+    if (!draftKey || restored) return
+    setRestored(true)
+    try {
+      const saved = sessionStorage.getItem(draftKey)
+      if (saved) {
+        const parsed = JSON.parse(saved) as { rows?: Row[]; who?: Who[] }
+        if (Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+          setRows(parsed.rows)
+          if (Array.isArray(parsed.who)) setWho(parsed.who)
+          loadExisting(parsed.rows)
+        }
+      }
+    } catch {
+      // No saved draft; start fresh.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey])
+  useEffect(() => {
+    if (!draftKey || !restored) return
+    try {
+      if (rows && rows.length > 0) sessionStorage.setItem(draftKey, JSON.stringify({ rows, who }))
+    } catch {
+      // Storage can be unavailable; the draft just isn't kept.
+    }
+  }, [draftKey, restored, rows, who])
+  const clearDraft = () => {
+    try { if (draftKey) sessionStorage.removeItem(draftKey) } catch { /* ignore */ }
+  }
   const fileRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
   const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -171,7 +204,7 @@ function ImportEvents() {
   }
 
   // Events already in the family's calendar over the found dates, for the duplicate warning.
-  const loadExisting = async (events: ImportedEvent[]) => {
+  async function loadExisting(events: ImportedEvent[]) {
     const dates = events.map((e) => e.date).sort()
     const from = reviewEventTimes({ ...events[0], date: dates[0], allDay: true }).startTime
     const to = reviewEventTimes({ ...events[0], date: dates[dates.length - 1], allDay: true }).endTime
@@ -230,6 +263,7 @@ function ImportEvents() {
     await mutate((key) => typeof key === 'string' && key.startsWith('/api/events'), undefined, { revalidate: true })
     if (ok === picked.length) {
       toast.success(ok === 1 ? 'Event added' : `${ok} events added`)
+      clearDraft()
       router.push('/calendar')
     } else if (ok > 0) {
       toast.message(`${ok} of ${picked.length} added. Check the ones marked below.`)
@@ -338,7 +372,7 @@ function ImportEvents() {
                   )}
                 </div>
               ) : (
-                <p className="text-center text-xs text-muted-foreground">{status.used} of {status.limit} imports used this month.</p>
+                <p className="text-center text-xs text-muted-foreground">{status.used} of {status.limit} imports used this month{status.trial ? ' during your free trial' : ''}.</p>
               )}
               <p className="text-center text-xs text-muted-foreground">
                 Only the photo or text you choose is sent to our AI provider to read the dates. <Link href="/privacy" className="underline">Privacy</Link>
@@ -448,7 +482,7 @@ function ImportEvents() {
                   {adding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {picked.length === 1 ? 'Add 1 event' : `Add ${picked.length} events`}
                 </Button>
-                <Button variant="outline" onClick={() => router.push('/calendar')} disabled={adding}>Done</Button>
+                <Button variant="outline" onClick={() => { clearDraft(); router.push('/calendar') }} disabled={adding}>Done</Button>
               </div>
             </>
           )}
