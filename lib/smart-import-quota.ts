@@ -14,6 +14,8 @@ export interface SmartImportUsage {
   used: number
   limit: number
   upgradeTo: { key: SubscriptionTierKey; name: string; limit: number } | null
+  /** True while the family is on the free trial, which has a lower monthly cap. */
+  trial?: boolean
 }
 
 async function planFor(familyId: string): Promise<{ tier: SubscriptionTierKey; userTrial: boolean }> {
@@ -35,7 +37,7 @@ async function countNow(familyId: string): Promise<number> {
 
 export async function smartImportUsage(familyId: string): Promise<SmartImportUsage> {
   const { tier, userTrial } = await planFor(familyId)
-  return { used: await countNow(familyId), limit: smartImportCap(tier, userTrial), upgradeTo: smartImportUpgrade(tier, userTrial) }
+  return { used: await countNow(familyId), limit: smartImportCap(tier, userTrial), upgradeTo: smartImportUpgrade(tier, userTrial), trial: userTrial }
 }
 
 /** Takes one import atomically, so two requests at once can't both take the last one. */

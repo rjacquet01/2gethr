@@ -184,24 +184,32 @@ export default function CalendarPage() {
     return c ? { backgroundColor: c } : undefined
   }
 
-  const navigatePrevious = () => {
-    if (viewMode !== 'week') {
-      setCurrentDate(subMonths(currentDate, 1))
+  // Moving to another month or week also moves the selected day, so the day
+  // panel never shows a day from a page you have left: today if it is in view,
+  // otherwise the first day of the new month or week.
+  const goTo = (next: Date) => {
+    setCurrentDate(next)
+    const today = new Date()
+    if (viewMode === 'week') {
+      const start = startOfWeek(next, { weekStartsOn: 0 })
+      setSelectedDate(isSameDay(startOfWeek(today, { weekStartsOn: 0 }), start) ? today : start)
     } else {
-      setCurrentDate(subWeeks(currentDate, 1))
+      setSelectedDate(isSameMonth(next, today) ? today : startOfMonth(next))
     }
+  }
+
+  const navigatePrevious = () => {
+    goTo(viewMode !== 'week' ? subMonths(currentDate, 1) : subWeeks(currentDate, 1))
   }
 
   const navigateNext = () => {
-    if (viewMode !== 'week') {
-      setCurrentDate(addMonths(currentDate, 1))
-    } else {
-      setCurrentDate(addWeeks(currentDate, 1))
-    }
+    goTo(viewMode !== 'week' ? addMonths(currentDate, 1) : addWeeks(currentDate, 1))
   }
 
   const navigateToday = () => {
-    setCurrentDate(new Date())
+    const today = new Date()
+    setCurrentDate(today)
+    setSelectedDate(today)
   }
 
   const handleDayClick = (day: Date) => {

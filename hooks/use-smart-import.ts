@@ -8,6 +8,7 @@ export interface SmartImportStatus {
   used: number
   limit: number
   upgradeTo: { key: string; name: string; limit: number } | null
+  trial?: boolean
 }
 
 // Smart Import availability for a family: null while the flag is off (the
