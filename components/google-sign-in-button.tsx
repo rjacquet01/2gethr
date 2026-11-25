@@ -2,7 +2,9 @@
 
 import { useEffect } from 'react'
 import { toast } from 'sonner'
-import { GOOGLE_SIGNIN_ENABLED } from '@/lib/google-signin'
+// Not imported from lib/google-signin.ts: that file pulls server-only code (db, jose)
+// into the browser bundle and crashes /login and /register.
+const GOOGLE_SIGNIN_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_SIGN_IN === 'true'
 
 const MESSAGES: Record<string, string> = {
   exists: 'An account with that email already exists. Sign in with your password, then we can add Google.',
