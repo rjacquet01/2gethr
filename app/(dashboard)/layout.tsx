@@ -55,6 +55,7 @@ import { cn } from '@/lib/utils'
 import { useUpgradeWording } from '@/components/upgrade-gate'
 import { IphoneSetupCard } from '@/components/iphone-setup'
 import { PushPrompt } from '@/components/push-prompt'
+import { AndroidExitGuard } from '@/components/android-exit-guard'
 
 // '/dashboard' is both the Home route AND the prefix every other dashboard
 // route is nested under (/dashboard/reminders, /dashboard/archive, ...), so
@@ -366,6 +367,7 @@ export default function DashboardLayout({
         <div className="p-3 sm:p-4 lg:p-8 pb-20 lg:pb-8">
           <IphoneSetupCard />
           <PushPrompt />
+          <AndroidExitGuard />
           {children}
         </div>
       </main>
