@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       )
       VALUES (
         ${userId}, ${email}, ${passwordHash}, ${firstName}, ${lastName}, ${body.timezone}, true,
-        true, ${signup.sub}, NOW(), NOW(),
+        NOW(), ${signup.sub}, NOW(), NOW(),
         ${nowIso}, ${nowIso}, ${TERMS_VERSION}
       )
     `
