@@ -16,6 +16,7 @@ import { Logo, BRAND_MOTTO } from '@/components/brand/logo'
 import { AGE_CONFIRMATION_LABEL } from '@/lib/consent-text'
 import { markChildDevice } from '@/components/privacy-analytics'
 import { SmsConsentText } from '@/components/sms-consent-text'
+import { GoogleSignInButton } from '@/components/google-sign-in-button'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -307,6 +308,11 @@ export default function RegisterPage() {
               </p>
             </CardFooter>
           </form>
+          {!isChildSignup && (
+            <CardContent className="pt-0">
+              <GoogleSignInButton redirect="/onboarding" />
+            </CardContent>
+          )}
         </Card>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">

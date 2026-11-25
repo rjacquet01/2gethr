@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { Eye, EyeOff } from 'lucide-react'
 import { Logo, BRAND_MOTTO } from '@/components/brand/logo'
 import { SignedInRedirect } from '@/components/signed-in-redirect'
+import { GoogleSignInButton } from '@/components/google-sign-in-button'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -204,6 +205,9 @@ export default function LoginPage() {
               </p>
             </CardFooter>
           </form>
+          <CardContent className="pt-0">
+            <GoogleSignInButton redirect={getRedirectTarget()} />
+          </CardContent>
         </Card>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
