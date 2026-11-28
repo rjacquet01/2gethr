@@ -1215,6 +1215,22 @@ export default function FamilyPage() {
                           Consent
                         </Button>
                       )}
+                      {viewerIsParent && child.familyMemberId && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="shrink-0 text-destructive hover:text-destructive"
+                          aria-label={`Remove ${child.displayName}`}
+                          onClick={(ev) => {
+                            ev.preventDefault()
+                            ev.stopPropagation()
+                            setMemberToRemove({ id: child.familyMemberId as string, name: child.displayName, isSelf: false, isChild: true })
+                          }}
+                        >
+                          <UserMinus className="w-4 h-4 mr-1" />
+                          Remove
+                        </Button>
+                      )}
                       {child.familyMemberId && (
                         <AppearanceButton familyId={family.id} memberId={child.familyMemberId} name={child.displayName} avatarUrl={child.avatarUrl} color={child.color} emoji={child.emoji} />
                       )}
